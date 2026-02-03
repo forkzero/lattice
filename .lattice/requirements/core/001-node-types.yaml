@@ -1,0 +1,51 @@
+id: REQ-CORE-001
+type: requirement
+
+title: "Four Primary Node Types"
+body: |
+  The lattice supports four primary node types that form the knowledge hierarchy:
+
+  1. **Source**: Primary research artifacts (papers, articles, data, URLs)
+  2. **Thesis**: Strategic claims derived from research
+  3. **Requirement**: Testable specifications derived from theses
+  4. **Implementation**: Code/config that satisfies requirements
+
+  Each node type has specific metadata schemas while sharing common fields
+  (id, title, body, version, status, created_at, created_by).
+
+priority: P0
+category: CORE
+tags: [data-model, nodes]
+
+acceptance:
+  - id: AT-001
+    given: "a YAML file in .lattice/sources/"
+    when: "parsed by the lattice"
+    then: "it is recognized as a Source node with source-specific metadata"
+    verification: automated
+
+  - id: AT-002
+    given: "node types Source, Thesis, Requirement, Implementation"
+    when: "a node is created"
+    then: "it must specify one of these types AND type-specific metadata is validated"
+    verification: automated
+
+  - id: AT-003
+    given: "any node"
+    when: "retrieved via API or CLI"
+    then: "it has id, type, title, body, version, status, created_at, created_by fields"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: "1.0.0"
+      rationale: "Typed nodes enable structured queries"
+    - target: THX-BIDIRECTIONAL-FLOW
+      version: "1.0.0"
+      rationale: "Four types map to the four layers of the knowledge hierarchy"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

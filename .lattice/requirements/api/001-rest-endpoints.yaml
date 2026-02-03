@@ -1,0 +1,70 @@
+id: REQ-API-001
+type: requirement
+
+title: "REST API for Lattice Operations"
+body: |
+  The lattice exposes a REST API for programmatic access:
+
+  **Nodes:**
+  - `GET /lattice/nodes` - List nodes with filters
+  - `GET /lattice/nodes/:id` - Get single node
+  - `GET /lattice/nodes/:id/history` - Version history
+  - `POST /lattice/nodes` - Create node
+  - `PUT /lattice/nodes/:id` - Update node
+  - `DELETE /lattice/nodes/:id` - Delete node
+
+  **Edges:**
+  - `GET /lattice/edges` - List edges with filters
+  - `POST /lattice/edges` - Create edge
+  - `DELETE /lattice/edges/:id` - Remove edge
+
+  **Queries:**
+  - `GET /lattice/graph/:id` - Subgraph from node
+  - `GET /lattice/drift` - Drift report
+  - `GET /lattice/coverage` - Coverage report
+
+  **Verification:**
+  - `POST /lattice/verify` - Record verification
+
+  The API reads/writes to the .lattice files; it does not maintain
+  separate state.
+
+priority: P1
+category: API
+tags: [api, rest, http]
+
+acceptance:
+  - id: AT-001
+    given: "API server running"
+    when: "`GET /lattice/nodes?type=requirement` is called"
+    then: "all requirement nodes are returned as JSON"
+    verification: automated
+
+  - id: AT-002
+    given: "`POST /lattice/nodes` with valid node"
+    when: "request completes"
+    then: "corresponding YAML file is created in .lattice/"
+    verification: automated
+
+  - id: AT-003
+    given: "a YAML file is modified externally"
+    when: "`GET /lattice/nodes/:id` is called"
+    then: "response reflects the file change (no stale cache)"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: "1.0.0"
+      rationale: "API enables agent programmatic access"
+    - target: THX-FILES-SOURCE-OF-TRUTH
+      version: "1.0.0"
+      rationale: "API is a view over files, not separate database"
+  depends_on:
+    - target: REQ-CORE-004
+      rationale: "API reads/writes file storage"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

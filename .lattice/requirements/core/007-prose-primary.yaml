@@ -1,0 +1,48 @@
+id: REQ-CORE-007
+type: requirement
+
+title: "Human-Readable Title and Body on All Nodes"
+body: |
+  Every node must have:
+  - `title`: A concise, human-readable name (< 100 characters)
+  - `body`: A prose description in markdown format
+
+  The body is the primary content. Structured metadata (edges, acceptance
+  tests, etc.) augments the prose but doesn't replace it.
+
+  A human should be able to understand a requirement by reading only its
+  title and body, without parsing the metadata.
+
+priority: P0
+category: CORE
+tags: [data-model, prose, human-readable]
+
+acceptance:
+  - id: AT-001
+    given: "any node YAML file"
+    when: "validated"
+    then: "it must have non-empty title and body fields"
+    verification: automated
+
+  - id: AT-002
+    given: "the body field"
+    when: "rendered"
+    then: "it is valid markdown"
+    verification: automated
+
+  - id: AT-003
+    given: "a requirement node"
+    when: "read by a human unfamiliar with lattice"
+    then: "the title and body alone convey what is required"
+    verification: manual
+
+edges:
+  derives_from:
+    - target: THX-PROSE-PRIMARY
+      version: "1.0.0"
+      rationale: "Prose is primary, structure augments"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

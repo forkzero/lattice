@@ -1,0 +1,44 @@
+id: THX-PROSE-PRIMARY
+type: thesis
+
+title: "Prose is Primary; Structure is Augmentation"
+body: |
+  Formal specification languages (Z, TLA+, Alloy) have never achieved
+  mainstream adoption despite decades of research. The reason: formalizing
+  intent is often as hard as implementing it.
+
+  Natural language captures:
+  - Context and rationale
+  - Nuance and edge cases
+  - Negotiable intent ("ideally X, but Y is acceptable")
+  - Domain-specific terminology
+
+  The mistake of many tools is requiring full formalization. This creates:
+  - High barrier to entry
+  - Loss of context and nuance
+  - Specifications that are harder to read than code
+
+  Better approach: Prose is primary, structure is augmentation.
+  - Every node has a human-readable title and body
+  - Structured metadata (edges, versions, tests) augments prose
+  - You can always understand a requirement by reading it
+  - Structure enables machine processing without replacing human expression
+
+  Lattice should feel like writing documentation, with structure added
+  incrementally, not like filling out forms.
+
+meta:
+  category: value_prop
+  confidence: 0.85
+  valid_until: null
+
+edges:
+  supported_by:
+    - target: SRC-TOOLS-FOR-HUMANS
+      strength: 0.7
+      rationale: "Human-friendly authoring is still valuable"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

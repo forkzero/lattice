@@ -1,0 +1,72 @@
+id: REQ-AGENT-001
+type: requirement
+
+title: "Agents Can Record Feedback via Edges"
+body: |
+  Agents should be able to record what they learn during implementation:
+
+  **Gap discovery:**
+  ```yaml
+  edge:
+    type: reveals_gap_in
+    from: IMP-MY-IMPL
+    to: REQ-FOO-001
+    rationale: "Requirement doesn't specify timeout behavior"
+  ```
+
+  **Challenge to thesis:**
+  ```yaml
+  edge:
+    type: challenges
+    from: IMP-MY-IMPL
+    to: THX-SOME-CLAIM
+    rationale: "Implementation shows this assumption is incorrect"
+  ```
+
+  **Validation of thesis:**
+  ```yaml
+  edge:
+    type: validates
+    from: IMP-MY-IMPL
+    to: THX-SOME-CLAIM
+    rationale: "Implementation confirms the thesis holds in practice"
+  ```
+
+  These feedback edges enable knowledge to flow upstream, not just down.
+
+priority: P1
+category: AGENT
+tags: [agent, feedback, edges]
+
+acceptance:
+  - id: AT-001
+    given: "an agent creates a `reveals_gap_in` edge"
+    when: "the lattice is queried"
+    then: "the gap is visible and linked to the implementation that found it"
+    verification: automated
+
+  - id: AT-002
+    given: "multiple `challenges` edges to a thesis"
+    when: "thesis is queried"
+    then: "all challenges are listed with their rationale"
+    verification: automated
+
+  - id: AT-003
+    given: "feedback edge from implementation to thesis"
+    when: "`lattice graph THX-* --direction downstream` runs"
+    then: "the implementation's feedback edge is included"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-BIDIRECTIONAL-FLOW
+      version: "1.0.0"
+      rationale: "Feedback edges enable upward information flow"
+  depends_on:
+    - target: REQ-CORE-002
+      rationale: "Uses feedback edge types"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

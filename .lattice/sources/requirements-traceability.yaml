@@ -1,0 +1,32 @@
+id: SRC-REQUIREMENTS-TRACEABILITY
+type: source
+
+title: "Requirements Traceability Reduces Defects and Rework"
+body: |
+  Decades of software engineering research shows that requirements traceability—
+  the ability to trace requirements through design, implementation, and testing—
+  significantly reduces defects and rework costs.
+
+  Key findings:
+  - Projects with strong traceability have 30-50% fewer defects (Gotel & Finkelstein)
+  - Lack of traceability is a top cause of project failure (Standish Group)
+  - Manual traceability is expensive and degrades over time
+  - Automated traceability tools improve consistency but require structured input
+
+  However, most traceability tools assume human authors and readers. They don't
+  support agent-mediated workflows where machines need to query and update
+  traceability information programmatically.
+
+meta:
+  citations:
+    - "Gotel, O. & Finkelstein, A. (1994). An Analysis of the Requirements Traceability Problem"
+    - "Standish Group CHAOS Reports (1995-2024)"
+    - "Mäder, P. & Egyed, A. (2015). Do developers benefit from requirements traceability?"
+    - "IEEE 830-1998: Recommended Practice for Software Requirements Specifications"
+  reliability: peer_reviewed
+  retrieved_at: "2026-02-03"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

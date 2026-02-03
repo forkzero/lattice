@@ -1,0 +1,27 @@
+id: SRC-AGENT-CODE-GEN
+type: source
+
+title: "AI Agents Capable of Autonomous Code Generation"
+body: |
+  Multiple studies and industry reports demonstrate that AI agents (Claude, GPT-4,
+  Codex successors) can generate functional code from natural language specifications.
+  However, quality depends heavily on specification clarity.
+
+  Key findings:
+  - Agents perform better with structured, atomic requirements
+  - Ambiguous specifications lead to hallucinated requirements
+  - Agents struggle to infer implicit dependencies
+  - Iterative refinement improves output quality
+
+meta:
+  citations:
+    - "GitHub Copilot Research (2023-2025)"
+    - "Anthropic Claude Coding Benchmarks (2024-2025)"
+    - "SWE-Bench: Can Language Models Resolve Real-World GitHub Issues (2024)"
+  reliability: industry
+  retrieved_at: "2026-02-03"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

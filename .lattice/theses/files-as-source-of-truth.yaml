@@ -1,0 +1,45 @@
+id: THX-FILES-SOURCE-OF-TRUTH
+type: thesis
+
+title: "Files in Git Should Be Source of Truth, Not a Database"
+body: |
+  Requirements management tools typically use databases as the source of
+  truth, with files as exports. This creates problems:
+
+  Database as source:
+  - Requires running infrastructure
+  - History is tool-specific (not git-native)
+  - Offline access limited
+  - Vendor lock-in
+  - Branching/merging is complicated
+
+  Files as source (with API as view):
+  - Git provides versioning, history, blame for free
+  - Works offline
+  - Diffable in PRs ("this PR changes requirement X")
+  - No database to manage
+  - Portable across projects
+  - Standard tooling (grep, sed, any editor)
+
+  The API server should read/write files, not maintain separate state.
+  This makes the lattice a "view" over the filesystem, not a separate
+  database that must be synchronized.
+
+  Trade-off: Some queries are slower than a database. But for requirement
+  volumes (hundreds to low thousands), file-based is fast enough.
+
+meta:
+  category: technical
+  confidence: 0.8
+  valid_until: null
+
+edges:
+  supported_by:
+    - target: SRC-TOOLS-FOR-HUMANS
+      strength: 0.6
+      rationale: "Current tools' database-centricity is part of the problem"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

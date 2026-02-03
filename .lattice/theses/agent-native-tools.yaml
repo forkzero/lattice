@@ -1,0 +1,44 @@
+id: THX-AGENT-NATIVE-TOOLS
+type: thesis
+
+title: "Agent-Native Tools Require Structured, Queryable Knowledge"
+body: |
+  AI agents are fundamentally different consumers of information than humans:
+
+  Humans can:
+  - Skim documents and extract relevant information
+  - Infer implicit relationships from context
+  - Tolerate ambiguity and ask clarifying questions in real-time
+  - Build mental models from unstructured narrative
+
+  Agents need:
+  - Explicit structure (can't reliably parse free-form prose)
+  - Typed relationships (can't infer "this depends on that")
+  - Atomic units (can't effectively use 50-page PRDs)
+  - Query interfaces (need to ask "what requirements are uncovered?")
+
+  Current tools (Jira, Notion, Confluence) optimize for human consumption.
+  Agent-native tools must optimize for machine consumption while remaining
+  human-readable.
+
+  This is not a minor adaptation—it requires rethinking the fundamental
+  data model, not just adding an API to existing tools.
+
+meta:
+  category: technical
+  confidence: 0.9
+  valid_until: null
+
+edges:
+  supported_by:
+    - target: SRC-TOOLS-FOR-HUMANS
+      strength: 0.95
+      rationale: "Direct evidence that current tools lack agent-friendly features"
+    - target: SRC-AGENT-CODE-GEN
+      strength: 0.8
+      rationale: "Agent capabilities depend on input quality"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

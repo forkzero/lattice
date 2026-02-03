@@ -1,0 +1,63 @@
+id: REQ-CORE-002
+type: requirement
+
+title: "Typed, Directed Edges with Semantics"
+body: |
+  Edges connect nodes with explicit types that convey semantic meaning:
+
+  **Justification edges** (downward flow):
+  - `supports`: Source → Thesis (research backs claim)
+  - `derives`: Thesis → Requirement (spec follows from strategy)
+  - `satisfies`: Implementation → Requirement (code implements spec)
+
+  **Dependency edges** (lateral):
+  - `depends_on`: Requirement → Requirement (prerequisite)
+  - `extends`: Requirement → Requirement (refinement)
+
+  **Feedback edges** (upward flow):
+  - `reveals_gap_in`: Implementation → Requirement/Thesis (found missing pieces)
+  - `challenges`: Any → Thesis (evidence contradicts)
+  - `validates`: Implementation → Thesis (evidence confirms)
+
+  **Conflict edges**:
+  - `conflicts_with`: Any → Any (cannot both be true)
+  - `supersedes`: Any → Any (this replaces that)
+
+  Each edge type has constraints on valid source/target node types.
+
+priority: P0
+category: CORE
+tags: [data-model, edges, relationships]
+
+acceptance:
+  - id: AT-001
+    given: "an edge of type 'supports'"
+    when: "created"
+    then: "source must be type Source AND target must be type Thesis"
+    verification: automated
+
+  - id: AT-002
+    given: "an edge of type 'satisfies'"
+    when: "created"
+    then: "source must be type Implementation AND target must be type Requirement"
+    verification: automated
+
+  - id: AT-003
+    given: "all defined edge types"
+    when: "queried"
+    then: "each has documented source/target constraints AND semantic description"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-BIDIRECTIONAL-FLOW
+      version: "1.0.0"
+      rationale: "Edge types encode bidirectional information flow"
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: "1.0.0"
+      rationale: "Typed edges enable structured traversal queries"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

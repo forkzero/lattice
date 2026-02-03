@@ -1,0 +1,64 @@
+id: REQ-CLI-005
+type: requirement
+
+title: "Record Verification via CLI"
+body: |
+  The `lattice verify` command records that an implementation satisfies
+  a requirement:
+
+  ```bash
+  # Basic verification
+  $ lattice verify IMP-FOO satisfies REQ-BAR-001
+
+  # With evidence
+  $ lattice verify IMP-FOO satisfies REQ-BAR-001 \
+      --tests-pass \
+      --coverage 0.94 \
+      --files "src/foo.ts,src/bar.ts"
+
+  # Auto-detect files from implementation node
+  $ lattice verify IMP-FOO satisfies REQ-BAR-001 --auto-hash
+  ```
+
+  Verification:
+  1. Creates/updates `satisfies` edge with current requirement version
+  2. Records file hashes for content drift detection
+  3. Records evidence (test results, coverage)
+  4. Updates implementation's `lastVerified` timestamp
+
+priority: P0
+category: CLI
+tags: [cli, verify, traceability]
+
+acceptance:
+  - id: AT-001
+    given: "`lattice verify IMP-FOO satisfies REQ-BAR-001`"
+    when: "both nodes exist"
+    then: "satisfies edge is created with current REQ-BAR-001 version"
+    verification: automated
+
+  - id: AT-002
+    given: "verification with --auto-hash"
+    when: "implementation specifies files"
+    then: "file content hashes are recorded in the edge"
+    verification: automated
+
+  - id: AT-003
+    given: "re-verification after requirement update"
+    when: "`lattice verify` runs"
+    then: "edge version is updated to current requirement version"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-VERSION-AWARE
+      version: "1.0.0"
+      rationale: "Verification binds to specific versions"
+  depends_on:
+    - target: REQ-CORE-003
+      rationale: "Creates version-bound edges"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

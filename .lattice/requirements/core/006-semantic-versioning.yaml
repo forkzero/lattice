@@ -1,0 +1,56 @@
+id: REQ-CORE-006
+type: requirement
+
+title: "Semantic Versioning for All Nodes"
+body: |
+  All nodes use semantic versioning (MAJOR.MINOR.PATCH):
+
+  - **MAJOR**: Breaking change to meaning or interface
+    - Requirement: Fundamental change to what's required
+    - Thesis: Core claim changed
+    - Implementation: API breaking change
+
+  - **MINOR**: Backward-compatible addition or clarification
+    - Requirement: Added acceptance test, clarified language
+    - Thesis: Added supporting evidence
+    - Implementation: New feature, same interface
+
+  - **PATCH**: Bug fix or typo correction
+    - Any node: Typo fix, formatting, no semantic change
+
+  Version increments are explicit (not automatic). The author decides
+  whether a change is major/minor/patch based on impact.
+
+priority: P0
+category: CORE
+tags: [versioning, semver]
+
+acceptance:
+  - id: AT-001
+    given: "any node"
+    when: "created"
+    then: "it has a version field in MAJOR.MINOR.PATCH format"
+    verification: automated
+
+  - id: AT-002
+    given: "a node is updated"
+    when: "saved"
+    then: "the version must be greater than the previous version"
+    verification: automated
+
+  - id: AT-003
+    given: "version change from 1.0.0 to 2.0.0"
+    when: "drift analysis runs"
+    then: "it is classified as a major change"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-VERSION-AWARE
+      version: "1.0.0"
+      rationale: "Semantic versioning enables meaningful drift classification"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

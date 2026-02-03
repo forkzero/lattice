@@ -1,0 +1,50 @@
+# Lattice Configuration
+# This file defines the lattice settings for this project
+
+lattice_version: "0.1.0"
+project: lattice
+description: "Lattice specifying itself - a knowledge coordination protocol"
+
+# Node ID prefixes
+prefixes:
+  source: SRC
+  thesis: THX
+  requirement: REQ
+  implementation: IMP
+
+# Categories for requirements
+categories:
+  - CORE    # Core data model and storage
+  - API     # REST/WebSocket API
+  - CLI     # Command-line interface
+  - AGENT   # Agent integration protocol
+  - EXPORT  # Export and view generation
+
+# Priority levels
+priorities:
+  - P0  # Must have for MVP
+  - P1  # Must have for beta
+  - P2  # Nice to have
+
+# Verification strategies
+verification_types:
+  - automated   # Can be verified by running tests
+  - manual      # Requires human review
+  - statistical # Verified by metrics/sampling
+
+# Status workflow
+statuses:
+  - draft       # Work in progress
+  - active      # Approved and in effect
+  - deprecated  # Being phased out
+  - superseded  # Replaced by another node
+
+# Export settings
+exports:
+  requirements_md: docs/REQUIREMENTS.md
+  traceability_md: docs/TRACEABILITY.md
+
+# Git integration
+git:
+  require_clean_for_verify: true
+  auto_commit_on_verify: false

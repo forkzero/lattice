@@ -1,0 +1,35 @@
+id: SRC-STRATEGIC-JUSTIFICATION
+type: source
+
+title: "Strategic Justification for Technical Decisions is Often Lost"
+body: |
+  Technical decisions in software projects are typically justified by strategic
+  rationale: market conditions, competitive analysis, research findings, risk
+  assessments. However, this justification is often:
+
+  - Captured in ephemeral media (meetings, Slack, email)
+  - Stored separately from technical artifacts (strategy decks vs. code)
+  - Not explicitly linked to the decisions it justifies
+  - Lost when team members leave
+
+  Consequences:
+  - New team members don't understand why decisions were made
+  - Changing requirements requires rediscovering original rationale
+  - "Chesterton's fence" problem: removing things without understanding why they exist
+  - Compliance audits can't demonstrate decision rationale
+
+  Explicit links from implementation → requirements → strategy → research
+  would preserve this justification chain.
+
+meta:
+  citations:
+    - "Architectural Decision Records (ADR) Pattern - Michael Nygard"
+    - "Design Rationale Research: A Survey (Burge et al., 2008)"
+    - "Documenting Software Architectures (Clements et al.)"
+  reliability: peer_reviewed
+  retrieved_at: "2026-02-03"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

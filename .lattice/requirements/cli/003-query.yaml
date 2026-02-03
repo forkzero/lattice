@@ -1,0 +1,71 @@
+id: REQ-CLI-003
+type: requirement
+
+title: "Query the Lattice via CLI"
+body: |
+  The `lattice query` command retrieves nodes and traverses the graph:
+
+  ```bash
+  # Get a specific node
+  $ lattice get REQ-CORE-001
+
+  # List all requirements
+  $ lattice list requirements
+
+  # Filter by status/priority
+  $ lattice list requirements --status active --priority P0
+
+  # Traverse upstream (why does this exist?)
+  $ lattice graph REQ-CORE-001 --direction upstream --depth 2
+
+  # Traverse downstream (what depends on this?)
+  $ lattice graph THX-AGENT-NATIVE --direction downstream
+
+  # Find uncovered requirements (no satisfying implementation)
+  $ lattice list requirements --uncovered
+  ```
+
+  Output formats: `--format yaml|json|table|tree`
+
+priority: P0
+category: CLI
+tags: [cli, query, list, graph]
+
+acceptance:
+  - id: AT-001
+    given: "`lattice get REQ-CORE-001`"
+    when: "node exists"
+    then: "full node content is displayed in default format"
+    verification: automated
+
+  - id: AT-002
+    given: "`lattice list requirements --priority P0`"
+    when: "executed"
+    then: "only P0 requirements are listed"
+    verification: automated
+
+  - id: AT-003
+    given: "`lattice graph REQ-CORE-001 --direction upstream`"
+    when: "executed"
+    then: "shows REQ-CORE-001 → derives_from → THX-* → supported_by → SRC-*"
+    verification: automated
+
+  - id: AT-004
+    given: "`lattice list requirements --uncovered`"
+    when: "executed"
+    then: "only requirements without satisfies edges are listed"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: "1.0.0"
+      rationale: "Structured queries are core to agent-native tools"
+  depends_on:
+    - target: REQ-CORE-002
+      rationale: "Graph traversal uses typed edges"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

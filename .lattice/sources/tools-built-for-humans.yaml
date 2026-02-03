@@ -1,0 +1,38 @@
+id: SRC-TOOLS-FOR-HUMANS
+type: source
+
+title: "Current Requirements Tools Optimized for Human Workflows"
+body: |
+  Existing requirements management tools (Jira, Azure DevOps, IBM DOORS,
+  Notion, Confluence) were designed for human authors and readers. They
+  optimize for:
+
+  - Rich text editing and formatting
+  - Collaborative editing with comments
+  - Flexible schemas and custom fields
+  - Search and filtering
+  - Integration with project management workflows
+
+  What they lack for agent workflows:
+  - Machine-parseable structure (most use rich text/HTML)
+  - Explicit, typed relationships (links are untyped or weakly typed)
+  - Version-aware edges (no "this link was valid for version X")
+  - Programmatic write access (APIs exist but are secondary)
+  - Drift detection (no alerts when linked artifacts change)
+  - Feedback mechanisms (no way to record "implementation revealed gap")
+
+  As agents become primary consumers of requirements, tools must evolve.
+
+meta:
+  citations:
+    - "Jira REST API Documentation (2025)"
+    - "Azure DevOps Requirements Management Overview"
+    - "IBM DOORS Next Generation Documentation"
+    - "Industry surveys on requirements tool adoption (2020-2025)"
+  reliability: industry
+  retrieved_at: "2026-02-03"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

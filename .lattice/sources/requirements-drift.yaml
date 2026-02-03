@@ -1,0 +1,35 @@
+id: SRC-REQUIREMENTS-DRIFT
+type: source
+
+title: "Requirements Documentation Drifts From Implementation"
+body: |
+  Studies consistently show that requirements documentation becomes stale
+  over time. Code evolves faster than documentation is updated, leading to
+  a growing gap between what the documentation says and what the code does.
+
+  Key findings:
+  - 60-80% of requirements documents are out of date within 6 months
+  - Developers stop trusting documentation, rely on code reading
+  - Compliance audits fail due to documentation drift
+  - The cost of re-synchronizing documentation exceeds original authoring cost
+
+  Root causes:
+  - No enforcement mechanism (docs and code can diverge freely)
+  - Update friction (changing docs requires separate workflow)
+  - No visibility (no alerts when drift occurs)
+  - Wrong incentives (shipping code is rewarded, updating docs is not)
+
+  Automated drift detection could address this by alerting when artifacts diverge.
+
+meta:
+  citations:
+    - "Forward, A. & Lethbridge, T. (2002). The Relevance of Software Documentation"
+    - "Aghajani, E. et al. (2019). Software Documentation Issues Unveiled"
+    - "Uddin, G. & Robillard, M. (2015). How API Documentation Fails"
+  reliability: peer_reviewed
+  retrieved_at: "2026-02-03"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

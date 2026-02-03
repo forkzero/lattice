@@ -1,0 +1,32 @@
+id: SRC-KNOWLEDGE-GRAPHS
+type: source
+
+title: "Knowledge Graphs Enable Complex Relationship Queries"
+body: |
+  Knowledge graphs—directed graphs where nodes represent entities and edges
+  represent relationships—have proven effective for representing complex,
+  interconnected knowledge domains.
+
+  Key findings:
+  - Graph databases outperform relational for relationship-heavy queries
+  - Explicit relationship typing improves query precision
+  - Version-aware graphs enable temporal queries ("what was true at time T")
+  - Graph traversal enables impact analysis ("what depends on X")
+
+  Applications in requirements engineering:
+  - Dependency graphs for change impact analysis
+  - Traceability graphs for compliance
+  - Concept graphs for domain modeling
+
+meta:
+  citations:
+    - "Hogan, A. et al. (2021). Knowledge Graphs. ACM Computing Surveys"
+    - "Neo4j Case Studies: Requirements Management"
+    - "Semantic Web Technologies for Requirements Traceability (2019)"
+  reliability: peer_reviewed
+  retrieved_at: "2026-02-03"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

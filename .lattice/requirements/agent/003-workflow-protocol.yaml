@@ -1,0 +1,61 @@
+id: REQ-AGENT-003
+type: requirement
+
+title: "Documented Agent Workflow Protocol"
+body: |
+  The lattice provides a documented protocol for agent interaction:
+
+  **Before implementing:**
+  1. Query the requirement: `GET /lattice/nodes/:id`
+  2. Traverse upstream: `GET /lattice/graph/:id?direction=upstream`
+  3. Check constraints: `GET /lattice/edges?to=:id&type=conflicts_with`
+
+  **During implementation:**
+  4. If gaps found: `POST /lattice/edges` with `reveals_gap_in`
+  5. If thesis challenged: `POST /lattice/edges` with `challenges`
+
+  **After implementation:**
+  6. Register implementation: `POST /lattice/nodes` (type: implementation)
+  7. Record verification: `POST /lattice/verify`
+
+  **On drift alerts:**
+  8. Query drift: `GET /lattice/drift?scope=:impl-id`
+  9. Re-verify or update implementation
+
+  This protocol is documented and agents are expected to follow it.
+
+priority: P1
+category: AGENT
+tags: [agent, protocol, workflow]
+
+acceptance:
+  - id: AT-001
+    given: "an agent following the protocol"
+    when: "implementing a requirement"
+    then: "full traceability exists from implementation → requirement → thesis → source"
+    verification: manual
+
+  - id: AT-002
+    given: "the agent workflow documentation"
+    when: "reviewed"
+    then: "it covers all edge types and query patterns"
+    verification: manual
+
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: "1.0.0"
+      rationale: "Protocol enables consistent agent interaction"
+    - target: THX-BIDIRECTIONAL-FLOW
+      version: "1.0.0"
+      rationale: "Protocol includes feedback mechanisms"
+  depends_on:
+    - target: REQ-API-001
+      rationale: "Protocol uses API endpoints"
+    - target: REQ-AGENT-001
+      rationale: "Protocol uses feedback edges"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

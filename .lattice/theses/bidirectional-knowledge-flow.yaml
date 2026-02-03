@@ -1,0 +1,46 @@
+id: THX-BIDIRECTIONAL-FLOW
+type: thesis
+
+title: "Knowledge Flows Bidirectionally Between Layers"
+body: |
+  The traditional view of requirements is top-down:
+    Strategy → Requirements → Implementation
+
+  But in practice, information flows both ways:
+    - Implementation reveals gaps in requirements
+    - Requirements challenge assumptions in strategy
+    - New research invalidates existing theses
+
+  A knowledge system must support this bidirectional flow:
+
+  Downward (justification):
+    - Research SUPPORTS theses
+    - Theses DERIVE requirements
+    - Requirements are SATISFIED BY implementations
+
+  Upward (feedback):
+    - Implementations REVEAL GAPS IN requirements
+    - Implementations CHALLENGE or VALIDATE theses
+    - Theses create NEED FOR RESEARCH
+
+  Ignoring upward flow means losing knowledge gained during implementation.
+  The system should make it easy to record feedback, not just consume specs.
+
+meta:
+  category: technical
+  confidence: 0.85
+  valid_until: null
+
+edges:
+  supported_by:
+    - target: SRC-KNOWLEDGE-GRAPHS
+      strength: 0.8
+      rationale: "Graph models naturally support bidirectional edges"
+    - target: SRC-STRATEGIC-JUSTIFICATION
+      strength: 0.7
+      rationale: "Capturing feedback preserves knowledge"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

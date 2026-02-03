@@ -1,0 +1,64 @@
+id: REQ-CLI-004
+type: requirement
+
+title: "Check Drift via CLI"
+body: |
+  The `lattice drift` command detects version and content drift:
+
+  ```bash
+  # Show all drift
+  $ lattice drift
+
+  # Check specific scope
+  $ lattice drift --scope implementations
+  $ lattice drift --scope requirements
+
+  # CI mode: exit non-zero if drift detected
+  $ lattice drift --check
+
+  # Show only errors (major version changes)
+  $ lattice drift --severity error
+  ```
+
+  Output shows:
+  - Node ID
+  - Bound version vs current version
+  - Severity (patch/minor/major)
+  - Affected downstream nodes
+
+priority: P0
+category: CLI
+tags: [cli, drift, verification, ci]
+
+acceptance:
+  - id: AT-001
+    given: "an implementation bound to requirement v1.0.0"
+    when: "requirement is updated to v1.1.0 and `lattice drift` runs"
+    then: "drift is reported with severity 'minor'"
+    verification: automated
+
+  - id: AT-002
+    given: "`lattice drift --check` with drift present"
+    when: "executed"
+    then: "exit code is non-zero"
+    verification: automated
+
+  - id: AT-003
+    given: "`lattice drift --check` with no drift"
+    when: "executed"
+    then: "exit code is zero"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-VERSION-AWARE
+      version: "1.0.0"
+      rationale: "CLI exposes drift detection"
+  depends_on:
+    - target: REQ-CORE-005
+      rationale: "Implements drift detection via CLI"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"

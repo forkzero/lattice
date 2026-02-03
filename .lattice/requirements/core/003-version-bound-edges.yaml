@@ -1,0 +1,61 @@
+id: REQ-CORE-003
+type: requirement
+
+title: "Edges Are Bound to Specific Versions"
+body: |
+  Every edge records the version of both source and target nodes at the time
+  the edge was created. This enables drift detection.
+
+  Edge structure:
+  ```yaml
+  edges:
+    derives_from:
+      - target: THX-SOME-THESIS
+        version: "1.2.0"        # Target version when edge was created
+        rationale: "..."
+  ```
+
+  When a node's version changes:
+  - Edges pointing TO the old version are flagged as "potentially stale"
+  - Edges pointing FROM the old version remain valid (historical record)
+
+  This enables queries like:
+  - "Which implementations need re-verification?" (target version < current)
+  - "What was the requirement when this implementation was verified?"
+
+priority: P0
+category: CORE
+tags: [data-model, edges, versioning, drift]
+
+acceptance:
+  - id: AT-001
+    given: "an edge is created from node A to node B"
+    when: "the edge is stored"
+    then: "it includes the current version of node B"
+    verification: automated
+
+  - id: AT-002
+    given: "node B is updated from v1.0.0 to v1.1.0"
+    when: "drift detection runs"
+    then: "edges pointing to B with version < 1.1.0 are flagged as stale"
+    verification: automated
+
+  - id: AT-003
+    given: "historical edge with version 1.0.0"
+    when: "target node is at version 2.0.0"
+    then: "edge is marked stale AND original version is preserved for audit"
+    verification: automated
+
+edges:
+  derives_from:
+    - target: THX-VERSION-AWARE
+      version: "1.0.0"
+      rationale: "Version-bound edges enable drift detection"
+  depends_on:
+    - target: REQ-CORE-002
+      rationale: "Version binding applies to typed edges"
+
+status: active
+version: "1.0.0"
+created_at: "2026-02-03T00:00:00Z"
+created_by: "human:george"
