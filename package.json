@@ -1,0 +1,58 @@
+{
+  "name": "lattice",
+  "version": "0.1.0",
+  "description": "A knowledge coordination protocol for human-agent collaboration",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "lattice": "./bin/lattice.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src tests --ext .ts",
+    "lint:fix": "eslint src tests --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "cli": "tsx src/cli/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "requirements",
+    "traceability",
+    "knowledge-graph",
+    "ai-agents",
+    "specifications"
+  ],
+  "author": "George Moon",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/forkzero/lattice.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "yaml": "^2.5.0",
+    "chalk": "^5.3.0",
+    "glob": "^11.0.0"
+  }
+}
