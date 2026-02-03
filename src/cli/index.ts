@@ -2,13 +2,20 @@
 /**
  * Lattice CLI - Command-line interface for Lattice operations.
  *
- * Linked requirements: REQ-CLI-001 through REQ-CLI-005
+ * Linked requirements: REQ-CLI-001 through REQ-CLI-005, REQ-CORE-009
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { findLatticeRoot } from '../storage/files.js';
+import { findLatticeRoot, loadNodesByType } from '../storage/files.js';
 import { buildNodeIndex, findDrift } from '../graph/traverse.js';
+import { exportNarrative, type Audience } from '../export/narrative.js';
+import type {
+  SourceNode,
+  ThesisNode,
+  RequirementNode,
+  ImplementationNode,
+} from '../core/types.js';
 
 const program = new Command();
 
@@ -128,6 +135,75 @@ program
     console.log(node.body);
     console.log();
     console.log(chalk.gray(`Status: ${node.status} | Version: ${node.version}`));
+  });
+
+// Export command
+program
+  .command('export')
+  .description('Export the lattice to various formats')
+  .option(
+    '-f, --format <format>',
+    'Export format (narrative, json)',
+    'narrative'
+  )
+  .option(
+    '-a, --audience <audience>',
+    'Target audience for narrative (investor, contributor, overview)',
+    'overview'
+  )
+  .option('-t, --title <title>', 'Document title', 'Lattice')
+  .option('--include-internal', 'Include nodes marked as internal')
+  .action((options) => {
+    const root = findLatticeRoot();
+    if (!root) {
+      console.error(chalk.red('Not in a lattice directory'));
+      process.exit(1);
+    }
+
+    if (options.format === 'json') {
+      const nodeIndex = buildNodeIndex(root);
+      const nodes = Array.from(nodeIndex.values());
+      console.log(JSON.stringify(nodes, null, 2));
+      return;
+    }
+
+    if (options.format === 'narrative') {
+      const validAudiences = ['investor', 'contributor', 'overview'];
+      if (!validAudiences.includes(options.audience)) {
+        console.error(
+          chalk.red(
+            `Invalid audience: ${options.audience}. Must be one of: ${validAudiences.join(', ')}`
+          )
+        );
+        process.exit(1);
+      }
+
+      const sources = loadNodesByType(root, 'sources') as SourceNode[];
+      const theses = loadNodesByType(root, 'theses') as ThesisNode[];
+      const requirements = loadNodesByType(
+        root,
+        'requirements'
+      ) as RequirementNode[];
+      const implementations = loadNodesByType(
+        root,
+        'implementations'
+      ) as ImplementationNode[];
+
+      const output = exportNarrative(
+        { sources, theses, requirements, implementations },
+        {
+          audience: options.audience as Audience,
+          title: options.title,
+          includeInternal: options.includeInternal || false,
+        }
+      );
+
+      console.log(output);
+      return;
+    }
+
+    console.error(chalk.red(`Unknown format: ${options.format}`));
+    process.exit(1);
   });
 
 program.parse();
