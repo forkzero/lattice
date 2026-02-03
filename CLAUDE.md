@@ -144,3 +144,24 @@ GitHub Actions runs on every push:
 - Build
 
 Local CI check: `make ci`
+
+## CI/CD Monitoring
+
+After any `git push`, automatically spawn the `ci-monitor` agent to track the GitHub Actions workflow and alert on failures.
+
+### Custom Agents
+
+Custom agents are defined in `.claude/agents/`:
+
+| Agent | Purpose |
+|-------|---------|
+| `ci-monitor` | Monitor GitHub Actions after push, alert on failures |
+
+### Manual Monitoring
+
+```bash
+gh run list --limit 5              # Recent runs
+gh run watch <RUN_ID>              # Watch live
+gh run view <RUN_ID> --log-failed  # Failed logs
+gh run rerun <RUN_ID> --failed     # Re-run failures
+```
