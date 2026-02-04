@@ -475,7 +475,8 @@ fn main() {
                             if let Some(ref res) = node.resolution {
                                 match res.status {
                                     Resolution::Blocked | Resolution::Deferred => {
-                                        let status_str = format!("[{:?}]", res.status).to_lowercase();
+                                        let status_str =
+                                            format!("[{:?}]", res.status).to_lowercase();
                                         let reason = res.reason.as_deref().unwrap_or("");
                                         println!(
                                             "{} {} - {} {}",
@@ -492,7 +493,12 @@ fn main() {
                             // Show resolution status if present
                             if let Some(ref res) = node.resolution {
                                 let status_str = format!("[{:?}]", res.status).to_lowercase();
-                                println!("{} {} - {}", node.id.cyan(), status_str.yellow(), node.title);
+                                println!(
+                                    "{} {} - {}",
+                                    node.id.cyan(),
+                                    status_str.yellow(),
+                                    node.title
+                                );
                             } else {
                                 println!("{} - {}", node.id.cyan(), node.title);
                             }
@@ -531,8 +537,7 @@ fn main() {
                 process::exit(1);
             };
 
-            let resolved_by =
-                format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"));
+            let resolved_by = format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"));
 
             let options = ResolveOptions {
                 node_id: id.clone(),
@@ -544,10 +549,7 @@ fn main() {
             match resolve_node(&root, options) {
                 Ok(path) => {
                     let status_str = format!("{:?}", resolution).to_lowercase();
-                    println!(
-                        "{}",
-                        format!("Resolved {} as {}", id, status_str).green()
-                    );
+                    println!("{}", format!("Resolved {} as {}", id, status_str).green());
                     if let Some(r) = reason {
                         println!("{}", format!("Reason: {}", r).dimmed());
                     }
