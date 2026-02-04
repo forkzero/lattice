@@ -2,22 +2,30 @@ id: REQ-AGENT-002
 type: requirement
 title: Clear Attribution for Agent vs Human Actions
 body: |
-  Every node and edge records who created it:
+  Every node and edge records who created it and who requested it:
 
   ```yaml
-  created_by: "human:george"      # Human author
-  created_by: "agent:claude-opus" # AI agent
-  created_by: "ci:github-actions" # Automated system
+  created_by: "agent:claude-2026-02-04"           # Who performed the action
+  requested_by: "George Moon <george@email.com>" # Who initiated the action
   ```
+
+  The `created_by` field indicates the actor (human, agent, or CI system):
+  - `human:george` - Human author
+  - `agent:claude-2026-02-04` - AI agent with date
+  - `ci:github-actions` - Automated system
+
+  The `requested_by` field captures the human who initiated agent actions,
+  auto-populated from git config (user.name and user.email).
 
   This enables:
   - Audit trails showing agent vs human contributions
+  - Tracking who requested agent-created content
   - Filtering by author type
   - Understanding provenance of knowledge
 
-  The `created_by` field is required and cannot be modified after creation.
+  Both fields are set at creation and cannot be modified.
 status: active
-version: 1.0.0
+version: 1.1.0
 created_at: 2026-02-03T00:00:00Z
 created_by: human:george
 priority: P1

@@ -189,6 +189,8 @@ pub struct LatticeNode {
     pub version: String,
     pub created_at: String,
     pub created_by: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requested_by: Option<String>,
 
     // Optional fields depending on node type
     #[serde(skip_serializing_if = "Option::is_none")]

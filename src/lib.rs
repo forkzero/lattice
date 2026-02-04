@@ -15,7 +15,7 @@ pub use graph::{
 };
 pub use storage::{
     AddRequirementOptions, AddSourceOptions, AddThesisOptions, LATTICE_DIR, ResolveOptions,
-    add_requirement, add_source, add_thesis, find_lattice_root, find_node_path, load_all_nodes,
-    load_nodes_by_type, resolve_node,
+    add_requirement, add_source, add_thesis, find_lattice_root, find_node_path, get_git_user,
+    load_all_nodes, load_nodes_by_type, resolve_node,
 };
 pub use types::{LatticeNode, NodeIndex, NodeType, Priority, Resolution, ResolutionInfo, Status};

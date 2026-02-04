@@ -1,6 +1,6 @@
 //! File-based storage for Lattice nodes.
 //!
-//! Linked requirements: REQ-CORE-004, REQ-CLI-002
+//! Linked requirements: REQ-CORE-004, REQ-CLI-002, REQ-AGENT-002
 
 use crate::types::{
     EdgeReference, Edges, LatticeNode, NodeMeta, NodeType, Priority, Reliability, Resolution,
@@ -8,10 +8,37 @@ use crate::types::{
 };
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use thiserror::Error;
 use walkdir::WalkDir;
 
 pub const LATTICE_DIR: &str = ".lattice";
+
+/// Get the git user name and email from git config.
+pub fn get_git_user() -> Option<String> {
+    let name = Command::new("git")
+        .args(["config", "user.name"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    let email = Command::new("git")
+        .args(["config", "user.email"])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
+    match (name, email) {
+        (Some(n), Some(e)) => Some(format!("{} <{}>", n, e)),
+        (Some(n), None) => Some(n),
+        (None, Some(e)) => Some(e),
+        (None, None) => None,
+    }
+}
 
 #[derive(Error, Debug)]
 pub enum StorageError {
@@ -178,6 +205,7 @@ pub fn add_requirement(
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
+        requested_by: get_git_user(),
         priority: Some(options.priority),
         category: Some(options.category.clone()),
         tags: options.tags,
@@ -220,6 +248,7 @@ pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, Sto
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
+        requested_by: get_git_user(),
         priority: None,
         category: None,
         tags: None,
@@ -259,6 +288,7 @@ pub fn add_source(root: &Path, options: AddSourceOptions) -> Result<PathBuf, Sto
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
+        requested_by: get_git_user(),
         priority: None,
         category: None,
         tags: None,
