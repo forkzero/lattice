@@ -1,0 +1,21 @@
+id: REQ-CORE-011
+type: requirement
+title: Default Values for Node Fields
+body: 'When creating nodes, the following defaults apply if not explicitly specified: (1) version: ''1.0.0'' for new nodes, (2) status: ''active'' (skip draft for programmatic creation), (3) created_at: current ISO 8601 timestamp, (4) created_by: ''agent:{agent-name}-{date}'' for agent-created or ''unknown'' if unspecified, (5) For theses: confidence defaults to 0.8, (6) For sources: reliability defaults to ''unverified'', (7) For edge references: version defaults to ''1.0.0'' if target version cannot be resolved. These defaults are documented and can be overridden explicitly.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:36:56.847639+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: CORE
+tags:
+- defaults
+- schema
+- validation
+edges:
+  derives_from:
+  - target: THX-PROSE-PRIMARY
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CORE-001
+    version: 1.0.0
