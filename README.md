@@ -2,6 +2,59 @@
 
 A knowledge coordination protocol for the human-agent era.
 
+## Installation
+
+### macOS (Apple Silicon)
+
+```bash
+curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-aarch64-apple-darwin.tar.gz | tar -xz
+sudo mv lattice-0.0.1-aarch64-apple-darwin/lattice /usr/local/bin/
+```
+
+### macOS (Intel)
+
+```bash
+curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-x86_64-apple-darwin.tar.gz | tar -xz
+sudo mv lattice-0.0.1-x86_64-apple-darwin/lattice /usr/local/bin/
+```
+
+### Linux (x86_64)
+
+```bash
+curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+sudo mv lattice-0.0.1-x86_64-unknown-linux-gnu/lattice /usr/local/bin/
+```
+
+### Linux (ARM64)
+
+```bash
+curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-aarch64-unknown-linux-gnu.tar.gz | tar -xz
+sudo mv lattice-0.0.1-aarch64-unknown-linux-gnu/lattice /usr/local/bin/
+```
+
+### Verify Installation
+
+```bash
+lattice --version
+# lattice 0.0.1
+```
+
+### Manual Download
+
+Download binaries directly from [GitHub Releases](https://github.com/forkzero/lattice/releases).
+
+Verify checksums:
+```bash
+# Download checksums.txt from the release
+sha256sum -c checksums.txt
+```
+
+### Uninstall
+
+```bash
+sudo rm /usr/local/bin/lattice
+```
+
 ## What is Lattice?
 
 Lattice connects research, strategy, requirements, and implementation into a single, traversable, version-aware knowledge graph.
@@ -34,17 +87,21 @@ lattice init
 lattice add requirement \
   --id REQ-AUTH-001 \
   --title "JWT Authentication" \
-  --priority P0
+  --body "Implement JWT-based authentication" \
+  --priority P0 \
+  --category AUTH
 
 # Query the lattice
-lattice list requirements --priority P0
-lattice graph REQ-AUTH-001 --direction upstream
+lattice list requirements
+lattice get REQ-AUTH-001
 
 # Check for drift
 lattice drift
 
-# Export to markdown
-lattice export requirements > docs/REQUIREMENTS.md
+# Export narrative
+lattice export --audience overview
+lattice export --audience investor
+lattice export --audience contributor
 ```
 
 ## Directory Structure
@@ -116,28 +173,29 @@ Lattice provides a structured protocol for agent interaction:
 3. **After**: Register implementation and verify
 4. **On drift**: Re-verify or update
 
-See [docs/AGENT_PROTOCOL.md](docs/AGENT_PROTOCOL.md) for the full specification.
-
 ## Self-Describing
 
 This repository uses Lattice to describe itself. The `.lattice/` directory contains:
 
 - **Sources**: Research on requirements engineering, knowledge graphs, agent systems
 - **Theses**: Why Lattice should exist and how it should work
-- **Requirements**: Specifications for Lattice itself
+- **Requirements**: Specifications for Lattice itself (36 requirements)
 
 ```bash
 # See the lattice for Lattice
 lattice list requirements
-lattice graph REQ-CORE-001 --direction upstream
+lattice export --audience overview
 ```
 
 ## Status
 
-**Early development.** Core concepts are defined; implementation is in progress.
+**v0.0.1** - Early development. Core CLI implemented, API in progress.
 
 See [docs/STRATEGIC_VISION.md](docs/STRATEGIC_VISION.md) for the full vision.
 
 ## License
 
-MIT
+Copyright (c) 2026 ForkZero. All rights reserved.
+
+This source code is provided for reference and evaluation purposes only.
+See [LICENSE](LICENSE) for details.

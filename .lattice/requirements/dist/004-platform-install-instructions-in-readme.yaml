@@ -1,0 +1,22 @@
+id: REQ-DIST-004
+type: requirement
+title: Platform Install Instructions in README
+body: 'The README must include clear installation instructions for each supported platform. Instructions include: (1) curl one-liner for each OS/arch when install script is available, (2) manual download instructions from GitHub Releases, (3) verification steps (checksum, version check), (4) PATH configuration guidance, (5) uninstall instructions. Instructions are tested and kept in sync with actual release artifacts.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T08:04:16.242330+00:00
+created_by: agent:claude-2026-02-04
+priority: P0
+category: DIST
+tags:
+- documentation
+- readme
+- install
+- onboarding
+edges:
+  derives_from:
+  - target: THX-PROSE-PRIMARY
+    version: 1.0.0
+  depends_on:
+  - target: REQ-DIST-001
+    version: 1.0.0
