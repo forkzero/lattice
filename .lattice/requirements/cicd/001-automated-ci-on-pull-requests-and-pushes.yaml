@@ -1,0 +1,19 @@
+id: REQ-CICD-001
+type: requirement
+title: Automated CI on Pull Requests and Pushes
+body: 'All pull requests and pushes to main trigger automated CI. The CI pipeline runs: (1) code formatting check (cargo fmt), (2) linting (cargo clippy), (3) all tests (cargo test), (4) release build (cargo build --release), (5) CLI smoke tests against the repository''s own .lattice/ directory. PRs cannot merge if CI fails. CI results are visible in GitHub Actions.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:44:22.600939+00:00
+created_by: agent:claude-2026-02-04
+priority: P0
+category: CICD
+tags:
+- ci
+- automation
+- github-actions
+- testing
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

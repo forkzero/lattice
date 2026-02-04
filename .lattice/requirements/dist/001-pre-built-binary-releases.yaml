@@ -1,0 +1,19 @@
+id: REQ-DIST-001
+type: requirement
+title: Pre-built Binary Releases
+body: 'Release builds produce pre-built binaries for supported platforms: (1) macOS x86_64 (Intel), (2) macOS aarch64 (Apple Silicon), (3) Linux x86_64 (glibc), (4) Linux aarch64. Windows support deferred until user demand is demonstrated. Binaries are built in CI using cross-compilation or native runners. Release artifacts are uploaded to GitHub Releases with checksums. Binary naming convention: lattice-{version}-{target}.tar.gz'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:44:36.086170+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: DIST
+tags:
+- release
+- binary
+- cross-platform
+- distribution
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

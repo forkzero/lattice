@@ -1,0 +1,24 @@
+id: REQ-DIST-003
+type: requirement
+title: Semantic Version Tagging Triggers Releases
+body: 'Git tags following semver pattern (v0.1.0, v1.0.0, etc.) trigger automated release workflows. The release workflow: (1) validates tag matches Cargo.toml version, (2) runs full CI suite, (3) builds binaries for all supported platforms, (4) generates checksums (SHA256), (5) creates GitHub Release with changelog, (6) uploads all artifacts. Pre-release versions (v0.1.0-alpha.1) create draft releases. crates.io publishing deferred until API stability.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:44:49.656664+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: DIST
+tags:
+- release
+- semver
+- tagging
+- automation
+edges:
+  derives_from:
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+  depends_on:
+  - target: REQ-DIST-001
+    version: 1.0.0
+  - target: REQ-CICD-001
+    version: 1.0.0

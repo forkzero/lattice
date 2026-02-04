@@ -1,0 +1,22 @@
+id: REQ-CICD-002
+type: requirement
+title: Code Coverage with Non-Regression Threshold
+body: CI measures code coverage using cargo-tarpaulin or llvm-cov. Initial threshold is 50% with goal to increase over time. Coverage threshold is updated when new tests increase coverage (ratchet up, never down). CI fails if coverage drops below the recorded threshold. Coverage reports are generated and can be uploaded to Codecov or similar. Focus is on meaningful tests, not coverage gaming.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:44:29.430331+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: CICD
+tags:
+- coverage
+- testing
+- quality
+- threshold
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CICD-001
+    version: 1.0.0
