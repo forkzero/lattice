@@ -1,0 +1,26 @@
+id: REQ-API-006
+type: requirement
+title: Prompt Actions for Codebase Integration
+body: "The lattice supports prompt actions triggered via 'lattice: <action>' syntax: (1) scan - analyze codebase and suggest requirements, (2) harden - add tests, validation, error handling for existing requirements, (3) critique - challenge theses and requirements, identify gaps, (4) test - generate test cases from acceptance criteria, (5) implement - build implementation satisfying requirements, (6) trace - verify code-to-requirement traceability, (7) doc - sync documentation with implementation status. Actions operate in the configured proposal mode."
+priority: P0
+category: API
+tags:
+  - prompt
+  - actions
+  - workflow
+  - integration
+status: active
+version: 1.0.0
+created_at: 2026-02-04T06:52:19.105Z
+created_by: agent:claude-2026-02-04
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: 1.0.0
+    - target: THX-BIDIRECTIONAL-FLOW
+      version: 1.0.0
+  depends_on:
+    - target: REQ-API-003
+      version: 1.0.0
+    - target: REQ-API-005
+      version: 1.0.0

@@ -1,0 +1,25 @@
+id: REQ-CLI-006
+type: requirement
+title: Init Hook for Agent Platform Integration
+body: "The 'lattice init' command detects and configures agent platform integrations automatically. Supported platforms: (1) Claude Code - creates .claude/agents/lattice.md with sub-agent config, adds to .claude/settings.json MCP servers, (2) Cursor - creates .cursor/agents/lattice.md or equivalent, (3) Generic - creates .lattice/agent-prompt.md for manual integration. The init command prompts for platform selection or auto-detects based on existing config directories. Can be re-run with 'lattice init --agents' to update agent configs without reinitializing the lattice."
+priority: P1
+category: CLI
+tags:
+  - init
+  - hook
+  - agents
+  - integration
+  - setup
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:10:27.856Z
+created_by: agent:claude-2026-02-04
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: 1.0.0
+  depends_on:
+    - target: REQ-AGENT-003
+      version: 1.0.0
+    - target: REQ-CLI-001
+      version: 1.0.0

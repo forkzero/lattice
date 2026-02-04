@@ -1,0 +1,24 @@
+id: REQ-API-007
+type: requirement
+title: Structured Search API
+body: "The Lattice API provides structured search for finding relevant nodes without embedding infrastructure. Search supports: (1) category filtering, (2) tag intersection, (3) keyword/trigram matching in title and body, (4) graph proximity (nodes sharing thesis derivation or dependencies), (5) ID prefix matching, (6) status filtering. Results return candidate nodes with titles and summaries for LLM-based semantic reasoning by the hosting agent. Designed to work in any implementation language (TypeScript, Rust) without ML dependencies."
+priority: P1
+category: API
+tags:
+  - search
+  - query
+  - filter
+  - graph
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:05:07.485Z
+created_by: agent:claude-2026-02-04
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: 1.0.0
+    - target: THX-FILES-SOURCE-OF-TRUTH
+      version: 1.0.0
+  depends_on:
+    - target: REQ-API-003
+      version: 1.0.0

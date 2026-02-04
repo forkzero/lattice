@@ -1,0 +1,23 @@
+id: REQ-API-008
+type: requirement
+title: Vector Similarity Search
+body: Optional vector-based semantic search for large lattices (500+ nodes). Uses local embedding model (no API keys) with content-hash caching to avoid regenerating unchanged embeddings. Deferred until structured search proves insufficient. Implementation should use language-portable solutions (ONNX Runtime, LanceDB) to support potential Rust rewrite.
+priority: P2
+category: API
+tags:
+  - search
+  - vector
+  - embeddings
+  - semantic
+  - future
+status: active
+version: 1.0.0
+created_at: 2026-02-04T07:05:18.020Z
+created_by: agent:claude-2026-02-04
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: 1.0.0
+  depends_on:
+    - target: REQ-API-007
+      version: 1.0.0

@@ -1,0 +1,22 @@
+id: REQ-API-004
+type: requirement
+title: MCP Server Mode
+body: "Lattice runs as an MCP (Model Context Protocol) server, enabling integration with Claude Code and other MCP-compatible clients. The server exposes tools for: listing nodes, getting node details, querying relationships, detecting drift, and proposing changes. This provides standardized LLM tool integration without custom protocol implementations."
+priority: P1
+category: API
+tags:
+  - mcp
+  - server
+  - tools
+  - claude-code
+status: active
+version: 1.0.0
+created_at: 2026-02-04T06:51:58.085Z
+created_by: agent:claude-2026-02-04
+edges:
+  derives_from:
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: 1.0.0
+  depends_on:
+    - target: REQ-API-003
+      version: 1.0.0
