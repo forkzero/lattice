@@ -1,0 +1,16 @@
+id: REQ-CLI-009
+type: requirement
+title: Seed Command for Bootstrapping Lattice
+body: 'The ''lattice seed'' command bootstraps a lattice from vision to requirements. Modes: (1) File-based: ''lattice seed --vision FILE'' parses an existing vision/strategy document and generates theses and requirements, (2) Interactive: ''lattice seed'' with no args prompts the user through a wizard - asks what they''re building, what problem it solves, key constraints, then generates vision summary, theses, and starting requirements. The command uses the current LLM context (when run in an agent session) or operates standalone with templates. Output: creates .lattice/ structure if needed, populates sources/ with vision doc reference, theses/ with strategic claims, requirements/ with derived specs. Designed for empty repos or projects without existing lattice structure.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T09:07:24.328321+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: CLI
+edges:
+  depends_on:
+  - target: REQ-CLI-001
+    version: 1.0.0
+  - target: REQ-CLI-002
+    version: 1.0.0
