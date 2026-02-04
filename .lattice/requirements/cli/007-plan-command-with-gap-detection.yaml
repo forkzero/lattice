@@ -1,0 +1,16 @@
+id: REQ-CLI-007
+type: requirement
+title: Plan Command with Gap Detection
+body: 'The CLI must support a ''lattice plan'' command that analyzes goals and identifies prerequisites. Inputs: (1) natural language goal (e.g., ''parallel development''), (2) specific requirement ID (e.g., REQ-CICD-001), or (3) list of requirement IDs. Output includes: existing requirements that apply, gaps that should become requirements, suggested new requirement IDs and titles, and prioritized implementation order based on dependencies. The command traverses the graph to find upstream dependencies (derives_from, depends_on edges) and downstream blockers.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T08:20:37.479558+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: CLI
+edges:
+  depends_on:
+  - target: REQ-CORE-002
+    version: 1.0.0
+  - target: REQ-CLI-003
+    version: 1.0.0

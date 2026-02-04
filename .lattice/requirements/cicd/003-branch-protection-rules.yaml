@@ -1,0 +1,14 @@
+id: REQ-CICD-003
+type: requirement
+title: Branch Protection Rules
+body: 'The main branch must be protected with rules that enforce quality gates. Required settings: (1) require status checks to pass before merge, (2) require CI workflow to complete successfully, (3) require branch to be up-to-date before merge. This ensures no code reaches main without passing automated validation. Configuration is stored in repository settings and documented in CONTRIBUTING.md.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T08:20:40.154104+00:00
+created_by: agent:claude-2026-02-04
+priority: P0
+category: CICD
+edges:
+  depends_on:
+  - target: REQ-CICD-001
+    version: 1.0.0

@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
 
 jobs:
   ci:
@@ -116,11 +117,26 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Test list command
+      - name: Smoke test - version
+        run: ./target/release/lattice --version
+
+      - name: Smoke test - list requirements
         run: ./target/release/lattice list requirements
 
-      - name: Test drift command
+      - name: Smoke test - list theses
+        run: ./target/release/lattice list theses
+
+      - name: Smoke test - list sources
+        run: ./target/release/lattice list sources
+
+      - name: Smoke test - get requirement
+        run: ./target/release/lattice get REQ-CICD-001
+
+      - name: Smoke test - drift check
         run: ./target/release/lattice drift
 
-      - name: Test export command
-        run: ./target/release/lattice export --audience overview --title "Lattice CI Test"
+      - name: Smoke test - export overview
+        run: ./target/release/lattice export --audience overview
+
+      - name: Smoke test - export contributor
+        run: ./target/release/lattice export --audience contributor

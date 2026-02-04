@@ -1,0 +1,14 @@
+id: REQ-CICD-004
+type: requirement
+title: PR-Based Workflow Enforcement
+body: 'All changes to the main branch must go through pull requests. Direct pushes to main are prohibited. PRs provide: (1) a review checkpoint for changes, (2) a trigger point for CI validation, (3) an audit trail of what changed and why, (4) opportunity for discussion before merge. Branch protection rules must disable direct push to main for all contributors.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T08:20:43.167712+00:00
+created_by: agent:claude-2026-02-04
+priority: P0
+category: CICD
+edges:
+  depends_on:
+  - target: REQ-CICD-003
+    version: 1.0.0
