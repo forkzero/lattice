@@ -1,7 +1,6 @@
 id: REQ-CORE-008
 type: requirement
-
-title: "Export Lattice to Markdown Views"
+title: Export Lattice to Markdown Views
 body: |
   The lattice can be exported to human-readable markdown files:
 
@@ -27,40 +26,41 @@ body: |
   ```
 
   The lattice is the source of truth; markdown is a view.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P1
 category: CORE
-tags: [export, markdown, views]
-
+tags:
+- export
+- markdown
+- views
 acceptance:
-  - id: AT-001
-    given: "`lattice export requirements --format markdown`"
-    when: "executed"
-    then: "markdown output includes all active requirements with acceptance tests"
-    verification: automated
-
-  - id: AT-002
-    given: "generated markdown file"
-    when: "inspected"
-    then: "it has DO NOT EDIT header with generation timestamp"
-    verification: automated
-
-  - id: AT-003
-    given: "`lattice export matrix`"
-    when: "executed"
-    then: "shows requirements × implementations traceability table"
-    verification: automated
-
+- id: AT-001
+  given: '`lattice export requirements --format markdown`'
+  when: executed
+  then: markdown output includes all active requirements with acceptance tests
+  verification: automated
+- id: AT-002
+  given: generated markdown file
+  when: inspected
+  then: it has DO NOT EDIT header with generation timestamp
+  verification: automated
+- id: AT-003
+  given: '`lattice export matrix`'
+  when: executed
+  then: shows requirements × implementations traceability table
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:20.311959+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-PROSE-PRIMARY
-      version: "1.0.0"
-      rationale: "Human-readable exports preserve prose primacy"
-    - target: THX-FILES-SOURCE-OF-TRUTH
-      version: "1.0.0"
-      rationale: "Lattice is source, markdown is view"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: THX-PROSE-PRIMARY
+    version: 1.0.0
+    rationale: Human-readable exports preserve prose primacy
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+    rationale: Lattice is source, markdown is view

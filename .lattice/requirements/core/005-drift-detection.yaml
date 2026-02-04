@@ -1,7 +1,6 @@
 id: REQ-CORE-005
 type: requirement
-
-title: "Automatic Drift Detection"
+title: Automatic Drift Detection
 body: |
   The lattice detects when artifacts have drifted from each other:
 
@@ -19,46 +18,46 @@ body: |
   - Major change: Error (must re-verify)
 
   Drift detection can be run manually or in CI.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CORE
-tags: [drift, verification, ci]
-
+tags:
+- drift
+- verification
+- ci
 acceptance:
-  - id: AT-001
-    given: "a requirement is updated from v1.0.0 to v1.1.0"
-    when: "`lattice drift` is run"
-    then: "all implementations bound to v1.0.0 are listed as stale"
-    verification: automated
-
-  - id: AT-002
-    given: "an implementation with file hashes recorded"
-    when: "the source files are modified"
-    then: "`lattice drift` reports content drift for that implementation"
-    verification: automated
-
-  - id: AT-003
-    given: "a major version change (1.x → 2.0)"
-    when: "drift is detected"
-    then: "it is classified as severity 'error'"
-    verification: automated
-
-  - id: AT-004
-    given: "`lattice drift --check` in CI"
-    when: "drift is detected"
-    then: "the command exits with non-zero status"
-    verification: automated
-
+- id: AT-001
+  given: a requirement is updated from v1.0.0 to v1.1.0
+  when: '`lattice drift` is run'
+  then: all implementations bound to v1.0.0 are listed as stale
+  verification: automated
+- id: AT-002
+  given: an implementation with file hashes recorded
+  when: the source files are modified
+  then: '`lattice drift` reports content drift for that implementation'
+  verification: automated
+- id: AT-003
+  given: a major version change (1.x → 2.0)
+  when: drift is detected
+  then: it is classified as severity 'error'
+  verification: automated
+- id: AT-004
+  given: '`lattice drift --check` in CI'
+  when: drift is detected
+  then: the command exits with non-zero status
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:19.412793+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-VERSION-AWARE
-      version: "1.0.0"
-      rationale: "Version-aware edges enable drift detection"
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+    rationale: Version-aware edges enable drift detection
   depends_on:
-    - target: REQ-CORE-003
-      rationale: "Drift detection requires version-bound edges"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-CORE-003
+    rationale: Drift detection requires version-bound edges

@@ -1,7 +1,6 @@
 id: REQ-CLI-002
 type: requirement
-
-title: "Add Nodes via CLI"
+title: Add Nodes via CLI
 body: |
   The `lattice add` command creates new nodes:
 
@@ -24,42 +23,43 @@ body: |
   4. Outputs the file path
 
   Interactive mode if required fields are missing.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CLI
-tags: [cli, add, create]
-
+tags:
+- cli
+- add
+- create
 acceptance:
-  - id: AT-001
-    given: "`lattice add requirement --id REQ-FOO-001 --title 'Test'`"
-    when: "command completes"
-    then: "file .lattice/requirements/REQ-FOO-001.yaml exists with correct structure"
-    verification: automated
-
-  - id: AT-002
-    given: "`lattice add requirement --derives-from THX-NONEXISTENT`"
-    when: "command runs"
-    then: "error is returned 'Target node THX-NONEXISTENT not found'"
-    verification: automated
-
-  - id: AT-003
-    given: "`lattice add source --url https://example.com --auto-extract`"
-    when: "command completes"
-    then: "source node is created with extracted metadata (title, date, etc.)"
-    verification: automated
-
+- id: AT-001
+  given: '`lattice add requirement --id REQ-FOO-001 --title ''Test''`'
+  when: command completes
+  then: file .lattice/requirements/REQ-FOO-001.yaml exists with correct structure
+  verification: automated
+- id: AT-002
+  given: '`lattice add requirement --derives-from THX-NONEXISTENT`'
+  when: command runs
+  then: error is returned 'Target node THX-NONEXISTENT not found'
+  verification: automated
+- id: AT-003
+  given: '`lattice add source --url https://example.com --auto-extract`'
+  when: command completes
+  then: source node is created with extracted metadata (title, date, etc.)
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:21.268161+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "CLI enables programmatic node creation"
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: CLI enables programmatic node creation
   depends_on:
-    - target: REQ-CORE-001
-      rationale: "Add creates nodes of defined types"
-    - target: REQ-CORE-004
-      rationale: "Add writes to file-based storage"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-CORE-001
+    rationale: Add creates nodes of defined types
+  - target: REQ-CORE-004
+    rationale: Add writes to file-based storage

@@ -1,7 +1,6 @@
 id: REQ-CORE-004
 type: requirement
-
-title: "File-Based Storage in .lattice Directory"
+title: File-Based Storage in .lattice Directory
 body: |
   The lattice is stored as YAML files in a `.lattice/` directory:
 
@@ -22,43 +21,43 @@ body: |
 
   Files are the source of truth. The API server reads/writes files directly.
   Git provides versioning, history, and branching.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CORE
-tags: [storage, files, git]
-
+tags:
+- storage
+- files
+- git
 acceptance:
-  - id: AT-001
-    given: "a new lattice project"
-    when: "`lattice init` is run"
-    then: ".lattice/ directory is created with config.yaml and subdirectories"
-    verification: automated
-
-  - id: AT-002
-    given: "a node is created via CLI or API"
-    when: "the operation completes"
-    then: "a corresponding YAML file exists in the appropriate subdirectory"
-    verification: automated
-
-  - id: AT-003
-    given: "a YAML file is manually edited"
-    when: "the lattice is queried"
-    then: "the changes are reflected (no stale cache)"
-    verification: automated
-
-  - id: AT-004
-    given: "the .lattice directory"
-    when: "committed to git"
-    then: "full history is available via git log/blame"
-    verification: manual
-
+- id: AT-001
+  given: a new lattice project
+  when: '`lattice init` is run'
+  then: .lattice/ directory is created with config.yaml and subdirectories
+  verification: automated
+- id: AT-002
+  given: a node is created via CLI or API
+  when: the operation completes
+  then: a corresponding YAML file exists in the appropriate subdirectory
+  verification: automated
+- id: AT-003
+  given: a YAML file is manually edited
+  when: the lattice is queried
+  then: the changes are reflected (no stale cache)
+  verification: automated
+- id: AT-004
+  given: the .lattice directory
+  when: committed to git
+  then: full history is available via git log/blame
+  verification: manual
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:19.407024+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-FILES-SOURCE-OF-TRUTH
-      version: "1.0.0"
-      rationale: "Files in git as source of truth"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+    rationale: Files in git as source of truth

@@ -13,6 +13,10 @@ tags:
 - binary
 - cross-platform
 - distribution
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:22.104171+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
   - target: THX-AGENT-NATIVE-TOOLS

@@ -1,7 +1,6 @@
 id: REQ-CORE-009
 type: requirement
-
-title: "Export Narrative View for Target Audience"
+title: Export Narrative View for Target Audience
 body: |
   The lattice can be exported as a narrative document tailored to a
   specific audience (investor, contributor, customer, team member).
@@ -17,49 +16,50 @@ body: |
   - `investor`: Strategic focus, thesis-first, market opportunity framing
   - `contributor`: Technical focus, requirements-first, how to help
   - `overview`: Balanced, suitable for README or documentation
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T12:30:00Z
+created_by: human:george
 priority: P1
 category: CORE
-tags: [export, narrative, audience, documentation]
-
+tags:
+- export
+- narrative
+- audience
+- documentation
 acceptance:
-  - id: AT-001
-    given: "a lattice with theses, sources, requirements, implementations"
-    when: "`lattice export --format narrative --audience investor` is run"
-    then: "a markdown document is generated with thesis→evidence→requirements→progress flow"
-    verification: automated
-
-  - id: AT-002
-    given: "nodes with `visibility: internal`"
-    when: "export runs with default settings"
-    then: "internal nodes are excluded from output"
-    verification: automated
-
-  - id: AT-003
-    given: "a lattice with implementations linked to requirements"
-    when: "export runs"
-    then: "progress section shows coverage (X of Y requirements implemented)"
-    verification: automated
-
-  - id: AT-004
-    given: "`lattice export --format narrative --audience contributor`"
-    when: "run"
-    then: "output emphasizes requirements, how to contribute, and open issues"
-    verification: manual
-
+- id: AT-001
+  given: a lattice with theses, sources, requirements, implementations
+  when: '`lattice export --format narrative --audience investor` is run'
+  then: a markdown document is generated with thesis→evidence→requirements→progress flow
+  verification: automated
+- id: AT-002
+  given: 'nodes with `visibility: internal`'
+  when: export runs with default settings
+  then: internal nodes are excluded from output
+  verification: automated
+- id: AT-003
+  given: a lattice with implementations linked to requirements
+  when: export runs
+  then: progress section shows coverage (X of Y requirements implemented)
+  verification: automated
+- id: AT-004
+  given: '`lattice export --format narrative --audience contributor`'
+  when: run
+  then: output emphasizes requirements, how to contribute, and open issues
+  verification: manual
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:20.318083+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-PROSE-PRIMARY
-      version: "1.0.0"
-      rationale: "Narrative export preserves prose-first principle for human readers"
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "Structured lattice enables automated document generation"
+  - target: THX-PROSE-PRIMARY
+    version: 1.0.0
+    rationale: Narrative export preserves prose-first principle for human readers
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Structured lattice enables automated document generation
   extends:
-    - target: REQ-CORE-008
-      rationale: "Narrative export is a specialized form of markdown export"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T12:30:00Z"
-created_by: "human:george"
+  - target: REQ-CORE-008
+    rationale: Narrative export is a specialized form of markdown export

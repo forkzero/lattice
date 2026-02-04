@@ -12,6 +12,10 @@ tags:
 - defaults
 - schema
 - validation
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:20.328728+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
   - target: THX-PROSE-PRIMARY

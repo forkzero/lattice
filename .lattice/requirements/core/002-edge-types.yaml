@@ -1,7 +1,6 @@
 id: REQ-CORE-002
 type: requirement
-
-title: "Typed, Directed Edges with Semantics"
+title: Typed, Directed Edges with Semantics
 body: |
   Edges connect nodes with explicit types that convey semantic meaning:
 
@@ -24,40 +23,41 @@ body: |
   - `supersedes`: Any → Any (this replaces that)
 
   Each edge type has constraints on valid source/target node types.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CORE
-tags: [data-model, edges, relationships]
-
+tags:
+- data-model
+- edges
+- relationships
 acceptance:
-  - id: AT-001
-    given: "an edge of type 'supports'"
-    when: "created"
-    then: "source must be type Source AND target must be type Thesis"
-    verification: automated
-
-  - id: AT-002
-    given: "an edge of type 'satisfies'"
-    when: "created"
-    then: "source must be type Implementation AND target must be type Requirement"
-    verification: automated
-
-  - id: AT-003
-    given: "all defined edge types"
-    when: "queried"
-    then: "each has documented source/target constraints AND semantic description"
-    verification: automated
-
+- id: AT-001
+  given: an edge of type 'supports'
+  when: created
+  then: source must be type Source AND target must be type Thesis
+  verification: automated
+- id: AT-002
+  given: an edge of type 'satisfies'
+  when: created
+  then: source must be type Implementation AND target must be type Requirement
+  verification: automated
+- id: AT-003
+  given: all defined edge types
+  when: queried
+  then: each has documented source/target constraints AND semantic description
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:19.396136+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-BIDIRECTIONAL-FLOW
-      version: "1.0.0"
-      rationale: "Edge types encode bidirectional information flow"
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "Typed edges enable structured traversal queries"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: THX-BIDIRECTIONAL-FLOW
+    version: 1.0.0
+    rationale: Edge types encode bidirectional information flow
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Typed edges enable structured traversal queries

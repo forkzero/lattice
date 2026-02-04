@@ -1,7 +1,6 @@
 id: REQ-CLI-003
 type: requirement
-
-title: "Query the Lattice via CLI"
+title: Query the Lattice via CLI
 body: |
   The `lattice query` command retrieves nodes and traverses the graph:
 
@@ -26,46 +25,47 @@ body: |
   ```
 
   Output formats: `--format yaml|json|table|tree`
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CLI
-tags: [cli, query, list, graph]
-
+tags:
+- cli
+- query
+- list
+- graph
 acceptance:
-  - id: AT-001
-    given: "`lattice get REQ-CORE-001`"
-    when: "node exists"
-    then: "full node content is displayed in default format"
-    verification: automated
-
-  - id: AT-002
-    given: "`lattice list requirements --priority P0`"
-    when: "executed"
-    then: "only P0 requirements are listed"
-    verification: automated
-
-  - id: AT-003
-    given: "`lattice graph REQ-CORE-001 --direction upstream`"
-    when: "executed"
-    then: "shows REQ-CORE-001 → derives_from → THX-* → supported_by → SRC-*"
-    verification: automated
-
-  - id: AT-004
-    given: "`lattice list requirements --uncovered`"
-    when: "executed"
-    then: "only requirements without satisfies edges are listed"
-    verification: automated
-
+- id: AT-001
+  given: '`lattice get REQ-CORE-001`'
+  when: node exists
+  then: full node content is displayed in default format
+  verification: automated
+- id: AT-002
+  given: '`lattice list requirements --priority P0`'
+  when: executed
+  then: only P0 requirements are listed
+  verification: automated
+- id: AT-003
+  given: '`lattice graph REQ-CORE-001 --direction upstream`'
+  when: executed
+  then: shows REQ-CORE-001 → derives_from → THX-* → supported_by → SRC-*
+  verification: automated
+- id: AT-004
+  given: '`lattice list requirements --uncovered`'
+  when: executed
+  then: only requirements without satisfies edges are listed
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:21.274686+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "Structured queries are core to agent-native tools"
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Structured queries are core to agent-native tools
   depends_on:
-    - target: REQ-CORE-002
-      rationale: "Graph traversal uses typed edges"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-CORE-002
+    rationale: Graph traversal uses typed edges

@@ -1,7 +1,6 @@
 id: REQ-CORE-006
 type: requirement
-
-title: "Semantic Versioning for All Nodes"
+title: Semantic Versioning for All Nodes
 body: |
   All nodes use semantic versioning (MAJOR.MINOR.PATCH):
 
@@ -20,37 +19,37 @@ body: |
 
   Version increments are explicit (not automatic). The author decides
   whether a change is major/minor/patch based on impact.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CORE
-tags: [versioning, semver]
-
+tags:
+- versioning
+- semver
 acceptance:
-  - id: AT-001
-    given: "any node"
-    when: "created"
-    then: "it has a version field in MAJOR.MINOR.PATCH format"
-    verification: automated
-
-  - id: AT-002
-    given: "a node is updated"
-    when: "saved"
-    then: "the version must be greater than the previous version"
-    verification: automated
-
-  - id: AT-003
-    given: "version change from 1.0.0 to 2.0.0"
-    when: "drift analysis runs"
-    then: "it is classified as a major change"
-    verification: automated
-
+- id: AT-001
+  given: any node
+  when: created
+  then: it has a version field in MAJOR.MINOR.PATCH format
+  verification: automated
+- id: AT-002
+  given: a node is updated
+  when: saved
+  then: the version must be greater than the previous version
+  verification: automated
+- id: AT-003
+  given: version change from 1.0.0 to 2.0.0
+  when: drift analysis runs
+  then: it is classified as a major change
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:19.418257+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-VERSION-AWARE
-      version: "1.0.0"
-      rationale: "Semantic versioning enables meaningful drift classification"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+    rationale: Semantic versioning enables meaningful drift classification

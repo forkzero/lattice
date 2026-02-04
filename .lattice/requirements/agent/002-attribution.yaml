@@ -1,7 +1,6 @@
 id: REQ-AGENT-002
 type: requirement
-
-title: "Clear Attribution for Agent vs Human Actions"
+title: Clear Attribution for Agent vs Human Actions
 body: |
   Every node and edge records who created it:
 
@@ -17,37 +16,38 @@ body: |
   - Understanding provenance of knowledge
 
   The `created_by` field is required and cannot be modified after creation.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P1
 category: AGENT
-tags: [agent, attribution, audit]
-
+tags:
+- agent
+- attribution
+- audit
 acceptance:
-  - id: AT-001
-    given: "a node created via CLI"
-    when: "saved"
-    then: "`created_by` reflects the authenticated user"
-    verification: automated
-
-  - id: AT-002
-    given: "a node created via API with agent credentials"
-    when: "saved"
-    then: "`created_by` is `agent:{agent-id}`"
-    verification: automated
-
-  - id: AT-003
-    given: "`lattice list requirements --created-by agent:*`"
-    when: "executed"
-    then: "only agent-created requirements are listed"
-    verification: automated
-
+- id: AT-001
+  given: a node created via CLI
+  when: saved
+  then: '`created_by` reflects the authenticated user'
+  verification: automated
+- id: AT-002
+  given: a node created via API with agent credentials
+  when: saved
+  then: '`created_by` is `agent:{agent-id}`'
+  verification: automated
+- id: AT-003
+  given: '`lattice list requirements --created-by agent:*`'
+  when: executed
+  then: only agent-created requirements are listed
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:43:22.780935+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "Attribution distinguishes agent from human contributions"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Attribution distinguishes agent from human contributions
