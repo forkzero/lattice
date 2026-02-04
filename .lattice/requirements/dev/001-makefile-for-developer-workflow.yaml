@@ -1,0 +1,15 @@
+id: REQ-DEV-001
+type: requirement
+title: Makefile for Developer Workflow
+body: 'The project includes a Makefile with standard targets for developer workflow: fmt (format code), lint (clippy), test (run tests), check (pre-commit: fmt+lint+test), build (release binary), clean, install, smoke (CLI smoke tests). Developers run ''make check'' before committing to catch formatting and lint issues locally before CI.'
+status: active
+version: 1.0.0
+created_at: 2026-02-04T08:58:49.681918+00:00
+created_by: agent:claude-2026-02-04
+priority: P1
+category: DEV
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T08:58:54.397524+00:00
+  resolved_by: agent:claude-2026-02-04
+edges: {}
