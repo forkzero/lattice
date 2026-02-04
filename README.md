@@ -4,49 +4,39 @@ A knowledge coordination protocol for the human-agent era.
 
 ## Installation
 
-### macOS (Apple Silicon)
-
 ```bash
-curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-aarch64-apple-darwin.tar.gz | tar -xz
-sudo mv lattice-0.0.1-aarch64-apple-darwin/lattice /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
 ```
 
-### macOS (Intel)
-
-```bash
-curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-x86_64-apple-darwin.tar.gz | tar -xz
-sudo mv lattice-0.0.1-x86_64-apple-darwin/lattice /usr/local/bin/
-```
-
-### Linux (x86_64)
-
-```bash
-curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-x86_64-unknown-linux-gnu.tar.gz | tar -xz
-sudo mv lattice-0.0.1-x86_64-unknown-linux-gnu/lattice /usr/local/bin/
-```
-
-### Linux (ARM64)
-
-```bash
-curl -fsSL https://github.com/forkzero/lattice/releases/latest/download/lattice-0.0.1-aarch64-unknown-linux-gnu.tar.gz | tar -xz
-sudo mv lattice-0.0.1-aarch64-unknown-linux-gnu/lattice /usr/local/bin/
-```
+The installer automatically detects your OS and architecture (macOS/Linux, x86_64/ARM64).
 
 ### Verify Installation
 
 ```bash
 lattice --version
-# lattice 0.0.1
 ```
 
-### Manual Download
+### Install Specific Version
 
-Download binaries directly from [GitHub Releases](https://github.com/forkzero/lattice/releases).
-
-Verify checksums:
 ```bash
-# Download checksums.txt from the release
-sha256sum -c checksums.txt
+VERSION=0.0.1 curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
+```
+
+### Manual Installation
+
+Download binaries directly from [GitHub Releases](https://github.com/forkzero/lattice/releases):
+
+| Platform | Binary |
+|----------|--------|
+| macOS Apple Silicon | `lattice-VERSION-aarch64-apple-darwin.tar.gz` |
+| macOS Intel | `lattice-VERSION-x86_64-apple-darwin.tar.gz` |
+| Linux x86_64 | `lattice-VERSION-x86_64-unknown-linux-gnu.tar.gz` |
+| Linux ARM64 | `lattice-VERSION-aarch64-unknown-linux-gnu.tar.gz` |
+
+```bash
+# Example manual install (macOS Apple Silicon)
+curl -fsSL https://github.com/forkzero/lattice/releases/download/v0.0.1/lattice-0.0.1-aarch64-apple-darwin.tar.gz | tar -xz
+sudo mv lattice-0.0.1-aarch64-apple-darwin/lattice /usr/local/bin/
 ```
 
 ### Uninstall
