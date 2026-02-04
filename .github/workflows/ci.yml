@@ -140,3 +140,50 @@ jobs:
 
       - name: Smoke test - export contributor
         run: ./target/release/lattice export --audience contributor
+
+  # Code coverage measurement
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin
+
+      - name: Run coverage
+        run: cargo tarpaulin --out Json --output-dir coverage
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(cat coverage/tarpaulin-report.json | jq '.coverage_percentage')
+          echo "Coverage: $COVERAGE%"
+
+          # Fail if coverage drops below 50%
+          THRESHOLD=50
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "ERROR: Coverage $COVERAGE% is below threshold $THRESHOLD%"
+            exit 1
+          fi
+
+          echo "Coverage $COVERAGE% meets threshold $THRESHOLD%"
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/

@@ -409,3 +409,90 @@ pub fn resolve_node(root: &Path, options: ResolveOptions) -> Result<PathBuf, Sto
     save_node(&path, &node)?;
     Ok(path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_init_lattice_creates_structure() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        let created = init_lattice(root, false).unwrap();
+
+        assert!(root.join(LATTICE_DIR).exists());
+        assert!(root.join(LATTICE_DIR).join("config.yaml").exists());
+        assert!(root.join(LATTICE_DIR).join("sources").exists());
+        assert!(root.join(LATTICE_DIR).join("theses").exists());
+        assert!(root.join(LATTICE_DIR).join("requirements").exists());
+        assert!(root.join(LATTICE_DIR).join("implementations").exists());
+        assert_eq!(created.len(), 5);
+    }
+
+    #[test]
+    fn test_init_lattice_fails_if_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // First init should succeed
+        init_lattice(root, false).unwrap();
+
+        // Second init should fail
+        let result = init_lattice(root, false);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_init_lattice_force_overwrites() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // First init
+        init_lattice(root, false).unwrap();
+
+        // Create a file in the lattice to verify it gets removed
+        let marker = root.join(LATTICE_DIR).join("marker.txt");
+        fs::write(&marker, "test").unwrap();
+        assert!(marker.exists());
+
+        // Force init should succeed and remove marker
+        init_lattice(root, true).unwrap();
+        assert!(!marker.exists());
+    }
+
+    #[test]
+    fn test_find_lattice_root_finds_parent() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        init_lattice(root, false).unwrap();
+
+        // Create a nested directory
+        let nested = root.join("src").join("deep");
+        fs::create_dir_all(&nested).unwrap();
+
+        // Should find root from nested
+        let found = find_lattice_root(&nested);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap(), root);
+    }
+
+    #[test]
+    fn test_find_lattice_root_returns_none() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // No lattice initialized
+        let found = find_lattice_root(root);
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_get_git_user_returns_some_or_none() {
+        // This test just verifies the function doesn't panic
+        // It may return Some or None depending on git config
+        let _result = get_git_user();
+    }
+}
