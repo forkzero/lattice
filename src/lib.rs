@@ -12,7 +12,8 @@ pub mod types;
 pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
 pub use graph::{DriftReport, DriftSeverity, build_node_index, find_drift};
 pub use storage::{
-    AddRequirementOptions, AddSourceOptions, AddThesisOptions, LATTICE_DIR, add_requirement,
-    add_source, add_thesis, find_lattice_root, load_all_nodes, load_nodes_by_type,
+    AddRequirementOptions, AddSourceOptions, AddThesisOptions, LATTICE_DIR, ResolveOptions,
+    add_requirement, add_source, add_thesis, find_lattice_root, find_node_path, load_all_nodes,
+    load_nodes_by_type, resolve_node,
 };
-pub use types::{LatticeNode, NodeIndex, NodeType, Priority, Status};
+pub use types::{LatticeNode, NodeIndex, NodeType, Priority, Resolution, ResolutionInfo, Status};

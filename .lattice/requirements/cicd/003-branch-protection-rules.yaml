@@ -8,6 +8,11 @@ created_at: 2026-02-04T08:20:40.154104+00:00
 created_by: agent:claude-2026-02-04
 priority: P0
 category: CICD
+resolution:
+  status: blocked
+  reason: GitHub Pro or public repo required for branch protection on private repos
+  resolved_at: 2026-02-04T08:40:04.625016+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   depends_on:
   - target: REQ-CICD-001

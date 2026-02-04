@@ -3,8 +3,8 @@
 //! Linked requirements: REQ-CORE-004, REQ-CLI-002
 
 use crate::types::{
-    EdgeReference, Edges, LatticeNode, NodeMeta, NodeType, Priority, Reliability, SourceMeta,
-    Status, ThesisCategory, ThesisMeta,
+    EdgeReference, Edges, LatticeNode, NodeMeta, NodeType, Priority, Reliability, Resolution,
+    ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -183,6 +183,7 @@ pub fn add_requirement(
         tags: options.tags,
         acceptance: None,
         visibility: None,
+        resolution: None,
         meta: None,
         edges: Some(edges),
     };
@@ -224,6 +225,7 @@ pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, Sto
         tags: None,
         acceptance: None,
         visibility: None,
+        resolution: None,
         meta: Some(NodeMeta::Thesis(ThesisMeta {
             category: options.category,
             confidence: options.confidence,
@@ -262,6 +264,7 @@ pub fn add_source(root: &Path, options: AddSourceOptions) -> Result<PathBuf, Sto
         tags: None,
         acceptance: None,
         visibility: None,
+        resolution: None,
         meta: Some(NodeMeta::Source(SourceMeta {
             url: options.url,
             citations: options.citations,
@@ -281,4 +284,59 @@ pub fn add_source(root: &Path, options: AddSourceOptions) -> Result<PathBuf, Sto
 
     save_node(&file_path, &node)?;
     Ok(file_path)
+}
+
+/// Find the file path for a node by ID.
+pub fn find_node_path(root: &Path, node_id: &str) -> Result<PathBuf, StorageError> {
+    let lattice_dir = root.join(LATTICE_DIR);
+
+    for type_name in &["sources", "theses", "requirements", "implementations"] {
+        let type_dir = lattice_dir.join(type_name);
+        if !type_dir.exists() {
+            continue;
+        }
+
+        for entry in WalkDir::new(&type_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path()
+                    .extension()
+                    .map(|ext| ext == "yaml" || ext == "yml")
+                    .unwrap_or(false)
+            })
+        {
+            if load_node(entry.path()).is_ok_and(|node| node.id == node_id) {
+                return Ok(entry.path().to_path_buf());
+            }
+        }
+    }
+
+    Err(StorageError::NodeNotFound(node_id.to_string()))
+}
+
+/// Options for resolving a node.
+pub struct ResolveOptions {
+    pub node_id: String,
+    pub resolution: Resolution,
+    pub reason: Option<String>,
+    pub resolved_by: String,
+}
+
+/// Resolve a node with a status.
+pub fn resolve_node(root: &Path, options: ResolveOptions) -> Result<PathBuf, StorageError> {
+    let path = find_node_path(root, &options.node_id)?;
+    let mut node = load_node(&path)?;
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    node.resolution = Some(ResolutionInfo {
+        status: options.resolution,
+        reason: options.reason,
+        resolved_at: now,
+        resolved_by: options.resolved_by,
+    });
+
+    save_node(&path, &node)?;
+    Ok(path)
 }

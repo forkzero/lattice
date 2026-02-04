@@ -6,8 +6,9 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience, DriftSeverity,
-    ExportOptions, LatticeData, Priority, Status, add_requirement, add_source, add_thesis,
-    build_node_index, export_narrative, find_drift, find_lattice_root, load_nodes_by_type,
+    ExportOptions, LatticeData, Priority, Resolution, ResolveOptions, Status, add_requirement,
+    add_source, add_thesis, build_node_index, export_narrative, find_drift, find_lattice_root,
+    load_nodes_by_type, resolve_node,
 };
 use std::env;
 use std::process;
@@ -48,6 +49,32 @@ enum Commands {
         /// Filter by priority (requirements only)
         #[arg(short, long)]
         priority: Option<String>,
+
+        /// Show only pending items (blocked or deferred)
+        #[arg(long)]
+        pending: bool,
+    },
+
+    /// Resolve a requirement with a status
+    Resolve {
+        /// Requirement ID (e.g., REQ-CICD-003)
+        id: String,
+
+        /// Mark as verified (requirement satisfied)
+        #[arg(long, conflicts_with_all = ["blocked", "deferred", "wontfix"])]
+        verified: bool,
+
+        /// Mark as blocked with reason (external constraint)
+        #[arg(long, conflicts_with_all = ["verified", "deferred", "wontfix"])]
+        blocked: Option<String>,
+
+        /// Mark as deferred with reason (user choice to postpone)
+        #[arg(long, conflicts_with_all = ["verified", "blocked", "wontfix"])]
+        deferred: Option<String>,
+
+        /// Mark as wontfix with reason (will not implement)
+        #[arg(long, conflicts_with_all = ["verified", "blocked", "deferred"])]
+        wontfix: Option<String>,
     },
 
     /// Check for version drift in the lattice
@@ -425,6 +452,7 @@ fn main() {
             node_type,
             status: _,
             priority: _,
+            pending,
         } => {
             let root = get_lattice_root();
 
@@ -442,8 +470,88 @@ fn main() {
             match load_nodes_by_type(&root, type_name) {
                 Ok(nodes) => {
                     for node in nodes {
-                        println!("{} - {}", node.id.cyan(), node.title);
+                        // If --pending, only show blocked or deferred items
+                        if pending {
+                            if let Some(ref res) = node.resolution {
+                                match res.status {
+                                    Resolution::Blocked | Resolution::Deferred => {
+                                        let status_str = format!("[{:?}]", res.status).to_lowercase();
+                                        let reason = res.reason.as_deref().unwrap_or("");
+                                        println!(
+                                            "{} {} - {} {}",
+                                            node.id.cyan(),
+                                            status_str.yellow(),
+                                            node.title,
+                                            reason.dimmed()
+                                        );
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        } else {
+                            // Show resolution status if present
+                            if let Some(ref res) = node.resolution {
+                                let status_str = format!("[{:?}]", res.status).to_lowercase();
+                                println!("{} {} - {}", node.id.cyan(), status_str.yellow(), node.title);
+                            } else {
+                                println!("{} - {}", node.id.cyan(), node.title);
+                            }
+                        }
                     }
+                }
+                Err(e) => {
+                    eprintln!("{}", format!("Error: {}", e).red());
+                    process::exit(1);
+                }
+            }
+        }
+
+        Commands::Resolve {
+            id,
+            verified,
+            blocked,
+            deferred,
+            wontfix,
+        } => {
+            let root = get_lattice_root();
+
+            let (resolution, reason) = if verified {
+                (Resolution::Verified, None)
+            } else if let Some(reason) = blocked {
+                (Resolution::Blocked, Some(reason))
+            } else if let Some(reason) = deferred {
+                (Resolution::Deferred, Some(reason))
+            } else if let Some(reason) = wontfix {
+                (Resolution::Wontfix, Some(reason))
+            } else {
+                eprintln!(
+                    "{}",
+                    "Must specify one of: --verified, --blocked, --deferred, --wontfix".red()
+                );
+                process::exit(1);
+            };
+
+            let resolved_by =
+                format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"));
+
+            let options = ResolveOptions {
+                node_id: id.clone(),
+                resolution: resolution.clone(),
+                reason: reason.clone(),
+                resolved_by,
+            };
+
+            match resolve_node(&root, options) {
+                Ok(path) => {
+                    let status_str = format!("{:?}", resolution).to_lowercase();
+                    println!(
+                        "{}",
+                        format!("Resolved {} as {}", id, status_str).green()
+                    );
+                    if let Some(r) = reason {
+                        println!("{}", format!("Reason: {}", r).dimmed());
+                    }
+                    println!("{}", format!("File: {}", path.display()).dimmed());
                 }
                 Err(e) => {
                     eprintln!("{}", format!("Error: {}", e).red());

@@ -33,6 +33,30 @@ pub enum Status {
     Superseded,
 }
 
+/// Resolution status for requirements.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Resolution {
+    /// Requirement is satisfied and working
+    Verified,
+    /// External constraint prevents implementation (implies revisit)
+    Blocked,
+    /// User chose to postpone (implies revisit)
+    Deferred,
+    /// Will not implement (no revisit)
+    Wontfix,
+}
+
+/// Resolution information for a requirement.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolutionInfo {
+    pub status: Resolution,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub resolved_at: String,
+    pub resolved_by: String,
+}
+
 /// Reliability level for sources.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -177,6 +201,10 @@ pub struct LatticeNode {
     pub acceptance: Option<Vec<AcceptanceTest>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<String>,
+
+    // Resolution status (for requirements)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<ResolutionInfo>,
 
     // Type-specific metadata
     #[serde(skip_serializing_if = "Option::is_none")]
