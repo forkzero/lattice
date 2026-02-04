@@ -1,9 +1,5 @@
-# Dependencies
-node_modules/
-
-# Build output
-dist/
-build/
+# Rust build output
+/target
 
 # IDE
 .idea/
@@ -21,10 +17,6 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-
-# Test coverage
-coverage/
 
 # Temporary files
 tmp/
