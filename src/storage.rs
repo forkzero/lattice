@@ -13,6 +13,9 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 pub const LATTICE_DIR: &str = ".lattice";
+pub const DEFAULT_CONFIG: &str = r#"# Lattice configuration
+version: "1.0"
+"#;
 
 /// Get the git user name and email from git config.
 pub fn get_git_user() -> Option<String> {
@@ -52,6 +55,8 @@ pub enum StorageError {
     NodeNotFound(String),
     #[error("Invalid node type: {0}")]
     InvalidNodeType(String),
+    #[error("{0}")]
+    AlreadyExists(String),
 }
 
 /// Find the lattice root by searching upward for .lattice directory.
@@ -66,6 +71,40 @@ pub fn find_lattice_root(start: &Path) -> Option<PathBuf> {
             return None;
         }
     }
+}
+
+/// Initialize a new lattice in the given directory.
+pub fn init_lattice(root: &Path, force: bool) -> Result<Vec<PathBuf>, StorageError> {
+    let lattice_dir = root.join(LATTICE_DIR);
+
+    // Check if already exists
+    if lattice_dir.exists() && !force {
+        return Err(StorageError::AlreadyExists(
+            "Lattice already initialized. Use --force to overwrite.".to_string(),
+        ));
+    }
+
+    // Remove existing if force
+    if lattice_dir.exists() && force {
+        fs::remove_dir_all(&lattice_dir)?;
+    }
+
+    let mut created = Vec::new();
+
+    // Create directories
+    let dirs = ["sources", "theses", "requirements", "implementations"];
+    for dir in &dirs {
+        let path = lattice_dir.join(dir);
+        fs::create_dir_all(&path)?;
+        created.push(path);
+    }
+
+    // Create config.yaml
+    let config_path = lattice_dir.join("config.yaml");
+    fs::write(&config_path, DEFAULT_CONFIG)?;
+    created.push(config_path);
+
+    Ok(created)
 }
 
 /// Load a single node from a YAML file.

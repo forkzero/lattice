@@ -1,7 +1,6 @@
 id: REQ-CLI-001
 type: requirement
-
-title: "Initialize Lattice in a Project"
+title: Initialize Lattice in a Project
 body: |
   The `lattice init` command initializes a lattice in the current directory:
 
@@ -18,40 +17,40 @@ body: |
   Options:
   - `--force`: Overwrite existing .lattice directory
   - `--config <file>`: Copy config from another project
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P0
 category: CLI
-tags: [cli, init]
-
+tags:
+- cli
+- init
 acceptance:
-  - id: AT-001
-    given: "a directory without .lattice/"
-    when: "`lattice init` is run"
-    then: ".lattice/ directory is created with standard structure"
-    verification: automated
-
-  - id: AT-002
-    given: "a directory with existing .lattice/"
-    when: "`lattice init` is run without --force"
-    then: "command fails with error 'Lattice already initialized'"
-    verification: automated
-
-  - id: AT-003
-    given: "`lattice init --force`"
-    when: "run in directory with existing .lattice/"
-    then: "existing .lattice/ is replaced"
-    verification: automated
-
+- id: AT-001
+  given: a directory without .lattice/
+  when: '`lattice init` is run'
+  then: .lattice/ directory is created with standard structure
+  verification: automated
+- id: AT-002
+  given: a directory with existing .lattice/
+  when: '`lattice init` is run without --force'
+  then: command fails with error 'Lattice already initialized'
+  verification: automated
+- id: AT-003
+  given: '`lattice init --force`'
+  when: run in directory with existing .lattice/
+  then: existing .lattice/ is replaced
+  verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-04T16:05:39.730996+00:00
+  resolved_by: agent:claude-2026-02-04
 edges:
   derives_from:
-    - target: THX-FILES-SOURCE-OF-TRUTH
-      version: "1.0.0"
-      rationale: "Initialize file-based storage structure"
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+    rationale: Initialize file-based storage structure
   depends_on:
-    - target: REQ-CORE-004
-      rationale: "Creates the file structure defined in CORE-004"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-CORE-004
+    rationale: Creates the file structure defined in CORE-004

@@ -8,7 +8,7 @@ use lattice::{
     AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience, DriftSeverity,
     ExportOptions, LatticeData, Plan, Priority, Resolution, ResolveOptions, Status,
     add_requirement, add_source, add_thesis, build_node_index, export_narrative, find_drift,
-    find_lattice_root, generate_plan, load_nodes_by_type, resolve_node,
+    find_lattice_root, generate_plan, init_lattice, load_nodes_by_type, resolve_node,
 };
 use std::env;
 use std::process;
@@ -411,9 +411,27 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { force: _ } => {
-            println!("{}", "lattice init not yet implemented".yellow());
-            println!("Would create .lattice/ directory structure");
+        Commands::Init { force } => {
+            let cwd = env::current_dir().expect("Failed to get current directory");
+
+            match init_lattice(&cwd, force) {
+                Ok(created) => {
+                    for path in &created {
+                        let display = path.strip_prefix(&cwd).unwrap_or(path);
+                        println!("{}", format!("Created {}", display.display()).green());
+                    }
+                    println!();
+                    println!("{}", "Lattice initialized.".green().bold());
+                    println!();
+                    println!("Next steps:");
+                    println!("  lattice seed              # Bootstrap from vision");
+                    println!("  lattice add requirement   # Add a requirement manually");
+                }
+                Err(e) => {
+                    eprintln!("{}", format!("Error: {}", e).red());
+                    process::exit(1);
+                }
+            }
         }
 
         Commands::Add { add_command } => match add_command {
