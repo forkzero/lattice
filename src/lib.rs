@@ -10,7 +10,9 @@ pub mod storage;
 pub mod types;
 
 pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
-pub use graph::{DriftReport, DriftSeverity, build_node_index, find_drift};
+pub use graph::{
+    DriftReport, DriftSeverity, Plan, PlannedItem, build_node_index, find_drift, generate_plan,
+};
 pub use storage::{
     AddRequirementOptions, AddSourceOptions, AddThesisOptions, LATTICE_DIR, ResolveOptions,
     add_requirement, add_source, add_thesis, find_lattice_root, find_node_path, load_all_nodes,

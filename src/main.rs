@@ -6,9 +6,9 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience, DriftSeverity,
-    ExportOptions, LatticeData, Priority, Resolution, ResolveOptions, Status, add_requirement,
-    add_source, add_thesis, build_node_index, export_narrative, find_drift, find_lattice_root,
-    load_nodes_by_type, resolve_node,
+    ExportOptions, LatticeData, Plan, Priority, Resolution, ResolveOptions, Status,
+    add_requirement, add_source, add_thesis, build_node_index, export_narrative, find_drift,
+    find_lattice_root, generate_plan, load_nodes_by_type, resolve_node,
 };
 use std::env;
 use std::process;
@@ -75,6 +75,13 @@ enum Commands {
         /// Mark as wontfix with reason (will not implement)
         #[arg(long, conflicts_with_all = ["verified", "blocked", "deferred"])]
         wontfix: Option<String>,
+    },
+
+    /// Plan implementation of requirements
+    Plan {
+        /// Requirement IDs to plan (e.g., REQ-CLI-001 REQ-CLI-002)
+        #[arg(required = true)]
+        requirements: Vec<String>,
     },
 
     /// Check for version drift in the lattice
@@ -317,6 +324,89 @@ fn split_csv(s: Option<String>) -> Option<Vec<String>> {
     s.map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
 }
 
+fn print_plan(plan: &Plan, index: &lattice::NodeIndex) {
+    // Print summary
+    println!("{}", "IMPLEMENTATION PLAN".bold());
+    println!(
+        "{}",
+        format!(
+            "{} ready, {} blocked, {} verified\n",
+            plan.ready.len(),
+            plan.blocked.len(),
+            plan.verified.len()
+        )
+        .dimmed()
+    );
+
+    // Print verified (already done)
+    if !plan.verified.is_empty() {
+        println!("{}", "✓ VERIFIED (already done)".green());
+        for id in &plan.verified {
+            if let Some(node) = index.get(id) {
+                println!("  {} - {}", id.dimmed(), node.title);
+            }
+        }
+        println!();
+    }
+
+    // Print ready (can implement now)
+    if !plan.ready.is_empty() {
+        println!("{}", "→ READY (can implement now)".cyan());
+        for id in &plan.ready {
+            if let Some(node) = index.get(id) {
+                println!("  {} - {}", id.cyan(), node.title);
+            }
+        }
+        println!();
+    }
+
+    // Print blocked (waiting on dependencies)
+    if !plan.blocked.is_empty() {
+        println!("{}", "⏸ BLOCKED (waiting on dependencies)".yellow());
+        for item in &plan.items {
+            if plan.blocked.contains(&item.id) {
+                let status = match &item.resolution {
+                    Some(Resolution::Blocked) => "[blocked]".red().to_string(),
+                    Some(Resolution::Deferred) => "[deferred]".yellow().to_string(),
+                    _ => format!("[needs: {}]", item.blocked_by.join(", "))
+                        .dimmed()
+                        .to_string(),
+                };
+                println!("  {} {} - {}", item.id.yellow(), status, item.title);
+            }
+        }
+        println!();
+    }
+
+    // Print implementation order
+    println!("{}", "IMPLEMENTATION ORDER".bold());
+    for item in &plan.items {
+        if plan.verified.contains(&item.id) {
+            continue; // Skip already verified
+        }
+        let marker = if plan.ready.contains(&item.id) {
+            "→".cyan()
+        } else {
+            "·".dimmed()
+        };
+        let status = match &item.resolution {
+            Some(Resolution::Verified) => "[verified]".green(),
+            Some(Resolution::Blocked) => "[blocked]".red(),
+            Some(Resolution::Deferred) => "[deferred]".yellow(),
+            Some(Resolution::Wontfix) => "[wontfix]".dimmed(),
+            None => "".normal(),
+        };
+        println!(
+            "  {} {}. {} {} - {}",
+            marker,
+            item.order + 1,
+            item.id,
+            status,
+            item.title
+        );
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -554,6 +644,21 @@ fn main() {
                         println!("{}", format!("Reason: {}", r).dimmed());
                     }
                     println!("{}", format!("File: {}", path.display()).dimmed());
+                }
+                Err(e) => {
+                    eprintln!("{}", format!("Error: {}", e).red());
+                    process::exit(1);
+                }
+            }
+        }
+
+        Commands::Plan { requirements } => {
+            let root = get_lattice_root();
+
+            match build_node_index(&root) {
+                Ok(index) => {
+                    let plan = generate_plan(&requirements, &index);
+                    print_plan(&plan, &index);
                 }
                 Err(e) => {
                     eprintln!("{}", format!("Error: {}", e).red());
