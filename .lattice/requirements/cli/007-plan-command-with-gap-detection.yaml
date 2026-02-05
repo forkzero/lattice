@@ -1,20 +1,28 @@
 id: REQ-CLI-007
 type: requirement
-title: Plan Command with Gap Detection
-body: 'The CLI must support a ''lattice plan'' command that analyzes goals and identifies prerequisites. Inputs: (1) natural language goal (e.g., ''parallel development''), (2) specific requirement ID (e.g., REQ-CICD-001), or (3) list of requirement IDs. Output includes: existing requirements that apply, gaps that should become requirements, suggested new requirement IDs and titles, and prioritized implementation order based on dependencies. The command traverses the graph to find upstream dependencies (derives_from, depends_on edges) and downstream blockers.'
+title: Next Command — LLM-Driven Planning via Agent Prompt
+body: >
+  The 'lattice next' workflow is an agent-driven planning step, not a Rust algorithm.
+  It is implemented as a portable, LLM-agnostic prompt file (.lattice/prompts/next.md)
+  that any agent (Claude, GPT, Gemini, etc.) can follow. The prompt instructs the agent to:
+  (1) Read lattice state — unresolved/blocked/verified requirements, priorities, dependency edges.
+  (2) Explore the codebase — architecture, patterns, test coverage, recent changes.
+  (3) Batch into waves — group related work, identify parallelizable items.
+  (4) Detect gaps — missing requirements, missing tests, stale edges, uncovered theses.
+  (5) Recommend 1–3 concrete next actions with rationale tied to lattice nodes.
+  The CLI may invoke this prompt via 'lattice next' in a future release, but the prompt
+  file is the canonical artifact. Evolved from v1 which envisioned gap detection as a
+  built-in Rust algorithm; v2 reframes it as an agent workflow that leverages LLM reasoning
+  over the full lattice + codebase context.
 status: active
-version: 1.0.0
+version: 2.0.0
 created_at: 2026-02-04T08:20:37.479558+00:00
 created_by: agent:claude-2026-02-04
 priority: P1
 category: CLI
-resolution:
-  status: verified
-  resolved_at: 2026-02-04T09:13:05.983573+00:00
-  resolved_by: agent:claude-2026-02-04
 edges:
   depends_on:
-  - target: REQ-CORE-002
+  - target: REQ-CORE-004
     version: 1.0.0
-  - target: REQ-CLI-003
+  - target: REQ-CORE-005
     version: 1.0.0

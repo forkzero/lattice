@@ -1,0 +1,19 @@
+id: IMP-DEV-001
+type: implementation
+title: Developer Workflow Makefile
+body: >
+  Makefile with targets for fmt, lint, test, check (pre-commit), build,
+  clean, install, smoke tests, watch mode, and help.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T21:00:00.000000+00:00
+created_by: agent:claude-opus-4.5-2026-02-04
+meta:
+  language: make
+  files:
+    - path: Makefile
+edges:
+  satisfies:
+    - target: REQ-DEV-001
+      version: 1.0.0
+      rationale: Makefile for developer workflow

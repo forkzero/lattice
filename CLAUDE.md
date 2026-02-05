@@ -126,6 +126,10 @@ Every feature links back to requirements in `.lattice/requirements/`:
 - Reference requirement IDs in source file doc comments
 - Update implementation nodes when code changes
 
+## Agent Workflows
+
+See `.lattice/prompts/` for agent workflows (e.g., `lattice next` planning).
+
 ## Architecture Rules
 
 1. **Files are source of truth** — No database, no separate state

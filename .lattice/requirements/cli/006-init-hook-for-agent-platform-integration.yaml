@@ -19,7 +19,7 @@ edges:
     - target: THX-AGENT-NATIVE-TOOLS
       version: 1.0.0
   depends_on:
-    - target: REQ-AGENT-003
+    - target: REQ-AGENT-004
       version: 1.0.0
     - target: REQ-CLI-001
       version: 1.0.0

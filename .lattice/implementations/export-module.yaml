@@ -1,0 +1,29 @@
+id: IMP-EXPORT-001
+type: implementation
+title: Narrative Export (export.rs)
+body: >
+  Generates markdown narratives from lattice data for three audiences:
+  investor (strategic thesis + research support + progress), contributor
+  (open requirements by priority + acceptance criteria), and overview
+  (why/what/progress summary). Also supports JSON export of full node index.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T21:00:00.000000+00:00
+created_by: agent:claude-opus-4.5-2026-02-04
+meta:
+  language: rust
+  files:
+    - path: src/export.rs
+      functions:
+        - export_narrative
+        - generate_investor_narrative
+        - generate_contributor_narrative
+        - generate_overview_narrative
+edges:
+  satisfies:
+    - target: REQ-CORE-008
+      version: 1.0.0
+      rationale: Exports lattice to markdown views
+    - target: REQ-CORE-009
+      version: 1.0.0
+      rationale: Audience-specific narrative generation

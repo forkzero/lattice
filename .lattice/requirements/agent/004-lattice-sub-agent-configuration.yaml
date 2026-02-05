@@ -1,4 +1,4 @@
-id: REQ-AGENT-003
+id: REQ-AGENT-004
 type: requirement
 title: Lattice Sub-Agent Configuration
 body: "Lattice provides a sub-agent configuration for LLM platforms that support agent delegation (Claude Code, AutoGPT, CrewAI, etc.). The sub-agent has: (1) specialized system prompt for requirements analysis - challenges assumptions, looks for gaps, ensures testability, (2) access to Lattice MCP tools plus .lattice/ file read only, (3) enforced workflow: search existing → propose → challenge → finalize, (4) returns structured summary to parent agent. Complements MCP tools for complex requirement operations like 'lattice: critique' or iterative requirement development."

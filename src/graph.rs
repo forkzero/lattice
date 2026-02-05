@@ -339,3 +339,417 @@ pub fn generate_plan(requirement_ids: &[String], index: &NodeIndex) -> Plan {
         verified,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+
+    /// Helper to build a minimal requirement node.
+    fn req(
+        id: &str,
+        version: &str,
+        edges: Option<Edges>,
+        resolution: Option<Resolution>,
+    ) -> LatticeNode {
+        LatticeNode {
+            id: id.to_string(),
+            node_type: NodeType::Requirement,
+            title: format!("Test {id}"),
+            body: String::new(),
+            status: Status::Active,
+            version: version.to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            created_by: "test".to_string(),
+            requested_by: None,
+            priority: Some(Priority::P1),
+            category: None,
+            tags: None,
+            acceptance: None,
+            visibility: None,
+            resolution: resolution.map(|s| ResolutionInfo {
+                status: s,
+                reason: None,
+                resolved_at: "2026-01-01T00:00:00Z".to_string(),
+                resolved_by: "test".to_string(),
+            }),
+            meta: None,
+            edges,
+        }
+    }
+
+    fn edge_ref(target: &str, version: &str) -> EdgeReference {
+        EdgeReference {
+            target: target.to_string(),
+            version: Some(version.to_string()),
+            rationale: None,
+        }
+    }
+
+    fn depends_on(targets: &[(&str, &str)]) -> Option<Edges> {
+        Some(Edges {
+            depends_on: Some(targets.iter().map(|(t, v)| edge_ref(t, v)).collect()),
+            ..Default::default()
+        })
+    }
+
+    // --- compare_versions ---
+
+    #[test]
+    fn test_compare_versions_major() {
+        assert_eq!(
+            compare_versions("1.0.0", "2.0.0"),
+            Some(DriftSeverity::Major)
+        );
+    }
+
+    #[test]
+    fn test_compare_versions_minor() {
+        assert_eq!(
+            compare_versions("1.0.0", "1.1.0"),
+            Some(DriftSeverity::Minor)
+        );
+    }
+
+    #[test]
+    fn test_compare_versions_patch() {
+        assert_eq!(
+            compare_versions("1.0.0", "1.0.1"),
+            Some(DriftSeverity::Patch)
+        );
+    }
+
+    #[test]
+    fn test_compare_versions_no_drift() {
+        assert_eq!(compare_versions("1.0.0", "1.0.0"), None);
+    }
+
+    #[test]
+    fn test_compare_versions_invalid() {
+        assert_eq!(compare_versions("1.0", "1.0.0"), None);
+        assert_eq!(compare_versions("abc", "1.0.0"), None);
+    }
+
+    // --- find_dependencies ---
+
+    #[test]
+    fn test_find_dependencies_returns_depends_on_targets() {
+        let mut index = NodeIndex::new();
+        index.insert(
+            "REQ-A".into(),
+            req(
+                "REQ-A",
+                "1.0.0",
+                depends_on(&[("REQ-B", "1.0.0"), ("REQ-C", "1.0.0")]),
+                None,
+            ),
+        );
+        index.insert("REQ-B".into(), req("REQ-B", "1.0.0", None, None));
+        index.insert("REQ-C".into(), req("REQ-C", "1.0.0", None, None));
+
+        let deps = find_dependencies("REQ-A", &index);
+        assert_eq!(deps.len(), 2);
+        assert!(deps.contains(&"REQ-B".to_string()));
+        assert!(deps.contains(&"REQ-C".to_string()));
+    }
+
+    #[test]
+    fn test_find_dependencies_excludes_theses() {
+        let mut index = NodeIndex::new();
+        let edges = Some(Edges {
+            derives_from: Some(vec![
+                edge_ref("THX-FOO", "1.0.0"),
+                edge_ref("REQ-B", "1.0.0"),
+            ]),
+            ..Default::default()
+        });
+        index.insert("REQ-A".into(), req("REQ-A", "1.0.0", edges, None));
+        index.insert("REQ-B".into(), req("REQ-B", "1.0.0", None, None));
+
+        let deps = find_dependencies("REQ-A", &index);
+        assert_eq!(deps, vec!["REQ-B".to_string()]);
+    }
+
+    #[test]
+    fn test_find_dependencies_missing_node() {
+        let index = NodeIndex::new();
+        assert!(find_dependencies("REQ-MISSING", &index).is_empty());
+    }
+
+    // --- find_dependents ---
+
+    #[test]
+    fn test_find_dependents() {
+        let mut index = NodeIndex::new();
+        index.insert("REQ-A".into(), req("REQ-A", "1.0.0", None, None));
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-C".into(),
+            req("REQ-C", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+
+        let dependents = find_dependents("REQ-A", &index);
+        assert_eq!(dependents.len(), 2);
+        assert!(dependents.contains(&"REQ-B".to_string()));
+        assert!(dependents.contains(&"REQ-C".to_string()));
+    }
+
+    #[test]
+    fn test_find_dependents_none() {
+        let mut index = NodeIndex::new();
+        index.insert("REQ-A".into(), req("REQ-A", "1.0.0", None, None));
+
+        assert!(find_dependents("REQ-A", &index).is_empty());
+    }
+
+    // --- traverse_from ---
+
+    #[test]
+    fn test_traverse_from_follows_edges() {
+        let mut index = NodeIndex::new();
+        index.insert(
+            "REQ-A".into(),
+            req("REQ-A", "1.0.0", depends_on(&[("REQ-B", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-C", "1.0.0")]), None),
+        );
+        index.insert("REQ-C".into(), req("REQ-C", "1.0.0", None, None));
+
+        let mut visited = HashSet::new();
+        let result = traverse_from("REQ-A", &index, &mut visited);
+
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].id, "REQ-A");
+    }
+
+    #[test]
+    fn test_traverse_from_handles_cycles() {
+        let mut index = NodeIndex::new();
+        index.insert(
+            "REQ-A".into(),
+            req("REQ-A", "1.0.0", depends_on(&[("REQ-B", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+
+        let mut visited = HashSet::new();
+        let result = traverse_from("REQ-A", &index, &mut visited);
+
+        // Should visit each node exactly once despite cycle
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_traverse_from_missing_start() {
+        let index = NodeIndex::new();
+        let mut visited = HashSet::new();
+        let result = traverse_from("REQ-MISSING", &index, &mut visited);
+        assert!(result.is_empty());
+    }
+
+    // --- topological_sort ---
+
+    #[test]
+    fn test_topological_sort_linear_chain() {
+        let mut index = NodeIndex::new();
+        index.insert("REQ-A".into(), req("REQ-A", "1.0.0", None, None));
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-C".into(),
+            req("REQ-C", "1.0.0", depends_on(&[("REQ-B", "1.0.0")]), None),
+        );
+
+        let ids: Vec<String> = vec!["REQ-A".into(), "REQ-B".into(), "REQ-C".into()];
+        let sorted = topological_sort(&ids, &index);
+
+        let pos_a = sorted.iter().position(|x| x == "REQ-A").unwrap();
+        let pos_b = sorted.iter().position(|x| x == "REQ-B").unwrap();
+        let pos_c = sorted.iter().position(|x| x == "REQ-C").unwrap();
+
+        assert!(pos_a < pos_b);
+        assert!(pos_b < pos_c);
+    }
+
+    #[test]
+    fn test_topological_sort_diamond() {
+        // A -> B, A -> C, B -> D, C -> D
+        let mut index = NodeIndex::new();
+        index.insert("REQ-A".into(), req("REQ-A", "1.0.0", None, None));
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-C".into(),
+            req("REQ-C", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-D".into(),
+            req(
+                "REQ-D",
+                "1.0.0",
+                depends_on(&[("REQ-B", "1.0.0"), ("REQ-C", "1.0.0")]),
+                None,
+            ),
+        );
+
+        let ids: Vec<String> = vec![
+            "REQ-A".into(),
+            "REQ-B".into(),
+            "REQ-C".into(),
+            "REQ-D".into(),
+        ];
+        let sorted = topological_sort(&ids, &index);
+
+        let pos_a = sorted.iter().position(|x| x == "REQ-A").unwrap();
+        let pos_b = sorted.iter().position(|x| x == "REQ-B").unwrap();
+        let pos_c = sorted.iter().position(|x| x == "REQ-C").unwrap();
+        let pos_d = sorted.iter().position(|x| x == "REQ-D").unwrap();
+
+        assert!(pos_a < pos_b);
+        assert!(pos_a < pos_c);
+        assert!(pos_b < pos_d);
+        assert!(pos_c < pos_d);
+    }
+
+    #[test]
+    fn test_topological_sort_independent_nodes() {
+        let mut index = NodeIndex::new();
+        index.insert("REQ-A".into(), req("REQ-A", "1.0.0", None, None));
+        index.insert("REQ-B".into(), req("REQ-B", "1.0.0", None, None));
+
+        let ids: Vec<String> = vec!["REQ-A".into(), "REQ-B".into()];
+        let sorted = topological_sort(&ids, &index);
+
+        assert_eq!(sorted.len(), 2);
+        assert!(sorted.contains(&"REQ-A".to_string()));
+        assert!(sorted.contains(&"REQ-B".to_string()));
+    }
+
+    // --- generate_plan ---
+
+    #[test]
+    fn test_generate_plan_categorizes_items() {
+        let mut index = NodeIndex::new();
+        index.insert(
+            "REQ-A".into(),
+            req("REQ-A", "1.0.0", None, Some(Resolution::Verified)),
+        );
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+        index.insert(
+            "REQ-C".into(),
+            req("REQ-C", "1.0.0", depends_on(&[("REQ-B", "1.0.0")]), None),
+        );
+
+        let plan = generate_plan(&["REQ-C".into()], &index);
+
+        assert!(plan.verified.contains(&"REQ-A".to_string()));
+        assert!(plan.ready.contains(&"REQ-B".to_string()));
+        assert!(plan.blocked.contains(&"REQ-C".to_string()));
+    }
+
+    #[test]
+    fn test_generate_plan_all_deps_verified_means_ready() {
+        let mut index = NodeIndex::new();
+        index.insert(
+            "REQ-A".into(),
+            req("REQ-A", "1.0.0", None, Some(Resolution::Verified)),
+        );
+        index.insert(
+            "REQ-B".into(),
+            req("REQ-B", "1.0.0", depends_on(&[("REQ-A", "1.0.0")]), None),
+        );
+
+        let plan = generate_plan(&["REQ-B".into()], &index);
+
+        assert!(plan.ready.contains(&"REQ-B".to_string()));
+        assert!(plan.blocked.is_empty());
+    }
+
+    #[test]
+    fn test_generate_plan_blocked_resolution() {
+        let mut index = NodeIndex::new();
+        index.insert(
+            "REQ-A".into(),
+            req("REQ-A", "1.0.0", None, Some(Resolution::Blocked)),
+        );
+
+        let plan = generate_plan(&["REQ-A".into()], &index);
+
+        assert!(plan.blocked.contains(&"REQ-A".to_string()));
+        assert!(plan.ready.is_empty());
+    }
+
+    #[test]
+    fn test_generate_plan_empty_input() {
+        let index = NodeIndex::new();
+        let plan = generate_plan(&[], &index);
+
+        assert!(plan.items.is_empty());
+        assert!(plan.ready.is_empty());
+        assert!(plan.blocked.is_empty());
+        assert!(plan.verified.is_empty());
+    }
+
+    // --- find_drift (file-based, using tempdir) ---
+
+    #[test]
+    fn test_find_drift_detects_version_mismatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let req_dir = root.join(".lattice").join("requirements");
+        std::fs::create_dir_all(&req_dir).unwrap();
+
+        // REQ-A at version 2.0.0
+        std::fs::write(
+            req_dir.join("req-a.yaml"),
+            "id: REQ-A\ntype: requirement\ntitle: A\nbody: test\nstatus: active\nversion: '2.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\n",
+        ).unwrap();
+
+        // REQ-B depends on REQ-A at version 1.0.0 (stale)
+        std::fs::write(
+            req_dir.join("req-b.yaml"),
+            "id: REQ-B\ntype: requirement\ntitle: B\nbody: test\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\nedges:\n  depends_on:\n    - target: REQ-A\n      version: '1.0.0'\n",
+        ).unwrap();
+
+        let reports = find_drift(root).unwrap();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].node_id, "REQ-B");
+        assert_eq!(reports[0].drift_items[0].target_id, "REQ-A");
+        assert_eq!(reports[0].drift_items[0].severity, DriftSeverity::Major);
+    }
+
+    #[test]
+    fn test_find_drift_clean_when_versions_match() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let req_dir = root.join(".lattice").join("requirements");
+        std::fs::create_dir_all(&req_dir).unwrap();
+
+        std::fs::write(
+            req_dir.join("req-a.yaml"),
+            "id: REQ-A\ntype: requirement\ntitle: A\nbody: test\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\n",
+        ).unwrap();
+
+        std::fs::write(
+            req_dir.join("req-b.yaml"),
+            "id: REQ-B\ntype: requirement\ntitle: B\nbody: test\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\nedges:\n  depends_on:\n    - target: REQ-A\n      version: '1.0.0'\n",
+        ).unwrap();
+
+        let reports = find_drift(root).unwrap();
+        assert!(reports.is_empty());
+    }
+}

@@ -1,0 +1,21 @@
+id: IMP-CICD-001
+type: implementation
+title: CI Pipeline (GitHub Actions)
+body: >
+  GitHub Actions workflow with four jobs: ci (fmt, clippy, test, build),
+  validate-lattice (YAML syntax and required fields), cli-smoke-test
+  (functional tests against .lattice/), and coverage (cargo-tarpaulin
+  with threshold). Triggers on push to main and pull requests.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T21:00:00.000000+00:00
+created_by: agent:claude-opus-4.5-2026-02-04
+meta:
+  language: yaml
+  files:
+    - path: .github/workflows/ci.yml
+edges:
+  satisfies:
+    - target: REQ-CICD-001
+      version: 1.0.0
+      rationale: Automated CI on push and PR

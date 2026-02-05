@@ -5,10 +5,11 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
-    AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience, DriftSeverity,
-    ExportOptions, LatticeData, Plan, Priority, Resolution, ResolveOptions, Status,
-    add_requirement, add_source, add_thesis, build_node_index, export_narrative, find_drift,
-    find_lattice_root, generate_plan, init_lattice, load_nodes_by_type, resolve_node,
+    AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience,
+    DriftSeverity, ExportOptions, LatticeData, Plan, Priority, Resolution, ResolveOptions, Status,
+    add_implementation, add_requirement, add_source, add_thesis, build_node_index,
+    export_narrative, find_drift, find_lattice_root, generate_plan, init_lattice,
+    load_nodes_by_type, resolve_node,
 };
 use std::env;
 use std::process;
@@ -222,6 +223,45 @@ enum AddCommands {
         /// Reliability (peer_reviewed, industry, blog, unverified)
         #[arg(long, default_value = "unverified")]
         reliability: String,
+
+        /// Status (draft, active)
+        #[arg(long, default_value = "active")]
+        status: String,
+
+        /// Author
+        #[arg(long)]
+        created_by: Option<String>,
+    },
+
+    /// Add an implementation to the lattice
+    Implementation {
+        /// Implementation ID (e.g., IMP-STORAGE-001)
+        #[arg(long)]
+        id: String,
+
+        /// Implementation title
+        #[arg(long)]
+        title: String,
+
+        /// Implementation body/description
+        #[arg(long)]
+        body: String,
+
+        /// Programming language (e.g., rust, python)
+        #[arg(long)]
+        language: Option<String>,
+
+        /// Comma-separated file paths
+        #[arg(long)]
+        files: Option<String>,
+
+        /// Test command (e.g., cargo test)
+        #[arg(long)]
+        test_command: Option<String>,
+
+        /// Comma-separated requirement IDs this satisfies
+        #[arg(long)]
+        satisfies: Option<String>,
 
         /// Status (draft, active)
         #[arg(long, default_value = "active")]
@@ -546,6 +586,47 @@ fn main() {
                 match add_source(&root, options) {
                     Ok(path) => {
                         println!("{}", format!("Created source: {}", id).green());
+                        println!("{}", format!("File: {}", path.display()).dimmed());
+                    }
+                    Err(e) => {
+                        eprintln!("{}", format!("Error: {}", e).red());
+                        process::exit(1);
+                    }
+                }
+            }
+
+            AddCommands::Implementation {
+                id,
+                title,
+                body,
+                language,
+                files,
+                test_command,
+                satisfies,
+                status,
+                created_by,
+            } => {
+                let root = get_lattice_root();
+                let status = parse_status(&status);
+                let created_by = created_by.unwrap_or_else(|| {
+                    format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"))
+                });
+
+                let options = AddImplementationOptions {
+                    id: id.clone(),
+                    title,
+                    body,
+                    language,
+                    files: split_csv(files),
+                    test_command,
+                    satisfies: split_csv(satisfies),
+                    status,
+                    created_by,
+                };
+
+                match add_implementation(&root, options) {
+                    Ok(path) => {
+                        println!("{}", format!("Created implementation: {}", id).green());
                         println!("{}", format!("File: {}", path.display()).dimmed());
                     }
                     Err(e) => {

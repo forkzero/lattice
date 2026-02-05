@@ -1,0 +1,47 @@
+id: IMP-STORAGE-001
+type: implementation
+title: File-Based Storage Layer (storage.rs)
+body: >
+  YAML-based file storage for lattice nodes. Handles init, load, save, and
+  search operations. Nodes stored as individual YAML files organized by type
+  in .lattice/ subdirectories. Supports add operations for requirements,
+  theses, and sources with edge creation. Includes resolve command for
+  updating requirement resolution status. Uses git config for attribution.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T21:00:00.000000+00:00
+created_by: agent:claude-opus-4.5-2026-02-04
+meta:
+  language: rust
+  files:
+    - path: src/storage.rs
+      functions:
+        - init_lattice
+        - load_node
+        - save_node
+        - load_nodes_by_type
+        - load_all_nodes
+        - add_requirement
+        - add_thesis
+        - add_source
+        - resolve_node
+        - find_node_path
+        - find_lattice_root
+        - get_git_user
+edges:
+  satisfies:
+    - target: REQ-CORE-004
+      version: 1.0.0
+      rationale: File-based storage in .lattice/ directory
+    - target: REQ-CORE-010
+      version: 1.0.0
+      rationale: Enforces naming convention (category/id-slug.yaml)
+    - target: REQ-CLI-001
+      version: 1.0.0
+      rationale: init_lattice creates .lattice/ directory structure
+    - target: REQ-CLI-002
+      version: 1.0.0
+      rationale: add_requirement, add_thesis, add_source functions
+    - target: REQ-AGENT-002
+      version: 1.1.0
+      rationale: get_git_user and created_by field for attribution

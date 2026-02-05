@@ -1,0 +1,33 @@
+id: IMP-DIST-001
+type: implementation
+title: Release Pipeline and Distribution
+body: >
+  GitHub Actions release workflow builds binaries for 4 targets
+  (aarch64-apple-darwin, x86_64-apple-darwin, x86_64-unknown-linux-gnu,
+  aarch64-unknown-linux-gnu). Packages as tar.gz with SHA256 checksums.
+  Triggered by semantic version tags. Includes install.sh for curl-based
+  installation and platform instructions in README.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T21:00:00.000000+00:00
+created_by: agent:claude-opus-4.5-2026-02-04
+meta:
+  language: yaml
+  files:
+    - path: .github/workflows/release.yml
+    - path: install.sh
+    - path: README.md
+edges:
+  satisfies:
+    - target: REQ-DIST-001
+      version: 1.0.0
+      rationale: Pre-built binary releases for 4 platforms
+    - target: REQ-DIST-002
+      version: 1.0.0
+      rationale: install.sh for curl-based installation
+    - target: REQ-DIST-003
+      version: 1.0.0
+      rationale: Semantic version tagging triggers release workflow
+    - target: REQ-DIST-004
+      version: 1.0.0
+      rationale: README includes platform install instructions

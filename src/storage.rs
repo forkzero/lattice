@@ -187,6 +187,19 @@ pub struct AddThesisOptions {
     pub created_by: String,
 }
 
+/// Options for adding an implementation.
+pub struct AddImplementationOptions {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub language: Option<String>,
+    pub files: Option<Vec<String>>,
+    pub test_command: Option<String>,
+    pub satisfies: Option<Vec<String>>,
+    pub status: Status,
+    pub created_by: String,
+}
+
 /// Options for adding a source.
 pub struct AddSourceOptions {
     pub id: String,
@@ -350,6 +363,67 @@ pub fn add_source(root: &Path, options: AddSourceOptions) -> Result<PathBuf, Sto
         .to_string();
     let file_name = format!("{}.yaml", slug);
     let file_path = root.join(LATTICE_DIR).join("sources").join(&file_name);
+
+    save_node(&file_path, &node)?;
+    Ok(file_path)
+}
+
+/// Add an implementation to the lattice.
+pub fn add_implementation(
+    root: &Path,
+    options: AddImplementationOptions,
+) -> Result<PathBuf, StorageError> {
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let edges = Edges {
+        satisfies: make_edge_refs(options.satisfies),
+        ..Default::default()
+    };
+
+    let files = options.files.map(|paths| {
+        paths
+            .into_iter()
+            .map(|p| crate::types::FileRef {
+                path: p,
+                functions: None,
+            })
+            .collect()
+    });
+
+    let node = LatticeNode {
+        id: options.id.clone(),
+        node_type: NodeType::Implementation,
+        title: options.title,
+        body: options.body,
+        status: options.status,
+        version: "1.0.0".to_string(),
+        created_at: now,
+        created_by: options.created_by,
+        requested_by: get_git_user(),
+        priority: None,
+        category: None,
+        tags: None,
+        acceptance: None,
+        visibility: None,
+        resolution: None,
+        meta: Some(NodeMeta::Implementation(crate::types::ImplementationMeta {
+            language: options.language,
+            files,
+            test_command: options.test_command,
+        })),
+        edges: Some(edges),
+    };
+
+    let slug = options
+        .id
+        .to_lowercase()
+        .trim_start_matches("imp-")
+        .to_string();
+    let file_name = format!("{}.yaml", slug);
+    let file_path = root
+        .join(LATTICE_DIR)
+        .join("implementations")
+        .join(&file_name);
 
     save_node(&file_path, &node)?;
     Ok(file_path)

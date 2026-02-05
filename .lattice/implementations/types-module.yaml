@@ -1,0 +1,39 @@
+id: IMP-TYPES-001
+type: implementation
+title: Core Data Model (types.rs)
+body: >
+  Defines all core types: NodeType, LatticeNode, EdgeReference, Edges, Priority,
+  Status, Resolution, ResolutionInfo, AcceptanceTest, and type-specific metadata
+  (SourceMeta, ThesisMeta, ImplementationMeta). Implements all_edges() for
+  collecting version-bound edge references across all edge types.
+status: active
+version: 1.0.0
+created_at: 2026-02-04T21:00:00.000000+00:00
+created_by: agent:claude-opus-4.5-2026-02-04
+meta:
+  language: rust
+  files:
+    - path: src/types.rs
+      functions:
+        - LatticeNode::all_edges
+        - EdgeReference::version_or_default
+edges:
+  satisfies:
+    - target: REQ-CORE-001
+      version: 1.0.0
+      rationale: Defines Source, Thesis, Requirement, Implementation node types
+    - target: REQ-CORE-002
+      version: 1.0.0
+      rationale: Defines typed directed edges (supports, derives, depends_on, etc.)
+    - target: REQ-CORE-003
+      version: 1.0.0
+      rationale: EdgeReference carries version field for version-bound edges
+    - target: REQ-CORE-006
+      version: 1.0.0
+      rationale: Version field on LatticeNode uses MAJOR.MINOR.PATCH
+    - target: REQ-CORE-007
+      version: 1.0.0
+      rationale: LatticeNode has title and body fields as required
+    - target: REQ-CORE-011
+      version: 1.0.0
+      rationale: EdgeReference::version_or_default provides default version
