@@ -165,25 +165,12 @@ jobs:
       - name: Install cargo-tarpaulin
         run: cargo install cargo-tarpaulin
 
-      - name: Run coverage
-        run: cargo tarpaulin --out Json --output-dir coverage
-
-      - name: Check coverage threshold
-        run: |
-          COVERAGE=$(cat coverage/tarpaulin-report.json | jq '.coverage_percentage')
-          echo "Coverage: $COVERAGE%"
-
-          # Fail if coverage drops below 50%
-          THRESHOLD=50
-          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-            echo "ERROR: Coverage $COVERAGE% is below threshold $THRESHOLD%"
-            exit 1
-          fi
-
-          echo "Coverage $COVERAGE% meets threshold $THRESHOLD%"
+      - name: Run coverage with threshold
+        run: cargo tarpaulin --fail-under 50 --out Html --output-dir coverage
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: coverage-report
           path: coverage/
