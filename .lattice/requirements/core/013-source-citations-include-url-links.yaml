@@ -1,4 +1,4 @@
-id: REQ-CORE-010
+id: REQ-CORE-013
 type: requirement
 title: Source Citations Include URL Links
 body: When displaying or exporting source nodes, citations shall include clickable URL links when a URL is available. This applies to HTML export, narrative export, and CLI output where applicable.
@@ -13,6 +13,10 @@ tags:
 - sources
 - citations
 - export
+resolution:
+  status: verified
+  resolved_at: 2026-02-08T02:01:12.834842+00:00
+  resolved_by: agent:claude-2026-02-08
 edges:
   derives_from:
   - target: THX-PROSE-PRIMARY
