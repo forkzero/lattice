@@ -964,46 +964,66 @@ fn main() {
         Commands::Init { force, agents } => {
             let cwd = env::current_dir().expect("Failed to get current directory");
 
-            match init_lattice(&cwd, force) {
-                Ok(created) => {
-                    for path in &created {
-                        let display = path.strip_prefix(&cwd).unwrap_or(path);
-                        println!("{}", format!("Created {}", display.display()).green());
+            // If --agents is passed on an existing lattice, just install agents
+            let lattice_exists = cwd.join(".lattice").exists();
+            if agents && lattice_exists && !force {
+                match install_agent_definitions(&cwd) {
+                    Ok(agent_paths) => {
+                        for path in &agent_paths {
+                            let display = path.strip_prefix(&cwd).unwrap_or(path);
+                            println!("{}", format!("Created {}", display.display()).green());
+                        }
+                        println!();
+                        println!("{}", "Agent definitions installed.".green().bold());
                     }
+                    Err(e) => {
+                        eprintln!("{}", format!("Error: {}", e).red());
+                        process::exit(1);
+                    }
+                }
+            } else {
+                match init_lattice(&cwd, force) {
+                    Ok(created) => {
+                        for path in &created {
+                            let display = path.strip_prefix(&cwd).unwrap_or(path);
+                            println!("{}", format!("Created {}", display.display()).green());
+                        }
 
-                    if agents {
-                        match install_agent_definitions(&cwd) {
-                            Ok(agent_paths) => {
-                                for path in &agent_paths {
-                                    let display = path.strip_prefix(&cwd).unwrap_or(path);
-                                    println!(
+                        if agents {
+                            match install_agent_definitions(&cwd) {
+                                Ok(agent_paths) => {
+                                    for path in &agent_paths {
+                                        let display = path.strip_prefix(&cwd).unwrap_or(path);
+                                        println!(
+                                            "{}",
+                                            format!("Created {}", display.display()).green()
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!(
                                         "{}",
-                                        format!("Created {}", display.display()).green()
+                                        format!("Warning: failed to install agents: {}", e)
+                                            .yellow()
                                     );
                                 }
                             }
-                            Err(e) => {
-                                eprintln!(
-                                    "{}",
-                                    format!("Warning: failed to install agents: {}", e).yellow()
-                                );
-                            }
+                        }
+
+                        println!();
+                        println!("{}", "Lattice initialized.".green().bold());
+                        println!();
+                        println!("Next steps:");
+                        println!("  lattice seed              # Bootstrap from vision");
+                        println!("  lattice add requirement   # Add a requirement manually");
+                        if !agents {
+                            println!("  lattice init --agents     # Install agent definitions");
                         }
                     }
-
-                    println!();
-                    println!("{}", "Lattice initialized.".green().bold());
-                    println!();
-                    println!("Next steps:");
-                    println!("  lattice seed              # Bootstrap from vision");
-                    println!("  lattice add requirement   # Add a requirement manually");
-                    if !agents {
-                        println!("  lattice init --agents     # Install agent definitions");
+                    Err(e) => {
+                        eprintln!("{}", format!("Error: {}", e).red());
+                        process::exit(1);
                     }
-                }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
                 }
             }
         }
