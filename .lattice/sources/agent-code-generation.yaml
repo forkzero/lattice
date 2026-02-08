@@ -14,6 +14,7 @@ body: |
   - Iterative refinement improves output quality
 
 meta:
+  url: "https://arxiv.org/abs/2310.06770"
   citations:
     - "GitHub Copilot Research (2023-2025)"
     - "Anthropic Claude Coding Benchmarks (2024-2025)"

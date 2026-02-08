@@ -24,6 +24,7 @@ body: |
   As agents become primary consumers of requirements, tools must evolve.
 
 meta:
+  url: "https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/"
   citations:
     - "Jira REST API Documentation (2025)"
     - "Azure DevOps Requirements Management Overview"

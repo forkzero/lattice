@@ -19,6 +19,7 @@ body: |
   - Concept graphs for domain modeling
 
 meta:
+  url: "https://doi.org/10.1145/3447772"
   citations:
     - "Hogan, A. et al. (2021). Knowledge Graphs. ACM Computing Surveys"
     - "Neo4j Case Studies: Requirements Management"

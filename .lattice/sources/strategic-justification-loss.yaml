@@ -22,6 +22,7 @@ body: |
   would preserve this justification chain.
 
 meta:
+  url: "https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions"
   citations:
     - "Architectural Decision Records (ADR) Pattern - Michael Nygard"
     - "Design Rationale Research: A Survey (Burge et al., 2008)"

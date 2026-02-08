@@ -18,6 +18,7 @@ body: |
   traceability information programmatically.
 
 meta:
+  url: "https://doi.org/10.1109/ICSE.1994.296767"
   citations:
     - "Gotel, O. & Finkelstein, A. (1994). An Analysis of the Requirements Traceability Problem"
     - "Standish Group CHAOS Reports (1995-2024)"
