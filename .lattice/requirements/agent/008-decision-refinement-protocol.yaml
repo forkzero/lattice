@@ -1,0 +1,27 @@
+id: REQ-AGENT-008
+type: requirement
+title: Decision Refinement Protocol
+body: 'When an implementing agent encounters ambiguity or gaps in a requirement during planning or implementation, it must surface the decision as a sub-requirement rather than making implicit choices in code. The protocol defines four gap types: (1) clarification — ambiguous but low-stakes, agent resolves and records, (2) design decision — multiple valid approaches with tradeoffs, agent proposes and flags for review, (3) missing requirement — entirely new capability needed, creates new requirement, (4) contradiction — requirements conflict, creates challenges edge and escalates. A dedicated lattice_refine tool handles sub-requirement creation, ID generation (PARENT-A, PARENT-B convention), edge wiring (derives_from parent thesis, parent depends_on sub-req, optional reveals_gap_in from implementation), and proposal mode enforcement. The protocol document lives in .lattice/protocols/refinement.md and is referenced by tool responses.'
+status: active
+version: 1.0.0
+created_at: 2026-02-08T13:51:00.675782+00:00
+created_by: agent:claude-2026-02-08
+requested_by: George Moon <george.moon@gmail.com>
+priority: P0
+category: AGENT
+tags:
+- agent
+- refinement
+- protocol
+- workflow
+edges:
+  derives_from:
+  - target: THX-AGENT-PRODUCT-OWNER
+    version: 1.0.0
+  - target: THX-REQUIREMENTS-DURABLE
+    version: 1.0.0
+  depends_on:
+  - target: REQ-AGENT-005
+    version: 1.0.0
+  - target: REQ-API-004
+    version: 1.0.0

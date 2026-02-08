@@ -1,0 +1,24 @@
+id: REQ-AGENT-006
+type: requirement
+title: Product Owner Action Protocol
+body: 'The product owner agent supports five core actions: (1) triage — read feedback edges, drift reports, unresolved requirements and output prioritized backlog with rationale, (2) critique — challenge existing theses against implementation evidence and create challenges edges where theses no longer hold, (3) plan — propose next wave of work as structured PlannedItems written back to lattice, (4) review — evaluate whether an implementation satisfies linked requirements and record validates or reveals_gap_in edges with evidence, (5) align — check that all active requirements trace to active theses and all theses trace to sources and flag orphans. Each action operates in the configured proposal mode (interactive/batch/trust) per REQ-API-005.'
+status: active
+version: 1.0.0
+created_at: 2026-02-08T13:38:24.302300+00:00
+created_by: agent:claude-2026-02-08
+requested_by: George Moon <george.moon@gmail.com>
+priority: P0
+category: AGENT
+tags:
+- agent
+- product-owner
+- workflow
+edges:
+  derives_from:
+  - target: THX-AGENT-PRODUCT-OWNER
+    version: 1.0.0
+  depends_on:
+  - target: REQ-AGENT-005
+    version: 1.0.0
+  - target: REQ-API-005
+    version: 1.0.0

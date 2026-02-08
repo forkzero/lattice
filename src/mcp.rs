@@ -5,8 +5,9 @@
 
 use crate::graph::{build_node_index, find_drift};
 use crate::storage::{
-    AddImplementationOptions, AddRequirementOptions, ResolveOptions, add_implementation,
-    add_requirement, find_lattice_root, load_nodes_by_type, resolve_node,
+    AddImplementationOptions, AddRequirementOptions, GapType, RefineOptions, ResolveOptions,
+    add_implementation, add_requirement, find_lattice_root, load_nodes_by_type, refine_requirement,
+    resolve_node,
 };
 use crate::types::{Priority, Resolution, Status};
 use rmcp::ServiceExt;
@@ -290,6 +291,32 @@ impl LatticeServer {
             "success": true,
             "id": params.id,
             "file": path.display().to_string()
+        }))
+    }
+
+    /// Refine a requirement by creating a sub-requirement from a gap
+    fn refine(&self, params: RefineParams) -> Result<Value, String> {
+        let gap_type: GapType = params.gap_type.parse().map_err(|e: String| e)?;
+        let created_by = format!("agent:mcp-{}", chrono::Utc::now().format("%Y-%m-%d"));
+
+        let options = RefineOptions {
+            parent_id: params.parent.clone(),
+            gap_type,
+            title: params.title,
+            description: params.description,
+            proposed: params.proposed,
+            implementation_id: params.implementation,
+            created_by,
+        };
+
+        let result = refine_requirement(&self.root, options).map_err(|e| e.to_string())?;
+
+        Ok(json!({
+            "success": true,
+            "sub_requirement_id": result.sub_requirement_id,
+            "file": result.sub_requirement_path.display().to_string(),
+            "parent_updated": result.parent_updated,
+            "implementation_updated": result.implementation_updated
         }))
     }
 
@@ -596,6 +623,18 @@ struct AddImplementationParams {
 }
 
 #[derive(Debug, Deserialize)]
+struct RefineParams {
+    parent: String,
+    gap_type: String,
+    title: String,
+    description: String,
+    #[serde(default)]
+    proposed: Option<String>,
+    #[serde(default)]
+    implementation: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct SearchParams {
     #[serde(default)]
     node_type: Option<String>,
@@ -789,6 +828,46 @@ fn get_tools() -> Vec<Tool> {
             ),
         ),
         Tool::new(
+            "lattice_refine",
+            "Create a sub-requirement when you discover an ambiguity, gap, or contradiction \
+             during implementation. This captures implicit decisions as explicit, reviewable \
+             requirements. Gap types: clarification (low-stakes ambiguity, auto-resolves), \
+             design_decision (multiple valid approaches, flagged for review), \
+             missing_requirement (new capability needed), contradiction (requirements conflict, \
+             escalates to human). Auto-generates sub-requirement ID ({PARENT}-A, -B, etc.), \
+             wires depends_on from parent, and optionally adds reveals_gap_in from implementation.",
+            make_schema(
+                json!({
+                    "parent": {
+                        "type": "string",
+                        "description": "Parent requirement ID (e.g., REQ-CORE-005)"
+                    },
+                    "gap_type": {
+                        "type": "string",
+                        "description": "Type of gap discovered",
+                        "enum": ["clarification", "design_decision", "missing_requirement", "contradiction"]
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Brief title for the sub-requirement"
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "What is underspecified and why it matters for implementation"
+                    },
+                    "proposed": {
+                        "type": "string",
+                        "description": "Your proposed resolution (always provide one, even for design decisions)"
+                    },
+                    "implementation": {
+                        "type": "string",
+                        "description": "Implementation ID that discovered this gap (adds reveals_gap_in edge)"
+                    }
+                }),
+                vec!["parent", "gap_type", "title", "description"],
+            ),
+        ),
+        Tool::new(
             "lattice_search",
             "Search for nodes with flexible filtering. Supports text search, priority/status filtering, \
              tag intersection, ID prefix matching, and graph proximity (find related nodes). \
@@ -956,6 +1035,13 @@ impl ServerHandler for LatticeServer {
                     .map_err(|e| rmcp::model::ErrorData::invalid_params(e.to_string(), None))?;
                     self.add_impl(params)
                 }
+                "lattice_refine" => {
+                    let params: RefineParams = serde_json::from_value(
+                        serde_json::to_value(&arguments).unwrap_or_default(),
+                    )
+                    .map_err(|e| rmcp::model::ErrorData::invalid_params(e.to_string(), None))?;
+                    self.refine(params)
+                }
                 "lattice_search" => {
                     let params: SearchParams = serde_json::from_value(
                         serde_json::to_value(&arguments).unwrap_or_default(),
@@ -1020,7 +1106,7 @@ mod tests {
     #[test]
     fn test_get_tools_returns_all_tools() {
         let tools = get_tools();
-        assert_eq!(tools.len(), 8);
+        assert_eq!(tools.len(), 9);
 
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"lattice_summary"));
@@ -1030,6 +1116,7 @@ mod tests {
         assert!(names.contains(&"lattice_resolve"));
         assert!(names.contains(&"lattice_add_requirement"));
         assert!(names.contains(&"lattice_add_implementation"));
+        assert!(names.contains(&"lattice_refine"));
         assert!(names.contains(&"lattice_search"));
     }
 
@@ -1369,5 +1456,69 @@ mod tests {
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 2);
+    }
+
+    #[test]
+    fn test_refine_creates_sub_requirement() {
+        let (_temp_dir, server) = setup_test_lattice();
+
+        // Create parent requirement
+        server
+            .add_req(AddRequirementParams {
+                id: "REQ-REF-001".to_string(),
+                title: "Refinable Requirement".to_string(),
+                body: "A requirement that needs refinement".to_string(),
+                priority: "P0".to_string(),
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+            })
+            .unwrap();
+
+        // Refine it via MCP
+        let result = server
+            .refine(RefineParams {
+                parent: "REQ-REF-001".to_string(),
+                gap_type: "design_decision".to_string(),
+                title: "Error format".to_string(),
+                description: "Need to decide error format".to_string(),
+                proposed: Some("Use JSON".to_string()),
+                implementation: None,
+            })
+            .unwrap();
+
+        assert_eq!(result.get("success").unwrap(), true);
+        assert_eq!(result.get("sub_requirement_id").unwrap(), "REQ-REF-001-A");
+        assert_eq!(result.get("parent_updated").unwrap(), true);
+    }
+
+    #[test]
+    fn test_refine_invalid_gap_type() {
+        let (_temp_dir, server) = setup_test_lattice();
+
+        server
+            .add_req(AddRequirementParams {
+                id: "REQ-BAD-001".to_string(),
+                title: "Bad Gap Type".to_string(),
+                body: "Body".to_string(),
+                priority: "P0".to_string(),
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+            })
+            .unwrap();
+
+        let result = server.refine(RefineParams {
+            parent: "REQ-BAD-001".to_string(),
+            gap_type: "invalid_type".to_string(),
+            title: "Test".to_string(),
+            description: "Test".to_string(),
+            proposed: None,
+            implementation: None,
+        });
+
+        assert!(result.is_err());
     }
 }

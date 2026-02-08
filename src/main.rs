@@ -6,11 +6,11 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience,
-    DriftSeverity, ExportOptions, HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority,
-    Resolution, ResolveOptions, Status, VerifyOptions, add_implementation, add_requirement,
-    add_source, add_thesis, build_node_index, export_html, export_narrative, find_drift,
-    find_lattice_root, fix_issues, generate_plan, init_lattice, lint_lattice, load_nodes_by_type,
-    resolve_node, verify_implementation,
+    DriftSeverity, ExportOptions, GapType, HtmlExportOptions, LatticeData, LintSeverity, Plan,
+    Priority, RefineOptions, Resolution, ResolveOptions, Status, VerifyOptions, add_implementation,
+    add_requirement, add_source, add_thesis, build_node_index, export_html, export_narrative,
+    find_drift, find_lattice_root, fix_issues, generate_plan, init_lattice, lint_lattice,
+    load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
 };
 use std::env;
 use std::process;
@@ -163,6 +163,32 @@ enum Commands {
         /// Comma-separated file paths as evidence
         #[arg(long)]
         files: Option<String>,
+    },
+
+    /// Refine a requirement by creating a sub-requirement from a discovered gap
+    Refine {
+        /// Parent requirement ID (e.g., REQ-CORE-005)
+        parent: String,
+
+        /// Gap type: clarification, design_decision, missing_requirement, contradiction
+        #[arg(long)]
+        gap_type: String,
+
+        /// Brief title for the sub-requirement
+        #[arg(long)]
+        title: String,
+
+        /// What is underspecified and why it matters
+        #[arg(long)]
+        description: String,
+
+        /// Proposed resolution
+        #[arg(long)]
+        proposed: Option<String>,
+
+        /// Implementation ID that discovered this gap
+        #[arg(long)]
+        implementation: Option<String>,
     },
 
     /// Run as MCP server over stdio
@@ -1253,6 +1279,68 @@ fn main() {
                         format!("Verified: {} satisfies {}", implementation, requirement).green()
                     );
                     println!("{}", format!("File: {}", path.display()).dimmed());
+                }
+                Err(e) => {
+                    eprintln!("{}", format!("Error: {}", e).red());
+                    process::exit(1);
+                }
+            }
+        }
+
+        Commands::Refine {
+            parent,
+            gap_type,
+            title,
+            description,
+            proposed,
+            implementation,
+        } => {
+            let root = get_lattice_root();
+
+            let gap: GapType = match gap_type.parse() {
+                Ok(g) => g,
+                Err(e) => {
+                    eprintln!("{}", format!("Error: {}", e).red());
+                    process::exit(1);
+                }
+            };
+
+            let options = RefineOptions {
+                parent_id: parent.clone(),
+                gap_type: gap,
+                title,
+                description,
+                proposed,
+                implementation_id: implementation,
+                created_by: format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d")),
+            };
+
+            match refine_requirement(&root, options) {
+                Ok(result) => {
+                    println!(
+                        "{}",
+                        format!(
+                            "Created sub-requirement: {} (refines {})",
+                            result.sub_requirement_id, parent
+                        )
+                        .green()
+                    );
+                    println!(
+                        "{}",
+                        format!("File: {}", result.sub_requirement_path.display()).dimmed()
+                    );
+                    if result.parent_updated {
+                        println!(
+                            "{}",
+                            format!("Updated {} with depends_on edge", parent).dimmed()
+                        );
+                    }
+                    if result.implementation_updated {
+                        println!(
+                            "{}",
+                            "Updated implementation with reveals_gap_in edge".dimmed()
+                        );
+                    }
                 }
                 Err(e) => {
                     eprintln!("{}", format!("Error: {}", e).red());

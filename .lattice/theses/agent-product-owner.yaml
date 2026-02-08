@@ -1,0 +1,23 @@
+id: THX-AGENT-PRODUCT-OWNER
+type: thesis
+title: Lattice Is Infrastructure for an Agent-Based Product Owner
+body: 'Traditional product ownership is a human bottleneck: a person holds strategy, backlog, and prioritization in their head or scattered across tools. An agent can own this function if given durable, structured memory — which is exactly what a lattice provides. The lattice becomes the agent''s working memory: every decision, prioritization, and critique is written back as a node or edge. This differs fundamentally from prompt-based instructions (e.g. CLAUDE.md) where product thinking evaporates when the session ends. A sub-agent architecture separates strategic reasoning from implementation, gives each a dedicated context window, enforces structured workflows, and makes the product owner composable — invocable from CLI, CI, chat, or cron. The key insight: requirements authored and maintained by an agent product owner are auditable (git history), persistent (YAML not chat), and coordinable (multiple agents read/write the same graph).'
+status: active
+version: 1.0.0
+created_at: 2026-02-08T13:37:23.784722+00:00
+created_by: human:george
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  category: technical
+  confidence: 0.85
+edges:
+  validates:
+    - target: THX-REQUIREMENTS-DURABLE
+      version: '1.0.0'
+      rationale: Agent PO makes requirements-as-durable-artifact concrete — the agent authors and maintains them as its primary output
+    - target: THX-AGENT-NATIVE-TOOLS
+      version: '1.0.0'
+      rationale: A product owner agent is the strongest consumer of structured, queryable knowledge — it must reason over the full graph
+    - target: THX-BIDIRECTIONAL-FLOW
+      version: '1.0.0'
+      rationale: The PO agent mechanizes bidirectional flow — it reads feedback edges and writes new requirements/challenges in response

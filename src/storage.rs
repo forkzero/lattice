@@ -484,6 +484,215 @@ pub fn resolve_node(root: &Path, options: ResolveOptions) -> Result<PathBuf, Sto
     Ok(path)
 }
 
+/// Gap type for requirement refinement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GapType {
+    Clarification,
+    DesignDecision,
+    MissingRequirement,
+    Contradiction,
+}
+
+impl std::fmt::Display for GapType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GapType::Clarification => write!(f, "clarification"),
+            GapType::DesignDecision => write!(f, "design_decision"),
+            GapType::MissingRequirement => write!(f, "missing_requirement"),
+            GapType::Contradiction => write!(f, "contradiction"),
+        }
+    }
+}
+
+impl std::str::FromStr for GapType {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "clarification" => Ok(GapType::Clarification),
+            "design_decision" => Ok(GapType::DesignDecision),
+            "missing_requirement" => Ok(GapType::MissingRequirement),
+            "contradiction" => Ok(GapType::Contradiction),
+            _ => Err(format!(
+                "Invalid gap type: {}. Expected: clarification, design_decision, missing_requirement, contradiction",
+                s
+            )),
+        }
+    }
+}
+
+/// Options for refining a requirement (creating a sub-requirement from a gap).
+pub struct RefineOptions {
+    pub parent_id: String,
+    pub gap_type: GapType,
+    pub title: String,
+    pub description: String,
+    pub proposed: Option<String>,
+    pub implementation_id: Option<String>,
+    pub created_by: String,
+}
+
+/// Result of a refinement operation.
+pub struct RefineResult {
+    pub sub_requirement_path: PathBuf,
+    pub sub_requirement_id: String,
+    pub parent_updated: bool,
+    pub implementation_updated: bool,
+}
+
+/// Refine a requirement by creating a sub-requirement that captures a gap.
+///
+/// This creates a sub-requirement with ID `{PARENT}-A`, `{PARENT}-B`, etc.,
+/// wires `depends_on` from parent to sub-req, and optionally adds a
+/// `reveals_gap_in` edge from the implementation to the parent.
+pub fn refine_requirement(
+    root: &Path,
+    options: RefineOptions,
+) -> Result<RefineResult, StorageError> {
+    // Load the parent requirement
+    let parent_path = find_node_path(root, &options.parent_id)?;
+    let mut parent_node = load_node(&parent_path)?;
+
+    // Determine the next suffix letter by scanning existing sub-requirements
+    let suffix = next_suffix(root, &options.parent_id)?;
+    let sub_id = format!("{}-{}", options.parent_id, suffix);
+
+    // Build body with gap metadata
+    let mut body = options.description.clone();
+    if let Some(ref proposed) = options.proposed {
+        body.push_str(&format!("\n\n## Proposed Resolution\n\n{}", proposed));
+    }
+    body.push_str(&format!("\n\n---\n_Gap type: {}_", options.gap_type));
+
+    // Determine status: clarifications with a proposal auto-resolve, others are draft
+    let status = if options.gap_type == GapType::Clarification && options.proposed.is_some() {
+        Status::Active
+    } else {
+        Status::Draft
+    };
+
+    // Inherit derives_from from parent
+    let parent_derives = parent_node
+        .edges
+        .as_ref()
+        .and_then(|e| e.derives_from.clone());
+
+    // Inherit category and priority from parent
+    let category = parent_node
+        .category
+        .clone()
+        .unwrap_or_else(|| "AGENT".to_string());
+    let priority = parent_node.priority.clone().unwrap_or(Priority::P1);
+
+    let edges = Edges {
+        derives_from: parent_derives,
+        ..Default::default()
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let sub_node = LatticeNode {
+        id: sub_id.clone(),
+        node_type: NodeType::Requirement,
+        title: options.title.clone(),
+        body,
+        status,
+        version: "1.0.0".to_string(),
+        created_at: now,
+        created_by: options.created_by,
+        requested_by: get_git_user(),
+        priority: Some(priority),
+        category: Some(category.clone()),
+        tags: Some(vec!["refinement".to_string(), options.gap_type.to_string()]),
+        acceptance: None,
+        visibility: None,
+        resolution: None,
+        meta: None,
+        edges: Some(edges),
+    };
+
+    // Save the sub-requirement
+    let category_dir = category.to_lowercase();
+    let slug = slugify(&options.title, 40);
+    let file_name = format!("{}-{}.yaml", suffix.to_lowercase(), slug);
+    let sub_path = root
+        .join(LATTICE_DIR)
+        .join("requirements")
+        .join(&category_dir)
+        .join(&file_name);
+    save_node(&sub_path, &sub_node)?;
+
+    // Add depends_on edge from parent to sub-requirement
+    let parent_edges = parent_node.edges.get_or_insert_with(Edges::default);
+    let dep_edge = EdgeReference {
+        target: sub_id.clone(),
+        version: Some("1.0.0".to_string()),
+        rationale: Some(format!("Refinement: {}", options.gap_type)),
+    };
+    if let Some(deps) = &mut parent_edges.depends_on {
+        deps.push(dep_edge);
+    } else {
+        parent_edges.depends_on = Some(vec![dep_edge]);
+    }
+    save_node(&parent_path, &parent_node)?;
+
+    // If implementation provided, add reveals_gap_in edge
+    let mut impl_updated = false;
+    if let Some(ref impl_id) = options.implementation_id
+        && let Ok(impl_path) = find_node_path(root, impl_id)
+    {
+        let mut impl_node = load_node(&impl_path)?;
+        let impl_edges = impl_node.edges.get_or_insert_with(Edges::default);
+        let gap_edge = EdgeReference {
+            target: options.parent_id.clone(),
+            version: Some(parent_node.version.clone()),
+            rationale: Some(format!("{}: {}", options.gap_type, options.title)),
+        };
+        if let Some(gaps) = &mut impl_edges.reveals_gap_in {
+            gaps.push(gap_edge);
+        } else {
+            impl_edges.reveals_gap_in = Some(vec![gap_edge]);
+        }
+        save_node(&impl_path, &impl_node)?;
+        impl_updated = true;
+    }
+
+    Ok(RefineResult {
+        sub_requirement_path: sub_path,
+        sub_requirement_id: sub_id,
+        parent_updated: true,
+        implementation_updated: impl_updated,
+    })
+}
+
+/// Determine the next suffix letter (A, B, C, ...) for sub-requirements.
+fn next_suffix(root: &Path, parent_id: &str) -> Result<String, StorageError> {
+    let all_nodes = load_all_nodes(root)?;
+    let prefix = format!("{}-", parent_id);
+    let mut max_suffix: u8 = b'A' - 1; // Start before 'A'
+
+    for node in &all_nodes {
+        if let Some(rest) = node.id.strip_prefix(&prefix) {
+            // Only match single-letter suffixes (A, B, C, ...)
+            if rest.len() == 1
+                && let Some(ch) = rest.chars().next()
+                && ch.is_ascii_uppercase()
+                && ch as u8 > max_suffix
+            {
+                max_suffix = ch as u8;
+            }
+        }
+    }
+
+    if max_suffix < b'A' {
+        Ok("A".to_string())
+    } else if max_suffix < b'Z' {
+        Ok(((max_suffix + 1) as char).to_string())
+    } else {
+        Err(StorageError::AlreadyExists(
+            "Too many sub-requirements (max 26)".to_string(),
+        ))
+    }
+}
+
 /// Options for verifying an implementation satisfies a requirement.
 pub struct VerifyOptions {
     pub implementation_id: String,
@@ -834,5 +1043,249 @@ mod tests {
         assert_eq!(slugify("Hello World!", 20), "hello-world");
         assert_eq!(slugify("Test", 2), "te");
         assert_eq!(slugify("---test---", 20), "test");
+    }
+
+    #[test]
+    fn test_refine_creates_sub_requirement() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        // Create a parent requirement
+        let parent_opts = AddRequirementOptions {
+            id: "REQ-TEST-001".to_string(),
+            title: "Parent Requirement".to_string(),
+            body: "Parent body".to_string(),
+            priority: crate::types::Priority::P0,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: Some(vec!["THX-001".to_string()]),
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, parent_opts).unwrap();
+
+        // Refine it
+        let refine_opts = RefineOptions {
+            parent_id: "REQ-TEST-001".to_string(),
+            gap_type: GapType::DesignDecision,
+            title: "Error format choice".to_string(),
+            description: "Need to decide JSON vs plain text errors".to_string(),
+            proposed: Some("Use JSON with error code field".to_string()),
+            implementation_id: None,
+            created_by: "test".to_string(),
+        };
+        let result = refine_requirement(root, refine_opts).unwrap();
+
+        assert_eq!(result.sub_requirement_id, "REQ-TEST-001-A");
+        assert!(result.sub_requirement_path.exists());
+        assert!(result.parent_updated);
+        assert!(!result.implementation_updated);
+
+        // Verify sub-requirement was created correctly
+        let sub_node = load_node(&result.sub_requirement_path).unwrap();
+        assert_eq!(sub_node.id, "REQ-TEST-001-A");
+        assert_eq!(sub_node.status, crate::types::Status::Draft); // design_decision = draft
+        assert!(sub_node.body.contains("Proposed Resolution"));
+        assert!(
+            sub_node
+                .tags
+                .as_ref()
+                .unwrap()
+                .contains(&"refinement".to_string())
+        );
+
+        // Verify parent now has depends_on edge to sub-requirement
+        let parent_path = find_node_path(root, "REQ-TEST-001").unwrap();
+        let parent = load_node(&parent_path).unwrap();
+        let deps = parent.edges.unwrap().depends_on.unwrap();
+        assert!(deps.iter().any(|e| e.target == "REQ-TEST-001-A"));
+    }
+
+    #[test]
+    fn test_refine_clarification_auto_resolves() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let parent_opts = AddRequirementOptions {
+            id: "REQ-CLR-001".to_string(),
+            title: "Clarification Parent".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P1,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, parent_opts).unwrap();
+
+        let refine_opts = RefineOptions {
+            parent_id: "REQ-CLR-001".to_string(),
+            gap_type: GapType::Clarification,
+            title: "Use hyphens in slugs".to_string(),
+            description: "Ambiguous separator character".to_string(),
+            proposed: Some("Use hyphens, not underscores".to_string()),
+            implementation_id: None,
+            created_by: "test".to_string(),
+        };
+        let result = refine_requirement(root, refine_opts).unwrap();
+
+        let sub = load_node(&result.sub_requirement_path).unwrap();
+        assert_eq!(sub.status, crate::types::Status::Active); // clarification with proposal = active
+    }
+
+    #[test]
+    fn test_refine_with_implementation_adds_gap_edge() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        // Create parent requirement
+        let parent_opts = AddRequirementOptions {
+            id: "REQ-GAP-001".to_string(),
+            title: "Gap Parent".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P0,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, parent_opts).unwrap();
+
+        // Create implementation
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-GAP-001".to_string(),
+            title: "Gap Impl".to_string(),
+            body: "Implementation".to_string(),
+            language: Some("rust".to_string()),
+            files: None,
+            test_command: None,
+            satisfies: Some(vec!["REQ-GAP-001".to_string()]),
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        // Refine with implementation reference
+        let refine_opts = RefineOptions {
+            parent_id: "REQ-GAP-001".to_string(),
+            gap_type: GapType::MissingRequirement,
+            title: "Concurrent write handling".to_string(),
+            description: "No spec for concurrent writes".to_string(),
+            proposed: None,
+            implementation_id: Some("IMP-GAP-001".to_string()),
+            created_by: "test".to_string(),
+        };
+        let result = refine_requirement(root, refine_opts).unwrap();
+
+        assert!(result.implementation_updated);
+
+        // Verify reveals_gap_in edge on implementation
+        let impl_path = find_node_path(root, "IMP-GAP-001").unwrap();
+        let impl_node = load_node(&impl_path).unwrap();
+        let gaps = impl_node.edges.unwrap().reveals_gap_in.unwrap();
+        assert!(gaps.iter().any(|e| e.target == "REQ-GAP-001"));
+    }
+
+    #[test]
+    fn test_refine_sequential_suffixes() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let parent_opts = AddRequirementOptions {
+            id: "REQ-SEQ-001".to_string(),
+            title: "Sequential Parent".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P0,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, parent_opts).unwrap();
+
+        // First refinement
+        let r1 = refine_requirement(
+            root,
+            RefineOptions {
+                parent_id: "REQ-SEQ-001".to_string(),
+                gap_type: GapType::Clarification,
+                title: "First gap".to_string(),
+                description: "First".to_string(),
+                proposed: Some("Answer".to_string()),
+                implementation_id: None,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(r1.sub_requirement_id, "REQ-SEQ-001-A");
+
+        // Second refinement
+        let r2 = refine_requirement(
+            root,
+            RefineOptions {
+                parent_id: "REQ-SEQ-001".to_string(),
+                gap_type: GapType::DesignDecision,
+                title: "Second gap".to_string(),
+                description: "Second".to_string(),
+                proposed: None,
+                implementation_id: None,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+        assert_eq!(r2.sub_requirement_id, "REQ-SEQ-001-B");
+    }
+
+    #[test]
+    fn test_gap_type_parse() {
+        assert_eq!(
+            "clarification".parse::<GapType>().unwrap(),
+            GapType::Clarification
+        );
+        assert_eq!(
+            "design_decision".parse::<GapType>().unwrap(),
+            GapType::DesignDecision
+        );
+        assert_eq!(
+            "missing_requirement".parse::<GapType>().unwrap(),
+            GapType::MissingRequirement
+        );
+        assert_eq!(
+            "contradiction".parse::<GapType>().unwrap(),
+            GapType::Contradiction
+        );
+        assert!("invalid".parse::<GapType>().is_err());
+    }
+
+    #[test]
+    fn test_refine_nonexistent_parent() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let result = refine_requirement(
+            root,
+            RefineOptions {
+                parent_id: "REQ-MISSING-001".to_string(),
+                gap_type: GapType::Clarification,
+                title: "Test".to_string(),
+                description: "Test".to_string(),
+                proposed: None,
+                implementation_id: None,
+                created_by: "test".to_string(),
+            },
+        );
+        assert!(result.is_err());
     }
 }

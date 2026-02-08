@@ -1,0 +1,24 @@
+id: REQ-AGENT-007
+type: requirement
+title: Lattice as Agent Working Memory
+body: 'The lattice serves as persistent working memory for the product owner agent. Every strategic decision, prioritization, critique, and gap analysis is recorded as a lattice node or edge — not as ephemeral chat. This ensures: (1) decisions are auditable via git history, (2) reasoning survives across sessions as YAML not conversation, (3) multiple agents coordinate through the shared graph where the coding agent reads what the PO wrote, (4) humans can override any decision by editing a YAML file. The PO agent must never hold strategic state only in its context window — all durable conclusions must be written to the lattice before the agent exits.'
+status: active
+version: 1.0.0
+created_at: 2026-02-08T13:38:26.702265+00:00
+created_by: agent:claude-2026-02-08
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: AGENT
+tags:
+- agent
+- memory
+- persistence
+edges:
+  derives_from:
+  - target: THX-AGENT-PRODUCT-OWNER
+    version: 1.0.0
+  - target: THX-REQUIREMENTS-DURABLE
+    version: 1.0.0
+  depends_on:
+  - target: REQ-AGENT-005
+    version: 1.0.0
