@@ -2,7 +2,9 @@
 
 **A knowledge coordination protocol for the human-agent era.**
 
-Your AI agents write code. But do they know *why*? Lattice connects research, strategy, requirements, and implementation into a traversable knowledge graph—so agents (and humans) can trace any decision back to its source.
+Built by [Forkzero](https://forkzero.ai).
+
+Your AI agents write code. But do they know *why*? Lattice connects research, strategy, requirements, and implementation into a traversable knowledge graph — so agents (and humans) can trace any decision back to its source.
 
 ```
 Sources (research, papers, data)
@@ -128,9 +130,25 @@ lattice list requirements    # All requirements
 lattice get REQ-AUTH-001     # Full details
 
 # Export
+lattice export --format json > lattice-data.json
 lattice export --format html --output docs/
 lattice export --audience investor
 ```
+
+## Publishing Documentation
+
+Lattice exports JSON that the [hosted reader](https://forkzero.ai/reader) renders as an interactive dashboard. Add this to your CI:
+
+```yaml
+# In your GitHub Actions workflow:
+- run: lattice export --format json > _site/lattice-data.json
+```
+
+Then link to: `https://forkzero.ai/reader?url=<your-published-json-url>`
+
+The reader displays stats, coverage, resolution status, priority breakdown, traceability tree, and filterable requirements — all from the JSON export.
+
+You can also use `lattice export --format html` for a self-contained HTML dashboard.
 
 ## For AI Agents
 
@@ -166,7 +184,7 @@ lattice prompt --mcp >> CLAUDE.md
 
 Lattice is built with Lattice. The `.lattice/` directory contains sources, theses, and requirements for Lattice itself.
 
-**[View Live Documentation →](https://forkzero.github.io/lattice/)**
+**[View Live Documentation](https://forkzero.ai/reader?url=https://forkzero.github.io/lattice/lattice-data.json)**
 
 ```bash
 lattice list requirements
@@ -175,11 +193,11 @@ lattice export --audience overview
 
 ## Status
 
-**v0.0.1** — Early development. Core CLI and MCP server implemented.
+**v0.1.0** — Core CLI, MCP server, HTML/JSON export, drift detection, hosted reader.
 
 See [docs/STRATEGIC_VISION.md](docs/STRATEGIC_VISION.md) for the full vision.
 
 ## License
 
-Copyright (c) 2026 ForkZero. All rights reserved.
+Copyright (c) 2026 Forkzero. All rights reserved.
 See [LICENSE](LICENSE) for details.

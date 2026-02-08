@@ -216,8 +216,20 @@ jobs:
       - name: Build release
         run: cargo build --release
 
-      - name: Generate HTML documentation
-        run: ./target/release/lattice export --format html --output _site
+      - name: Generate documentation
+        run: |
+          mkdir -p _site
+          ./target/release/lattice export --format json > _site/lattice-data.json
+          cat > _site/index.html << 'HEREDOC'
+          <!DOCTYPE html>
+          <html><head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0;url=https://forkzero.ai/reader?url=https://forkzero.github.io/lattice/lattice-data.json">
+            <title>Lattice Documentation</title>
+          </head><body>
+            <p>Redirecting to <a href="https://forkzero.ai/reader?url=https://forkzero.github.io/lattice/lattice-data.json">Lattice Documentation</a>...</p>
+          </body></html>
+          HEREDOC
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
