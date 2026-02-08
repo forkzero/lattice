@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - Lattice Documentation</title>
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-card: #ffffff;
+            --text-primary: #1a1a2e;
+            --text-secondary: #4a4a6a;
+            --text-muted: #6c757d;
+            --border-color: #e9ecef;
+            --accent-blue: #3b82f6;
+            --accent-green: #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-red: #ef4444;
+            --accent-purple: #8b5cf6;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.07);
+            --radius: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        header .subtitle {
+            opacity: 0.9;
+            font-size: 1rem;
+        }
+
+        header .generated {
+            font-size: 0.8rem;
+            opacity: 0.7;
+            margin-top: 1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-card .label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .stat-card.sources .value { color: var(--accent-blue); }
+        .stat-card.theses .value { color: var(--accent-purple); }
+        .stat-card.requirements .value { color: var(--accent-yellow); }
+        .stat-card.implementations .value { color: var(--accent-green); }
+
+        .section {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .section-header {
+            background: var(--bg-secondary);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-header h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .section-content {
+            padding: 1.5rem;
+        }
+
+        details {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        details:last-child {
+            border-bottom: none;
+        }
+
+        summary {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            user-select: none;
+            transition: background 0.2s;
+        }
+
+        summary:hover {
+            background: var(--bg-secondary);
+        }
+
+        summary::marker {
+            color: var(--accent-blue);
+        }
+
+        details[open] summary {
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .details-content {
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-p0 { background: #fef3c7; color: #92400e; }
+        .badge-p1 { background: #dbeafe; color: #1e40af; }
+        .badge-p2 { background: #f3e8ff; color: #6b21a8; }
+        .badge-verified { background: #d1fae5; color: #065f46; }
+        .badge-blocked { background: #fee2e2; color: #991b1b; }
+        .badge-deferred { background: #fef3c7; color: #92400e; }
+        .badge-unresolved { background: #e5e7eb; color: #374151; }
+        .badge-wontfix { background: #f3f4f6; color: #6b7280; }
+
+        .progress-bar {
+            background: var(--bg-secondary);
+            border-radius: 9999px;
+            height: 1rem;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+            transition: width 0.3s;
+        }
+
+        .node-item {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .node-item:last-child {
+            border-bottom: none;
+        }
+
+        .node-id {
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+            font-size: 0.85rem;
+            color: var(--accent-blue);
+            font-weight: 500;
+        }
+
+        .node-title {
+            color: var(--text-primary);
+            margin-left: 0.5rem;
+        }
+
+        .node-body {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+            white-space: pre-wrap;
+        }
+
+        .tree-node {
+            margin-left: 1.5rem;
+            padding: 0.5rem 0;
+            border-left: 2px solid var(--border-color);
+            padding-left: 1rem;
+        }
+
+        .tree-node.level-0 {
+            margin-left: 0;
+            border-left: none;
+            padding-left: 0;
+        }
+
+        .tree-icon {
+            display: inline-block;
+            width: 1.2rem;
+            text-align: center;
+            margin-right: 0.5rem;
+        }
+
+        .resolution-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .resolution-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: var(--radius);
+        }
+
+        .resolution-item .count {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .resolution-item .label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .resolution-item.verified .count { color: var(--accent-green); }
+        .resolution-item.blocked .count { color: var(--accent-red); }
+        .resolution-item.deferred .count { color: var(--accent-yellow); }
+        .resolution-item.unresolved .count { color: var(--text-muted); }
+        .resolution-item.wontfix .count { color: var(--text-secondary); }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+
+        footer a {
+            color: var(--accent-blue);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            header {
+                padding: 1.5rem 1rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    {% block content %}{% endblock %}
+</body>
+</html>

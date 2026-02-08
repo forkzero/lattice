@@ -6,6 +6,7 @@
 
 pub mod export;
 pub mod graph;
+pub mod html_export;
 pub mod mcp;
 pub mod storage;
 pub mod types;
@@ -14,6 +15,7 @@ pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
 pub use graph::{
     DriftReport, DriftSeverity, Plan, PlannedItem, build_node_index, find_drift, generate_plan,
 };
+pub use html_export::{HtmlExportOptions, export_html};
 pub use storage::{
     AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions,
     LATTICE_DIR, ResolveOptions, add_implementation, add_requirement, add_source, add_thesis,

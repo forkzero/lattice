@@ -6,10 +6,10 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience,
-    DriftSeverity, ExportOptions, LatticeData, Plan, Priority, Resolution, ResolveOptions, Status,
-    add_implementation, add_requirement, add_source, add_thesis, build_node_index,
-    export_narrative, find_drift, find_lattice_root, generate_plan, init_lattice,
-    load_nodes_by_type, resolve_node,
+    DriftSeverity, ExportOptions, HtmlExportOptions, LatticeData, Plan, Priority, Resolution,
+    ResolveOptions, Status, add_implementation, add_requirement, add_source, add_thesis,
+    build_node_index, export_html, export_narrative, find_drift, find_lattice_root, generate_plan,
+    init_lattice, load_nodes_by_type, resolve_node,
 };
 use std::env;
 use std::process;
@@ -100,7 +100,7 @@ enum Commands {
 
     /// Export the lattice to various formats
     Export {
-        /// Export format (narrative, json)
+        /// Export format (narrative, json, html)
         #[arg(short, long, default_value = "narrative")]
         format: String,
 
@@ -115,6 +115,10 @@ enum Commands {
         /// Include nodes marked as internal
         #[arg(long)]
         include_internal: bool,
+
+        /// Output directory for HTML export
+        #[arg(short, long)]
+        output: Option<String>,
     },
 
     /// Show a compact status summary of the lattice
@@ -863,6 +867,7 @@ fn main() {
             audience,
             title,
             include_internal,
+            output,
         } => {
             let root = get_lattice_root();
 
@@ -875,6 +880,39 @@ fn main() {
                             serde_json::to_string_pretty(&nodes)
                                 .unwrap_or_else(|_| "[]".to_string())
                         );
+                    }
+                    Err(e) => {
+                        eprintln!("{}", format!("Error: {}", e).red());
+                        process::exit(1);
+                    }
+                }
+                return;
+            }
+
+            if format == "html" {
+                let output_dir = output.unwrap_or_else(|| "_site".to_string());
+
+                let sources = load_nodes_by_type(&root, "sources").unwrap_or_default();
+                let theses = load_nodes_by_type(&root, "theses").unwrap_or_default();
+                let requirements = load_nodes_by_type(&root, "requirements").unwrap_or_default();
+                let implementations =
+                    load_nodes_by_type(&root, "implementations").unwrap_or_default();
+
+                let data = LatticeData {
+                    sources,
+                    theses,
+                    requirements,
+                    implementations,
+                };
+
+                let options = HtmlExportOptions {
+                    output_dir: std::path::PathBuf::from(&output_dir),
+                    title,
+                };
+
+                match export_html(&data, &options) {
+                    Ok(path) => {
+                        println!("{}", format!("HTML exported to {}", path.display()).green());
                     }
                     Err(e) => {
                         eprintln!("{}", format!("Error: {}", e).red());

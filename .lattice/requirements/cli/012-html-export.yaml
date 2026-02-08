@@ -1,0 +1,23 @@
+id: REQ-CLI-012
+type: requirement
+title: HTML Export
+body: The CLI shall support exporting the lattice to a static HTML documentation site via 'lattice export --format html'. The output shall include statistics cards, resolution status breakdown, priority breakdown, implementation coverage, a collapsible traceability tree (thesis -> requirements -> implementations), and collapsible node listings by type. The HTML shall be self-contained with embedded CSS.
+status: active
+version: 1.0.0
+created_at: 2026-02-08T01:04:13.108711+00:00
+created_by: agent:claude-2026-02-07
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+tags:
+- export
+- html
+- documentation
+resolution:
+  status: verified
+  resolved_at: 2026-02-08T01:04:16.389124+00:00
+  resolved_by: agent:claude-2026-02-08
+edges:
+  derives_from:
+  - target: THX-PROSE-FIRST
+    version: 1.0.0

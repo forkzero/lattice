@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header>
+    <div class="container">
+        <h1>{{ title }}</h1>
+        <p class="subtitle">Knowledge Coordination Protocol</p>
+        <p class="generated">Generated: {{ generated_at }}</p>
+    </div>
+</header>
+
+<div class="container">
+    <!-- Statistics Cards -->
+    <div class="stats-grid">
+        <div class="stat-card sources">
+            <div class="label">Sources</div>
+            <div class="value">{{ stats.sources }}</div>
+        </div>
+        <div class="stat-card theses">
+            <div class="label">Theses</div>
+            <div class="value">{{ stats.theses }}</div>
+        </div>
+        <div class="stat-card requirements">
+            <div class="label">Requirements</div>
+            <div class="value">{{ stats.requirements }}</div>
+        </div>
+        <div class="stat-card implementations">
+            <div class="label">Implementations</div>
+            <div class="value">{{ stats.implementations }}</div>
+        </div>
+    </div>
+
+    <!-- Implementation Coverage -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Implementation Coverage</h2>
+        </div>
+        <div class="section-content">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span>{{ stats.implemented }} of {{ stats.requirements }} requirements implemented</span>
+                <strong>{{ stats.coverage_pct }}%</strong>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ stats.coverage_pct }}%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resolution Status -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Resolution Status</h2>
+        </div>
+        <div class="section-content">
+            <div class="resolution-grid">
+                <div class="resolution-item verified">
+                    <div class="count">{{ stats.verified }}</div>
+                    <div class="label">Verified</div>
+                </div>
+                <div class="resolution-item blocked">
+                    <div class="count">{{ stats.blocked }}</div>
+                    <div class="label">Blocked</div>
+                </div>
+                <div class="resolution-item deferred">
+                    <div class="count">{{ stats.deferred }}</div>
+                    <div class="label">Deferred</div>
+                </div>
+                <div class="resolution-item unresolved">
+                    <div class="count">{{ stats.unresolved }}</div>
+                    <div class="label">Unresolved</div>
+                </div>
+                <div class="resolution-item wontfix">
+                    <div class="count">{{ stats.wontfix }}</div>
+                    <div class="label">Won't Fix</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Priority Breakdown -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Priority Breakdown</h2>
+        </div>
+        <div class="section-content">
+            <div class="resolution-grid">
+                <div class="resolution-item">
+                    <div class="count" style="color: #92400e;">{{ stats.p0 }}</div>
+                    <div class="label">P0 (MVP)</div>
+                </div>
+                <div class="resolution-item">
+                    <div class="count" style="color: #1e40af;">{{ stats.p1 }}</div>
+                    <div class="label">P1 (Beta)</div>
+                </div>
+                <div class="resolution-item">
+                    <div class="count" style="color: #6b21a8;">{{ stats.p2 }}</div>
+                    <div class="label">P2 (Future)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Traceability Tree -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Traceability Tree</h2>
+        </div>
+        <div class="section-content">
+            {% for thesis in traceability %}
+            <details>
+                <summary>
+                    <span class="tree-icon">📋</span>
+                    <span class="node-id">{{ thesis.id }}</span>
+                    <span class="node-title">{{ thesis.title }}</span>
+                </summary>
+                <div class="details-content">
+                    {% for req in thesis.requirements %}
+                    <div class="tree-node">
+                        <span class="tree-icon">📦</span>
+                        <span class="node-id">{{ req.id }}</span>
+                        <span class="node-title">{{ req.title }}</span>
+                        {% if req.priority %}
+                        <span class="badge badge-{{ req.priority | lower }}">{{ req.priority }}</span>
+                        {% endif %}
+                        {% if req.resolution %}
+                        <span class="badge badge-{{ req.resolution | lower }}">{{ req.resolution }}</span>
+                        {% endif %}
+                        {% if req.implementations | length > 0 %}
+                        <div style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                            {% for impl in req.implementations %}
+                            <div class="tree-node">
+                                <span class="tree-icon">⚙️</span>
+                                <span class="node-id">{{ impl.id }}</span>
+                                <span class="node-title">{{ impl.title }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </details>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Sources -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Sources ({{ sources | length }})</h2>
+        </div>
+        {% for source in sources %}
+        <details>
+            <summary>
+                <span class="node-id">{{ source.id }}</span>
+                <span class="node-title">{{ source.title }}</span>
+            </summary>
+            <div class="details-content">
+                <div class="node-body">{{ source.body }}</div>
+                {% if source.url %}
+                <p style="margin-top: 0.5rem;"><a href="{{ source.url }}" target="_blank">{{ source.url }}</a></p>
+                {% endif %}
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+
+    <!-- Theses -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Theses ({{ theses | length }})</h2>
+        </div>
+        {% for thesis in theses %}
+        <details>
+            <summary>
+                <span class="node-id">{{ thesis.id }}</span>
+                <span class="node-title">{{ thesis.title }}</span>
+            </summary>
+            <div class="details-content">
+                <div class="node-body">{{ thesis.body }}</div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+
+    <!-- Requirements -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Requirements ({{ requirements | length }})</h2>
+        </div>
+        {% for req in requirements %}
+        <details>
+            <summary>
+                <span class="node-id">{{ req.id }}</span>
+                <span class="node-title">{{ req.title }}</span>
+                {% if req.priority %}
+                <span class="badge badge-{{ req.priority | lower }}">{{ req.priority }}</span>
+                {% endif %}
+                {% if req.resolution %}
+                <span class="badge badge-{{ req.resolution | lower }}">{{ req.resolution }}</span>
+                {% endif %}
+            </summary>
+            <div class="details-content">
+                <div class="node-body">{{ req.body }}</div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+
+    <!-- Implementations -->
+    <div class="section">
+        <div class="section-header">
+            <h2>Implementations ({{ implementations | length }})</h2>
+        </div>
+        {% for impl in implementations %}
+        <details>
+            <summary>
+                <span class="node-id">{{ impl.id }}</span>
+                <span class="node-title">{{ impl.title }}</span>
+            </summary>
+            <div class="details-content">
+                <div class="node-body">{{ impl.body }}</div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</div>
+
+<footer>
+    <p>Generated by <a href="https://github.com/forkzero/lattice">Lattice</a> - A knowledge coordination protocol for human-agent collaboration</p>
+</footer>
+{% endblock %}
