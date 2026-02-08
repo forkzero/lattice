@@ -21,6 +21,7 @@ use std::process;
 #[command(name = "lattice")]
 #[command(about = "A knowledge coordination protocol for human-agent collaboration")]
 #[command(version = "0.1.0")]
+#[command(disable_help_subcommand = true)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -33,6 +34,10 @@ enum Commands {
         /// Overwrite existing lattice
         #[arg(short, long)]
         force: bool,
+
+        /// Also install agent definitions (.claude/agents/)
+        #[arg(long)]
+        agents: bool,
     },
 
     /// Add a node to the lattice
@@ -272,6 +277,13 @@ enum Commands {
         /// Output MCP version instead of CLI version
         #[arg(long)]
         mcp: bool,
+    },
+
+    /// Show available commands (use --json for machine-readable catalog)
+    Help {
+        /// Output as structured JSON for agent consumption
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -568,6 +580,20 @@ fn emit_error(format: &str, code: &str, detail: &str) -> ! {
     process::exit(1);
 }
 
+fn install_agent_definitions(root: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let agents_dir = root.join(".claude").join("agents");
+    std::fs::create_dir_all(&agents_dir).map_err(|e| e.to_string())?;
+
+    let mut created = Vec::new();
+
+    let po_path = agents_dir.join("product-owner.md");
+    std::fs::write(&po_path, include_str!("../agents/product-owner.md"))
+        .map_err(|e| e.to_string())?;
+    created.push(po_path);
+
+    Ok(created)
+}
+
 fn print_plan(plan: &Plan, index: &lattice::NodeIndex) {
     // Print summary
     println!("{}", "IMPLEMENTATION PLAN".bold());
@@ -651,11 +677,291 @@ fn print_plan(plan: &Plan, index: &lattice::NodeIndex) {
     }
 }
 
+fn build_command_catalog() -> serde_json::Value {
+    let param = |name: &str, typ: &str, required: bool, desc: &str| -> serde_json::Value {
+        json!({
+            "name": name,
+            "type": typ,
+            "required": required,
+            "description": desc
+        })
+    };
+
+    json!({
+        "version": "0.1.0",
+        "commands": [
+            {
+                "name": "init",
+                "description": "Initialize a new lattice in the current directory",
+                "parameters": [
+                    param("--force", "bool", false, "Overwrite existing lattice"),
+                    param("--agents", "bool", false, "Install agent definitions (.claude/agents/)")
+                ],
+                "examples": [
+                    "lattice init",
+                    "lattice init --force",
+                    "lattice init --agents"
+                ]
+            },
+            {
+                "name": "list",
+                "description": "List nodes of a given type",
+                "parameters": [
+                    param("node_type", "string", true, "Node type: sources, theses, requirements, implementations"),
+                    param("--status", "string", false, "Filter by status"),
+                    param("--priority", "string", false, "Filter by priority (P0, P1, P2)"),
+                    param("--pending", "bool", false, "Show only blocked/deferred items"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice list requirements",
+                    "lattice list requirements --priority P0 --format json",
+                    "lattice list theses"
+                ]
+            },
+            {
+                "name": "get",
+                "description": "Get a specific node by ID with full details",
+                "parameters": [
+                    param("id", "string", true, "Node ID (e.g. REQ-CORE-001)"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice get REQ-CORE-001",
+                    "lattice get THX-AGENT-NATIVE-TOOLS --format json"
+                ]
+            },
+            {
+                "name": "search",
+                "description": "Search nodes with filters (text, priority, resolution, tags, category, graph proximity)",
+                "parameters": [
+                    param("--node-type", "string", false, "Node type to search (default: requirements)"),
+                    param("--query", "string", false, "Text search in title and body"),
+                    param("--priority", "string", false, "Filter by priority (P0, P1, P2)"),
+                    param("--resolution", "string", false, "Filter: verified, blocked, deferred, wontfix, unresolved"),
+                    param("--tag", "string", false, "Filter by single tag"),
+                    param("--tags", "string", false, "Comma-separated tags (all must match)"),
+                    param("--category", "string", false, "Filter by category"),
+                    param("--id-prefix", "string", false, "Filter by ID prefix"),
+                    param("--related-to", "string", false, "Find nodes related to this node ID"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice search --query 'product owner' --format json",
+                    "lattice search --priority P0 --resolution unresolved",
+                    "lattice search --tag agent --category AGENT"
+                ]
+            },
+            {
+                "name": "add requirement",
+                "description": "Add a requirement node to the lattice",
+                "parameters": [
+                    param("--id", "string", true, "Requirement ID (e.g. REQ-API-003)"),
+                    param("--title", "string", true, "Requirement title"),
+                    param("--body", "string", true, "Requirement body/description"),
+                    param("--priority", "string", true, "Priority: P0, P1, P2"),
+                    param("--category", "string", true, "Category (e.g. API, CORE, CLI)"),
+                    param("--tags", "string", false, "Comma-separated tags"),
+                    param("--derives-from", "string", false, "Comma-separated thesis IDs"),
+                    param("--depends-on", "string", false, "Comma-separated requirement IDs"),
+                    param("--status", "string", false, "Status: draft, active (default: active)"),
+                    param("--created-by", "string", false, "Author (e.g. human:george)"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice add requirement --id REQ-FEAT-001 --title 'New feature' --body 'Description' --priority P1 --category FEAT"
+                ]
+            },
+            {
+                "name": "add thesis",
+                "description": "Add a thesis node to the lattice",
+                "parameters": [
+                    param("--id", "string", true, "Thesis ID (e.g. THX-AGENT-PROTOCOL)"),
+                    param("--title", "string", true, "Thesis title"),
+                    param("--body", "string", true, "Thesis body/description"),
+                    param("--category", "string", true, "Category: value_prop, market, technical, risk, competitive"),
+                    param("--confidence", "float", false, "Confidence level 0.0-1.0"),
+                    param("--tags", "string", false, "Comma-separated tags"),
+                    param("--supported-by", "string", false, "Comma-separated source IDs"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice add thesis --id THX-NEW --title 'Thesis' --body 'Claim' --category technical"
+                ]
+            },
+            {
+                "name": "add source",
+                "description": "Add a source node to the lattice",
+                "parameters": [
+                    param("--id", "string", true, "Source ID (e.g. SRC-PAPER-001)"),
+                    param("--title", "string", true, "Source title"),
+                    param("--body", "string", true, "Source body/summary"),
+                    param("--url", "string", false, "Source URL"),
+                    param("--source-type", "string", false, "Type: paper, article, report, data"),
+                    param("--tags", "string", false, "Comma-separated tags"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice add source --id SRC-NEW --title 'Paper' --body 'Summary' --url https://example.com"
+                ]
+            },
+            {
+                "name": "add implementation",
+                "description": "Add an implementation node to the lattice",
+                "parameters": [
+                    param("--id", "string", true, "Implementation ID (e.g. IMP-STORAGE-001)"),
+                    param("--title", "string", true, "Implementation title"),
+                    param("--body", "string", true, "Implementation body/description"),
+                    param("--satisfies", "string", false, "Comma-separated requirement IDs"),
+                    param("--files", "string", false, "Comma-separated file paths"),
+                    param("--tags", "string", false, "Comma-separated tags"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice add implementation --id IMP-NEW --title 'Impl' --body 'Description' --satisfies REQ-CORE-001"
+                ]
+            },
+            {
+                "name": "resolve",
+                "description": "Resolve a requirement with a status",
+                "parameters": [
+                    param("id", "string", true, "Requirement ID"),
+                    param("--verified", "bool", false, "Mark as verified"),
+                    param("--blocked", "string", false, "Mark as blocked with reason"),
+                    param("--deferred", "string", false, "Mark as deferred with reason"),
+                    param("--wontfix", "string", false, "Mark as wontfix with reason"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice resolve REQ-CORE-001 --verified",
+                    "lattice resolve REQ-API-002 --deferred 'Post-MVP'"
+                ]
+            },
+            {
+                "name": "verify",
+                "description": "Record that an implementation satisfies a requirement",
+                "parameters": [
+                    param("implementation", "string", true, "Implementation ID"),
+                    param("relation", "string", true, "Must be 'satisfies'"),
+                    param("requirement", "string", true, "Requirement ID"),
+                    param("--tests-pass", "bool", false, "Record that tests pass"),
+                    param("--coverage", "float", false, "Coverage percentage 0.0-1.0"),
+                    param("--files", "string", false, "Comma-separated evidence file paths"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice verify IMP-STORAGE-001 satisfies REQ-CORE-004 --tests-pass --coverage 0.94"
+                ]
+            },
+            {
+                "name": "refine",
+                "description": "Create a sub-requirement from a discovered gap in an existing requirement",
+                "parameters": [
+                    param("parent", "string", true, "Parent requirement ID"),
+                    param("--gap-type", "string", true, "Gap type: clarification, design_decision, missing_requirement, contradiction"),
+                    param("--title", "string", true, "Brief title for the sub-requirement"),
+                    param("--description", "string", true, "What is underspecified and why"),
+                    param("--proposed", "string", false, "Proposed resolution"),
+                    param("--implementation", "string", false, "Implementation ID that discovered this gap"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice refine REQ-CORE-005 --gap-type design_decision --title 'Drift threshold' --description 'Should minor version drift be flagged?'"
+                ]
+            },
+            {
+                "name": "drift",
+                "description": "Check for version drift in edge bindings",
+                "parameters": [
+                    param("--check", "bool", false, "Exit with code 2 if drift detected"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice drift",
+                    "lattice drift --check --format json"
+                ]
+            },
+            {
+                "name": "lint",
+                "description": "Lint lattice files for structural issues",
+                "parameters": [
+                    param("--fix", "bool", false, "Attempt to auto-fix fixable issues"),
+                    param("--strict", "bool", false, "Exit with non-zero status on any issue"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice lint",
+                    "lattice lint --fix",
+                    "lattice lint --strict --format json"
+                ]
+            },
+            {
+                "name": "summary",
+                "description": "Show a compact status overview of the lattice",
+                "parameters": [
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice summary",
+                    "lattice summary --format json"
+                ]
+            },
+            {
+                "name": "plan",
+                "description": "Plan implementation order for requirements based on dependency graph",
+                "parameters": [
+                    param("requirements", "string[]", true, "Requirement IDs to plan")
+                ],
+                "examples": [
+                    "lattice plan REQ-CLI-001 REQ-CLI-002"
+                ]
+            },
+            {
+                "name": "export",
+                "description": "Export the lattice to narrative, JSON, or HTML",
+                "parameters": [
+                    param("--format", "string", false, "Export format: narrative, json, html (default: narrative)"),
+                    param("--audience", "string", false, "Target audience: investor, contributor, overview (default: overview)"),
+                    param("--title", "string", false, "Document title (default: Lattice)"),
+                    param("--include-internal", "bool", false, "Include nodes marked as internal"),
+                    param("--output", "string", false, "Output directory for HTML export")
+                ],
+                "examples": [
+                    "lattice export",
+                    "lattice export --format json",
+                    "lattice export --format html --output ./docs"
+                ]
+            },
+            {
+                "name": "help",
+                "description": "Show available commands (use --json for machine-readable catalog)",
+                "parameters": [
+                    param("--json", "bool", false, "Output as structured JSON for agent consumption")
+                ],
+                "examples": [
+                    "lattice help",
+                    "lattice help --json"
+                ]
+            }
+        ],
+        "exit_codes": {
+            "0": "Success",
+            "1": "Error",
+            "2": "Actionable condition (drift detected, lint issues)"
+        },
+        "global_flags": {
+            "--format json": "Available on all read and write commands for structured output",
+            "--help": "Show help for any command",
+            "--version": "Show version"
+        }
+    })
+}
+
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { force } => {
+        Commands::Init { force, agents } => {
             let cwd = env::current_dir().expect("Failed to get current directory");
 
             match init_lattice(&cwd, force) {
@@ -664,12 +970,36 @@ fn main() {
                         let display = path.strip_prefix(&cwd).unwrap_or(path);
                         println!("{}", format!("Created {}", display.display()).green());
                     }
+
+                    if agents {
+                        match install_agent_definitions(&cwd) {
+                            Ok(agent_paths) => {
+                                for path in &agent_paths {
+                                    let display = path.strip_prefix(&cwd).unwrap_or(path);
+                                    println!(
+                                        "{}",
+                                        format!("Created {}", display.display()).green()
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "{}",
+                                    format!("Warning: failed to install agents: {}", e).yellow()
+                                );
+                            }
+                        }
+                    }
+
                     println!();
                     println!("{}", "Lattice initialized.".green().bold());
                     println!();
                     println!("Next steps:");
                     println!("  lattice seed              # Bootstrap from vision");
                     println!("  lattice add requirement   # Add a requirement manually");
+                    if !agents {
+                        println!("  lattice init --agents     # Install agent definitions");
+                    }
                 }
                 Err(e) => {
                     eprintln!("{}", format!("Error: {}", e).red());
@@ -1873,6 +2203,48 @@ fn main() {
                 print!("{}", include_str!("../prompts/LATTICE_MCP_CLAUDE_MD.md"));
             } else {
                 print!("{}", include_str!("../prompts/LATTICE_CLAUDE_MD.md"));
+            }
+        }
+
+        Commands::Help { json } => {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&build_command_catalog()).unwrap()
+                );
+            } else {
+                // Human-readable help
+                let catalog = build_command_catalog();
+                println!(
+                    "{}\n",
+                    "LATTICE - A knowledge coordination protocol for human-agent collaboration"
+                        .bold()
+                );
+                println!("{}", "COMMANDS:".bold());
+                if let Some(commands) = catalog["commands"].as_array() {
+                    for cmd in commands {
+                        let name = cmd["name"].as_str().unwrap_or("");
+                        let desc = cmd["description"].as_str().unwrap_or("");
+                        println!("  {:<22} {}", name.cyan(), desc);
+                    }
+                }
+                println!();
+                println!("{}", "EXIT CODES:".bold());
+                println!("  {}  Success", "0".cyan());
+                println!("  {}  Error", "1".cyan());
+                println!(
+                    "  {}  Actionable condition (drift detected, lint issues)",
+                    "2".cyan()
+                );
+                println!();
+                println!(
+                    "Use {} for machine-readable command catalog.",
+                    "lattice help --json".cyan()
+                );
+                println!(
+                    "Use {} for help on a specific command.",
+                    "lattice <command> --help".cyan()
+                );
             }
         }
     }
