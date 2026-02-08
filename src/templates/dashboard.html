@@ -12,22 +12,22 @@
 <div class="container">
     <!-- Statistics Cards -->
     <div class="stats-grid">
-        <div class="stat-card sources">
+        <a href="#sources-section" class="stat-card sources" style="text-decoration: none; color: inherit;">
             <div class="label">Sources</div>
             <div class="value">{{ stats.sources }}</div>
-        </div>
-        <div class="stat-card theses">
+        </a>
+        <a href="#theses-section" class="stat-card theses" style="text-decoration: none; color: inherit;">
             <div class="label">Theses</div>
             <div class="value">{{ stats.theses }}</div>
-        </div>
-        <div class="stat-card requirements">
+        </a>
+        <a href="#requirements-section" class="stat-card requirements" style="text-decoration: none; color: inherit;">
             <div class="label">Requirements</div>
             <div class="value">{{ stats.requirements }}</div>
-        </div>
-        <div class="stat-card implementations">
+        </a>
+        <a href="#implementations-section" class="stat-card implementations" style="text-decoration: none; color: inherit;">
             <div class="label">Implementations</div>
             <div class="value">{{ stats.implementations }}</div>
-        </div>
+        </a>
     </div>
 
     <!-- Implementation Coverage -->
@@ -87,14 +87,26 @@
                 <div class="resolution-item">
                     <div class="count" style="color: #92400e;">{{ stats.p0 }}</div>
                     <div class="label">P0 (MVP)</div>
+                    <div class="mini-progress">
+                        <div class="mini-progress-fill" style="width: {% if stats.p0 > 0 %}{{ stats.p0_verified * 100 / stats.p0 }}{% else %}0{% endif %}%;"></div>
+                    </div>
+                    <div class="mini-label">{{ stats.p0_verified }}/{{ stats.p0 }} verified</div>
                 </div>
                 <div class="resolution-item">
                     <div class="count" style="color: #1e40af;">{{ stats.p1 }}</div>
                     <div class="label">P1 (Beta)</div>
+                    <div class="mini-progress">
+                        <div class="mini-progress-fill" style="width: {% if stats.p1 > 0 %}{{ stats.p1_verified * 100 / stats.p1 }}{% else %}0{% endif %}%;"></div>
+                    </div>
+                    <div class="mini-label">{{ stats.p1_verified }}/{{ stats.p1 }} verified</div>
                 </div>
                 <div class="resolution-item">
                     <div class="count" style="color: #6b21a8;">{{ stats.p2 }}</div>
                     <div class="label">P2 (Future)</div>
+                    <div class="mini-progress">
+                        <div class="mini-progress-fill" style="width: {% if stats.p2 > 0 %}{{ stats.p2_verified * 100 / stats.p2 }}{% else %}0{% endif %}%;"></div>
+                    </div>
+                    <div class="mini-label">{{ stats.p2_verified }}/{{ stats.p2 }} verified</div>
                 </div>
             </div>
         </div>
@@ -145,7 +157,7 @@
     </div>
 
     <!-- Sources -->
-    <div class="section">
+    <div class="section" id="sources-section">
         <div class="section-header">
             <h2>Sources ({{ sources | length }})</h2>
         </div>
@@ -176,7 +188,7 @@
     </div>
 
     <!-- Theses -->
-    <div class="section">
+    <div class="section" id="theses-section">
         <div class="section-header">
             <h2>Theses ({{ theses | length }})</h2>
         </div>
@@ -194,12 +206,30 @@
     </div>
 
     <!-- Requirements -->
-    <div class="section">
-        <div class="section-header">
+    <div class="section" id="requirements-section">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
             <h2>Requirements ({{ requirements | length }})</h2>
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <span class="filter-label">Priority:</span>
+                    <button class="filter-btn active" data-filter="priority" data-value="all">All</button>
+                    <button class="filter-btn" data-filter="priority" data-value="P0">P0</button>
+                    <button class="filter-btn" data-filter="priority" data-value="P1">P1</button>
+                    <button class="filter-btn" data-filter="priority" data-value="P2">P2</button>
+                </div>
+                <div class="filter-group">
+                    <span class="filter-label">Status:</span>
+                    <button class="filter-btn active" data-filter="status" data-value="all">All</button>
+                    <button class="filter-btn" data-filter="status" data-value="verified">Verified</button>
+                    <button class="filter-btn" data-filter="status" data-value="blocked">Blocked</button>
+                    <button class="filter-btn" data-filter="status" data-value="deferred">Deferred</button>
+                    <button class="filter-btn" data-filter="status" data-value="open">Open</button>
+                </div>
+            </div>
         </div>
+        <div id="requirements-list">
         {% for req in requirements %}
-        <details>
+        <details class="req-item" data-priority="{{ req.priority | default(value='') }}" data-status="{{ req.resolution | default(value='open') }}">
             <summary>
                 <span class="node-id">{{ req.id }}</span>
                 <span class="node-title">{{ req.title }}</span>
@@ -208,6 +238,8 @@
                 {% endif %}
                 {% if req.resolution %}
                 <span class="badge badge-{{ req.resolution | lower }}">{{ req.resolution }}</span>
+                {% else %}
+                <span class="badge badge-open">Open</span>
                 {% endif %}
             </summary>
             <div class="details-content">
@@ -215,10 +247,12 @@
             </div>
         </details>
         {% endfor %}
+        </div>
+        <p id="no-results" style="display: none; padding: 1rem; color: var(--text-muted); text-align: center;">No requirements match the selected filters.</p>
     </div>
 
     <!-- Implementations -->
-    <div class="section">
+    <div class="section" id="implementations-section">
         <div class="section-header">
             <h2>Implementations ({{ implementations | length }})</h2>
         </div>
@@ -239,4 +273,47 @@
 <footer>
     <p>Generated by <a href="https://github.com/forkzero/lattice">Lattice</a> - A knowledge coordination protocol for human-agent collaboration</p>
 </footer>
+
+<script>
+(function() {
+    const filters = { priority: 'all', status: 'all' };
+
+    function applyFilters() {
+        const items = document.querySelectorAll('.req-item');
+        let visibleCount = 0;
+
+        items.forEach(item => {
+            const priority = item.dataset.priority || '';
+            const status = item.dataset.status || 'open';
+
+            const matchPriority = filters.priority === 'all' || priority === filters.priority;
+            const matchStatus = filters.status === 'all' || status === filters.status;
+
+            if (matchPriority && matchStatus) {
+                item.style.display = '';
+                visibleCount++;
+            } else {
+                item.style.display = 'none';
+            }
+        });
+
+        document.getElementById('no-results').style.display = visibleCount === 0 ? 'block' : 'none';
+    }
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const filterType = this.dataset.filter;
+            const value = this.dataset.value;
+
+            // Update active state
+            document.querySelectorAll(`.filter-btn[data-filter="${filterType}"]`).forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+
+            // Update filter and apply
+            filters[filterType] = value;
+            applyFilters();
+        });
+    });
+})();
+</script>
 {% endblock %}

@@ -35,6 +35,9 @@ pub struct Statistics {
     pub p0: usize,
     pub p1: usize,
     pub p2: usize,
+    pub p0_verified: usize,
+    pub p1_verified: usize,
+    pub p2_verified: usize,
 }
 
 /// A thesis node in the traceability tree.
@@ -94,8 +97,17 @@ pub fn compute_statistics(data: &LatticeData) -> Statistics {
     let mut p0 = 0;
     let mut p1 = 0;
     let mut p2 = 0;
+    let mut p0_verified = 0;
+    let mut p1_verified = 0;
+    let mut p2_verified = 0;
 
     for req in &data.requirements {
+        let is_verified = req
+            .resolution
+            .as_ref()
+            .map(|r| r.status == Resolution::Verified)
+            .unwrap_or(false);
+
         match req.resolution.as_ref().map(|r| &r.status) {
             Some(Resolution::Verified) => verified += 1,
             Some(Resolution::Blocked) => blocked += 1,
@@ -105,9 +117,24 @@ pub fn compute_statistics(data: &LatticeData) -> Statistics {
         }
 
         match req.priority {
-            Some(Priority::P0) => p0 += 1,
-            Some(Priority::P1) => p1 += 1,
-            Some(Priority::P2) => p2 += 1,
+            Some(Priority::P0) => {
+                p0 += 1;
+                if is_verified {
+                    p0_verified += 1;
+                }
+            }
+            Some(Priority::P1) => {
+                p1 += 1;
+                if is_verified {
+                    p1_verified += 1;
+                }
+            }
+            Some(Priority::P2) => {
+                p2 += 1;
+                if is_verified {
+                    p2_verified += 1;
+                }
+            }
             None => {}
         }
     }
@@ -127,6 +154,9 @@ pub fn compute_statistics(data: &LatticeData) -> Statistics {
         p0,
         p1,
         p2,
+        p0_verified,
+        p1_verified,
+        p2_verified,
     }
 }
 
@@ -296,6 +326,9 @@ fn build_context(data: &LatticeData, options: &HtmlExportOptions) -> Context {
         ("p0", stats.p0),
         ("p1", stats.p1),
         ("p2", stats.p2),
+        ("p0_verified", stats.p0_verified),
+        ("p1_verified", stats.p1_verified),
+        ("p2_verified", stats.p2_verified),
     ]
     .into_iter()
     .collect();
