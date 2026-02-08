@@ -165,11 +165,15 @@ Lattice provides a structured protocol for agent interaction:
 
 ## Self-Describing
 
-This repository uses Lattice to describe itself. The `.lattice/` directory contains:
+Lattice is built with Lattice. View the current state of our knowledge graph and requirements:
+
+**[View Live Documentation](https://forkzero.github.io/lattice/)**
+
+The `.lattice/` directory contains:
 
 - **Sources**: Research on requirements engineering, knowledge graphs, agent systems
 - **Theses**: Why Lattice should exist and how it should work
-- **Requirements**: Specifications for Lattice itself (36 requirements)
+- **Requirements**: Specifications for Lattice itself
 
 ```bash
 # See the lattice for Lattice
