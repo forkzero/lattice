@@ -1,19 +1,30 @@
 id: REQ-API-003
 type: requirement
-title: JSON-RPC Protocol over Socket
-body: "The Lattice server exposes a JSON-RPC 2.0 API over Unix domain socket for LLM integration. This design avoids API keys by leveraging the hosting agent's LLM. The protocol supports: node CRUD operations, graph queries, drift detection, and proposal workflows. Requests include method, params, and optional id. Responses include result or error with code/message."
+title: JSON-RPC Protocol via MCP
+body: |
+  MCP (Model Context Protocol) uses JSON-RPC 2.0 over stdio as its transport layer.
+  By implementing REQ-API-004 (MCP Server Mode), we get JSON-RPC "for free" without
+  building a custom protocol layer. The MCP SDK handles request/response framing,
+  method dispatch, and error handling per JSON-RPC 2.0 specification.
+
+  This requirement is satisfied by the MCP implementation rather than a separate
+  JSON-RPC server. Unix domain socket and HTTP transports are deferred to future
+  SaaS requirements (REQ-API-009).
+status: active
+version: 2.0.0
+created_at: 2026-02-04T06:51:50.534Z
+created_by: agent:claude-2026-02-04
 priority: P0
 category: API
 tags:
-  - json-rpc
-  - socket
-  - llm
-  - protocol
-status: active
-version: 1.0.0
-created_at: 2026-02-04T06:51:50.534Z
-created_by: agent:claude-2026-02-04
+- json-rpc
+- mcp
+- protocol
+resolution:
+  status: verified
+  resolved_at: 2026-02-08T00:25:01.865891+00:00
+  resolved_by: agent:claude-2026-02-08
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: 1.0.0
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

@@ -1,0 +1,23 @@
+id: REQ-API-009
+type: requirement
+title: Remote MCP Endpoint for SaaS
+body: 'Lattice SaaS exposes a remote MCP endpoint over SSE (Server-Sent Events) or WebSocket. The endpoint provides the same tools as the local MCP server: list nodes, get node details, query relationships, detect drift, propose changes. Enables Claude.ai and other hosted agents to interact with lattice without local installation. Authenticated via API key in request headers.'
+status: active
+version: 1.0.0
+created_at: 2026-02-07T23:49:35.001685+00:00
+created_by: agent:claude-2026-02-07
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: API
+resolution:
+  status: deferred
+  reason: 'Future: SaaS remote endpoint'
+  resolved_at: 2026-02-07T23:49:45.348760+00:00
+  resolved_by: agent:claude-2026-02-07
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-API-004
+    version: 1.0.0

@@ -116,6 +116,16 @@ enum Commands {
         #[arg(long)]
         include_internal: bool,
     },
+
+    /// Show a compact status summary of the lattice
+    Summary {
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Run as MCP server over stdio
+    Mcp,
 }
 
 #[derive(Subcommand)]
@@ -908,6 +918,187 @@ fn main() {
 
             eprintln!("{}", format!("Unknown format: {}", format).red());
             process::exit(1);
+        }
+
+        Commands::Summary { format } => {
+            let root = get_lattice_root();
+
+            let sources = load_nodes_by_type(&root, "sources").unwrap_or_default();
+            let theses = load_nodes_by_type(&root, "theses").unwrap_or_default();
+            let requirements = load_nodes_by_type(&root, "requirements").unwrap_or_default();
+            let implementations = load_nodes_by_type(&root, "implementations").unwrap_or_default();
+
+            // Count requirements by resolution status
+            let mut unresolved = 0;
+            let mut verified = 0;
+            let mut blocked = 0;
+            let mut deferred = 0;
+            let mut wontfix = 0;
+
+            // Count by priority
+            let mut p0 = 0;
+            let mut p1 = 0;
+            let mut p2 = 0;
+
+            // Track orphaned requirements (no derives_from)
+            let mut orphaned_reqs: Vec<String> = Vec::new();
+
+            for req in &requirements {
+                // Resolution status
+                match req.resolution.as_ref().map(|r| &r.status) {
+                    Some(Resolution::Verified) => verified += 1,
+                    Some(Resolution::Blocked) => blocked += 1,
+                    Some(Resolution::Deferred) => deferred += 1,
+                    Some(Resolution::Wontfix) => wontfix += 1,
+                    None => unresolved += 1,
+                }
+
+                // Priority
+                match req.priority {
+                    Some(Priority::P0) => p0 += 1,
+                    Some(Priority::P1) => p1 += 1,
+                    Some(Priority::P2) => p2 += 1,
+                    None => {}
+                }
+
+                // Check for orphaned (no derives_from)
+                let has_derives_from = req
+                    .edges
+                    .as_ref()
+                    .and_then(|e| e.derives_from.as_ref())
+                    .map(|d| !d.is_empty())
+                    .unwrap_or(false);
+                if !has_derives_from {
+                    orphaned_reqs.push(req.id.clone());
+                }
+            }
+
+            // Check for drift
+            let drift_reports = find_drift(&root).unwrap_or_default();
+            let has_drift = !drift_reports.is_empty();
+
+            // Check for orphaned theses (no requirements derive from them)
+            let thesis_ids: std::collections::HashSet<_> =
+                theses.iter().map(|t| t.id.clone()).collect();
+            let mut referenced_theses: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for req in &requirements {
+                if let Some(edges) = &req.edges
+                    && let Some(derives_from) = &edges.derives_from
+                {
+                    for edge in derives_from {
+                        referenced_theses.insert(edge.target.clone());
+                    }
+                }
+            }
+            let orphaned_theses: Vec<_> =
+                thesis_ids.difference(&referenced_theses).cloned().collect();
+
+            if format == "json" {
+                let summary = serde_json::json!({
+                    "nodes": {
+                        "sources": sources.len(),
+                        "theses": theses.len(),
+                        "requirements": requirements.len(),
+                        "implementations": implementations.len()
+                    },
+                    "requirements": {
+                        "by_resolution": {
+                            "unresolved": unresolved,
+                            "verified": verified,
+                            "blocked": blocked,
+                            "deferred": deferred,
+                            "wontfix": wontfix
+                        },
+                        "by_priority": {
+                            "P0": p0,
+                            "P1": p1,
+                            "P2": p2
+                        },
+                        "orphaned": orphaned_reqs
+                    },
+                    "theses": {
+                        "orphaned": orphaned_theses
+                    },
+                    "drift": {
+                        "has_drift": has_drift,
+                        "count": drift_reports.len()
+                    }
+                });
+                println!("{}", serde_json::to_string_pretty(&summary).unwrap());
+            } else {
+                // Text format
+                println!("{}", "Lattice Summary".cyan().bold());
+                println!();
+
+                println!("{}", "Nodes:".bold());
+                println!(
+                    "  {} sources, {} theses, {} requirements, {} implementations",
+                    sources.len(),
+                    theses.len(),
+                    requirements.len(),
+                    implementations.len()
+                );
+                println!();
+
+                println!("{}", "Requirements by resolution:".bold());
+                println!(
+                    "  {} unresolved, {} verified, {} blocked, {} deferred, {} wontfix",
+                    unresolved, verified, blocked, deferred, wontfix
+                );
+                println!();
+
+                println!("{}", "Requirements by priority:".bold());
+                println!("  {} P0, {} P1, {} P2", p0, p1, p2);
+                println!();
+
+                if has_drift {
+                    println!(
+                        "{}",
+                        format!("Drift: {} stale edges detected", drift_reports.len()).yellow()
+                    );
+                } else {
+                    println!("{}", "Drift: none".green());
+                }
+                println!();
+
+                if !orphaned_reqs.is_empty() {
+                    println!(
+                        "{}",
+                        format!(
+                            "Orphaned requirements (no derives_from): {}",
+                            orphaned_reqs.len()
+                        )
+                        .yellow()
+                    );
+                    for id in &orphaned_reqs {
+                        println!("  - {}", id);
+                    }
+                    println!();
+                }
+
+                if !orphaned_theses.is_empty() {
+                    println!(
+                        "{}",
+                        format!(
+                            "Orphaned theses (no requirements derive from them): {}",
+                            orphaned_theses.len()
+                        )
+                        .yellow()
+                    );
+                    for id in &orphaned_theses {
+                        println!("  - {}", id);
+                    }
+                }
+            }
+        }
+
+        Commands::Mcp => {
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+            if let Err(e) = rt.block_on(lattice::mcp::run_server()) {
+                eprintln!("{}", format!("MCP server error: {}", e).red());
+                process::exit(1);
+            }
         }
     }
 }

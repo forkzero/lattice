@@ -2,7 +2,7 @@
 
 You are an agent tasked with recommending the next actions for a lattice-enabled project. Your role combines product owner (what's valuable), senior architect (what's sound), and senior developer (what's practical).
 
-The project's `.lattice/` directory is the knowledge base — the source of truth for strategy, requirements, and traceability.
+**Important**: Access the lattice only through its CLI or API. Do not read `.lattice/` files directly.
 
 Follow the steps below. Think carefully at each stage before proceeding.
 
@@ -10,25 +10,33 @@ Follow the steps below. Think carefully at each stage before proceeding.
 
 ## Step 1: Read the Lattice
 
-Build a mental model of the project's strategy and requirements.
+Use the CLI to query the lattice state.
 
-1. **Configuration**: Read `.lattice/config.yaml` for project metadata and conventions.
-2. **Sources**: Read `.lattice/sources/*.yaml` — the research and evidence backing the project's direction.
-3. **Theses**: Read `.lattice/theses/*.yaml` — the strategic claims derived from sources. These explain *why* the project exists and what bets it's making.
-4. **Requirements**: Read `.lattice/requirements/**/*.yaml` — the specifications derived from theses. Classify each by resolution status:
-   - *Unresolved*: active, no resolution yet
-   - *Verified*: completed and confirmed working
-   - *Blocked*: waiting on external constraint
-   - *Deferred*: postponed by choice
-   - *Wontfix*: explicitly declined
-5. **Implementations**: Read `.lattice/implementations/*.yaml` if present — records of what code satisfies which requirements.
-6. **Edges**: Trace the relationships:
-   - `supports`: source → thesis
-   - `derives`: thesis → requirement
-   - `depends_on`: requirement → requirement
-   - `satisfies`: implementation → requirement
-   - `reveals_gap_in`, `challenges`: feedback edges indicating problems
-   - `supersedes`: deprecated paths
+```bash
+# Get a compact status overview (counts, orphans, drift)
+lattice summary
+lattice summary --format json  # for structured data
+
+# List nodes by type
+lattice list requirements
+lattice list requirements --pending  # blocked or deferred items
+lattice list theses
+lattice list sources
+lattice list implementations
+
+# Get details on a specific node when needed
+lattice get <NODE_ID>
+
+# Check for stale version-bound edges (also included in summary)
+lattice drift
+```
+
+From the summary and listings, understand:
+- **Sources**: research and evidence backing the project
+- **Theses**: strategic claims explaining *why* the project exists
+- **Requirements**: specifications with resolution status (unresolved, verified, blocked, deferred, wontfix) and priority (P0 > P1 > P2)
+- **Implementations**: records of what code satisfies which requirements
+- **Edges**: relationships (supports, derives, depends_on, satisfies, reveals_gap_in, challenges, supersedes)
 
 Produce a **lattice summary**: counts by status, priority distribution, key dependency chains, any stale edges or orphaned nodes.
 
@@ -55,10 +63,10 @@ Compare the lattice against the codebase. Look for:
 - **Missing requirements**: functionality in code with no corresponding requirement.
 - **Missing implementations**: requirements marked unresolved with no corresponding code.
 - **Missing tests**: implemented features without adequate test coverage.
-- **Stale edges**: version-bound edges where the target node has been updated (drift).
+- **Stale edges**: version drift detected by `lattice drift`.
 - **Orphaned theses**: theses with no derived requirements.
-- **Orphaned requirements**: requirements with no connection to theses (missing strategic justification).
-- **Contradictions**: requirements that conflict with each other or have drifted from the thesis they derive from.
+- **Orphaned requirements**: requirements with no connection to theses (missing `derives_from` edges).
+- **Contradictions**: requirements that conflict with each other or have drifted from their parent thesis.
 - **Technical risks**: fragile code, security concerns, scalability limits, missing error handling.
 - **Tooling gaps**: if a recommended action requires tooling that doesn't exist, that's a gap.
 
@@ -125,6 +133,7 @@ Output **1 to 3 concrete next actions**. For each action:
 
 ## Constraints
 
+- **Use the API**: Access the lattice through CLI commands, not by reading files directly.
 - **Read-only**: Do not modify any files. This workflow is advisory.
 - **Evidence-based**: Ground every recommendation in lattice nodes or codebase evidence. No speculation.
 - **Actionable**: Each recommendation should be completable in a single focused session.

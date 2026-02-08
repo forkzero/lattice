@@ -1,0 +1,23 @@
+id: REQ-API-010
+type: requirement
+title: Authentication and Multi-Tenancy
+body: The remote API supports authentication via API keys and OAuth. Multi-tenancy isolates each project's lattice data. API keys are scoped to specific projects. OAuth enables SSO for teams. Rate limiting and usage tracking per tenant. Admin API for managing projects, keys, and team members.
+status: active
+version: 1.0.0
+created_at: 2026-02-07T23:49:37.680606+00:00
+created_by: agent:claude-2026-02-07
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: API
+resolution:
+  status: deferred
+  reason: 'Future: SaaS auth and multi-tenancy'
+  resolved_at: 2026-02-07T23:49:46.255279+00:00
+  resolved_by: agent:claude-2026-02-07
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-API-009
+    version: 1.0.0

@@ -1,0 +1,20 @@
+id: IMP-MCP-001
+type: implementation
+title: MCP Server Module
+body: 'MCP server implementation using rmcp crate. Exposes 7 tools: lattice_summary, lattice_list, lattice_get, lattice_drift, lattice_resolve, lattice_add_requirement, lattice_add_implementation. Runs over stdio for integration with Claude Code and other MCP clients.'
+status: active
+version: 1.0.0
+created_at: 2026-02-08T00:24:58.682808+00:00
+created_by: agent:claude-2026-02-08
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  language: rust
+  files:
+  - path: src/mcp.rs
+  test_command: cargo test
+edges:
+  satisfies:
+  - target: REQ-API-003
+    version: 1.0.0
+  - target: REQ-API-004
+    version: 1.0.0

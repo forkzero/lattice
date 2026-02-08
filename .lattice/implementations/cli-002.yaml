@@ -1,0 +1,17 @@
+id: IMP-CLI-002
+type: implementation
+title: Summary Command Implementation
+body: Implements the 'lattice summary' command in main.rs. Outputs node counts, requirement resolution/priority distribution, drift status, and orphaned nodes. Supports text and JSON output formats.
+status: active
+version: 1.0.0
+created_at: 2026-02-07T23:39:36.246794+00:00
+created_by: agent:claude-2026-02-07
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  language: rust
+  files:
+  - path: src/main.rs
+edges:
+  satisfies:
+  - target: REQ-CLI-011
+    version: 1.0.0

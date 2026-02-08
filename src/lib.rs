@@ -6,6 +6,7 @@
 
 pub mod export;
 pub mod graph;
+pub mod mcp;
 pub mod storage;
 pub mod types;
 

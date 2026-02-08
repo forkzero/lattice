@@ -1,22 +1,66 @@
 id: REQ-API-004
 type: requirement
 title: MCP Server Mode
-body: "Lattice runs as an MCP (Model Context Protocol) server, enabling integration with Claude Code and other MCP-compatible clients. The server exposes tools for: listing nodes, getting node details, querying relationships, detecting drift, and proposing changes. This provides standardized LLM tool integration without custom protocol implementations."
+body: |
+  Lattice runs as an MCP server via `lattice mcp` command, enabling integration with
+  Claude Code and other MCP-compatible clients. Uses the official Rust MCP SDK (rmcp).
+
+  ## Tools Exposed
+
+  **lattice_summary**
+  Get a compact overview of the knowledge graph: node counts by type, requirement
+  resolution status distribution, priority breakdown, drift status, and orphaned nodes.
+  Use this first to understand the current state before diving into specifics.
+
+  **lattice_list**
+  List nodes by type (sources, theses, requirements, implementations). Returns ID,
+  title, version, and status for each. Use to find specific nodes or browse categories.
+  Parameters: type (required), status (optional filter).
+
+  **lattice_get**
+  Retrieve full details of a specific node by ID. Returns title, body, version, edges,
+  resolution status, and all metadata. Use when you need complete context about a node.
+  Parameters: id (required).
+
+  **lattice_drift**
+  Check for version drift in the knowledge graph. Identifies edges where the target
+  node version has changed since the edge was created, indicating potentially stale
+  relationships. Returns list of stale edges with source, target, and version mismatch.
+
+  **lattice_resolve**
+  Update the resolution status of a requirement. Statuses: verified (implemented and
+  tested), blocked (waiting on dependency), deferred (future work), wontfix (rejected).
+  Parameters: id (required), status (required), reason (optional).
+
+  **lattice_add_requirement**
+  Create a new requirement node. Automatically generates ID from title. Links to
+  thesis via derives_from edge. Parameters: title (required), body (required),
+  priority (P0-P3), derives_from (thesis ID), depends_on (other requirement IDs).
+
+  **lattice_add_implementation**
+  Create an implementation node tracking code that satisfies requirements. Links to
+  requirements via satisfies edges. Parameters: title (required), body (required),
+  language, files (paths), test_command, satisfies (requirement IDs).
+status: active
+version: 2.0.0
+created_at: 2026-02-04T06:51:58.085Z
+created_by: agent:claude-2026-02-04
 priority: P1
 category: API
 tags:
-  - mcp
-  - server
-  - tools
-  - claude-code
-status: active
-version: 1.0.0
-created_at: 2026-02-04T06:51:58.085Z
-created_by: agent:claude-2026-02-04
+- mcp
+- server
+- tools
+- claude-code
+- rmcp
+resolution:
+  status: verified
+  resolved_at: 2026-02-08T00:24:53.220979+00:00
+  resolved_by: agent:claude-2026-02-08
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: 1.0.0
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
   depends_on:
-    - target: REQ-API-003
-      version: 1.0.0
+  - target: REQ-API-003
+    version: 2.0.0

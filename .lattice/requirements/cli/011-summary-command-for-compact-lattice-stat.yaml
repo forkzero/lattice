@@ -1,0 +1,22 @@
+id: REQ-CLI-011
+type: requirement
+title: Summary Command for Compact Lattice Status
+body: 'The CLI provides a ''lattice summary'' command that outputs a compact status overview: node counts by type, requirements by resolution status and priority, drift status, orphaned requirements (no derives_from), and orphaned theses (no requirements derive from them). Supports --format json for structured output. Designed for agent workflows where token efficiency matters.'
+status: active
+version: 1.0.0
+created_at: 2026-02-07T23:39:26.505184+00:00
+created_by: agent:claude-2026-02-07
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+resolution:
+  status: verified
+  resolved_at: 2026-02-07T23:39:30.763278+00:00
+  resolved_by: agent:claude-2026-02-07
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-003
+    version: 1.0.0
