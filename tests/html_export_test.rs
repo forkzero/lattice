@@ -1,5 +1,7 @@
 //! Integration tests for HTML export functionality.
 
+#![allow(deprecated)] // cargo_bin is deprecated but replacement not yet stable
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
