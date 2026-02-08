@@ -293,6 +293,116 @@ impl LatticeServer {
         }))
     }
 
+    /// Search across nodes with multiple filter criteria
+    fn search(&self, params: SearchParams) -> Result<Value, String> {
+        let node_type = params.node_type.as_deref().unwrap_or("requirements");
+        let type_name = match node_type {
+            "sources" => "sources",
+            "theses" => "theses",
+            "requirements" => "requirements",
+            "implementations" => "implementations",
+            _ => return Err(format!("Unknown type: {}", node_type)),
+        };
+
+        let nodes = load_nodes_by_type(&self.root, type_name).map_err(|e| e.to_string())?;
+
+        let results: Vec<Value> = nodes
+            .iter()
+            .filter(|n| {
+                // Text search in title and body
+                if let Some(ref query) = params.query {
+                    let query_lower = query.to_lowercase();
+                    let title_match = n.title.to_lowercase().contains(&query_lower);
+                    let body_match = n.body.to_lowercase().contains(&query_lower);
+                    if !title_match && !body_match {
+                        return false;
+                    }
+                }
+
+                // Priority filter
+                if let Some(ref priority) = params.priority {
+                    let node_priority = n.priority.as_ref().map(|p| format!("{:?}", p));
+                    if node_priority.as_deref() != Some(priority.to_uppercase().as_str()) {
+                        return false;
+                    }
+                }
+
+                // Resolution status filter
+                if let Some(ref resolution) = params.resolution {
+                    let res_lower = resolution.to_lowercase();
+                    let matches = match res_lower.as_str() {
+                        "verified" => matches!(
+                            n.resolution.as_ref().map(|r| &r.status),
+                            Some(Resolution::Verified)
+                        ),
+                        "blocked" => matches!(
+                            n.resolution.as_ref().map(|r| &r.status),
+                            Some(Resolution::Blocked)
+                        ),
+                        "deferred" => matches!(
+                            n.resolution.as_ref().map(|r| &r.status),
+                            Some(Resolution::Deferred)
+                        ),
+                        "wontfix" => matches!(
+                            n.resolution.as_ref().map(|r| &r.status),
+                            Some(Resolution::Wontfix)
+                        ),
+                        "unresolved" | "open" => n.resolution.is_none(),
+                        _ => true,
+                    };
+                    if !matches {
+                        return false;
+                    }
+                }
+
+                // Tag filter
+                if let Some(ref tag) = params.tag {
+                    let tag_lower = tag.to_lowercase();
+                    let has_tag = n
+                        .tags
+                        .as_ref()
+                        .map(|tags| tags.iter().any(|t| t.to_lowercase() == tag_lower))
+                        .unwrap_or(false);
+                    if !has_tag {
+                        return false;
+                    }
+                }
+
+                // Category filter
+                if let Some(ref category) = params.category {
+                    let cat_lower = category.to_lowercase();
+                    let matches_cat = n
+                        .category
+                        .as_ref()
+                        .map(|c| c.to_lowercase() == cat_lower)
+                        .unwrap_or(false);
+                    if !matches_cat {
+                        return false;
+                    }
+                }
+
+                true
+            })
+            .map(|n| {
+                json!({
+                    "id": n.id,
+                    "title": n.title,
+                    "body": n.body,
+                    "version": n.version,
+                    "priority": n.priority.as_ref().map(|p| format!("{:?}", p)),
+                    "resolution": n.resolution.as_ref().map(|r| format!("{:?}", r.status).to_lowercase()),
+                    "category": n.category,
+                    "tags": n.tags
+                })
+            })
+            .collect();
+
+        Ok(json!({
+            "count": results.len(),
+            "results": results
+        }))
+    }
+
     /// Add an implementation
     fn add_impl(&self, params: AddImplementationParams) -> Result<Value, String> {
         let created_by = format!("agent:mcp-{}", chrono::Utc::now().format("%Y-%m-%d"));
@@ -347,6 +457,22 @@ struct AddImplementationParams {
     test_command: Option<String>,
     #[serde(default)]
     satisfies: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchParams {
+    #[serde(default)]
+    node_type: Option<String>,
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    priority: Option<String>,
+    #[serde(default)]
+    resolution: Option<String>,
+    #[serde(default)]
+    tag: Option<String>,
+    #[serde(default)]
+    category: Option<String>,
 }
 
 fn make_schema(properties: Value, required: Vec<&str>) -> Arc<Map<String, Value>> {
@@ -520,6 +646,43 @@ fn get_tools() -> Vec<Tool> {
                 vec!["id", "title", "body"],
             ),
         ),
+        Tool::new(
+            "lattice_search",
+            "Search for nodes with flexible filtering. Find open requirements, P0 items, \
+             nodes matching text, or any combination. All filters are optional and combined with AND.",
+            make_schema(
+                json!({
+                    "node_type": {
+                        "type": "string",
+                        "description": "Node type to search (default: requirements)",
+                        "enum": ["sources", "theses", "requirements", "implementations"]
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Text to search for in title and body (case-insensitive)"
+                    },
+                    "priority": {
+                        "type": "string",
+                        "description": "Filter by priority level",
+                        "enum": ["P0", "P1", "P2"]
+                    },
+                    "resolution": {
+                        "type": "string",
+                        "description": "Filter by resolution status",
+                        "enum": ["verified", "blocked", "deferred", "wontfix", "unresolved", "open"]
+                    },
+                    "tag": {
+                        "type": "string",
+                        "description": "Filter by tag (exact match, case-insensitive)"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Filter by category (e.g., API, CLI, CORE)"
+                    }
+                }),
+                vec![],
+            ),
+        ),
     ]
 }
 
@@ -637,6 +800,13 @@ impl ServerHandler for LatticeServer {
                     .map_err(|e| rmcp::model::ErrorData::invalid_params(e.to_string(), None))?;
                     self.add_impl(params)
                 }
+                "lattice_search" => {
+                    let params: SearchParams = serde_json::from_value(
+                        serde_json::to_value(&arguments).unwrap_or_default(),
+                    )
+                    .map_err(|e| rmcp::model::ErrorData::invalid_params(e.to_string(), None))?;
+                    self.search(params)
+                }
                 _ => {
                     return Err(rmcp::model::ErrorData::invalid_params(
                         format!("Unknown tool: {}", name),
@@ -694,7 +864,7 @@ mod tests {
     #[test]
     fn test_get_tools_returns_all_tools() {
         let tools = get_tools();
-        assert_eq!(tools.len(), 7);
+        assert_eq!(tools.len(), 8);
 
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"lattice_summary"));
@@ -704,6 +874,7 @@ mod tests {
         assert!(names.contains(&"lattice_resolve"));
         assert!(names.contains(&"lattice_add_requirement"));
         assert!(names.contains(&"lattice_add_implementation"));
+        assert!(names.contains(&"lattice_search"));
     }
 
     #[test]
@@ -821,5 +992,89 @@ mod tests {
         let value = result.unwrap();
         assert_eq!(value.get("success").unwrap(), true);
         assert_eq!(value.get("id").unwrap(), "IMP-TEST-001");
+    }
+
+    #[test]
+    fn test_search_empty_lattice() {
+        let (_temp_dir, server) = setup_test_lattice();
+        let params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: None,
+            resolution: Some("unresolved".to_string()),
+            tag: None,
+            category: None,
+        };
+        let result = server.search(params);
+        assert!(result.is_ok());
+
+        let value = result.unwrap();
+        assert_eq!(value.get("count").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_search_with_results() {
+        let (_temp_dir, server) = setup_test_lattice();
+
+        // Add a requirement first
+        let add_params = AddRequirementParams {
+            id: "REQ-SEARCH-001".to_string(),
+            title: "Searchable Requirement".to_string(),
+            body: "This requirement is for testing search".to_string(),
+            priority: "P0".to_string(),
+            category: "TEST".to_string(),
+            tags: Some(vec!["mvp".to_string()]),
+            derives_from: None,
+            depends_on: None,
+        };
+        server.add_req(add_params).unwrap();
+
+        // Search by text
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: Some("searchable".to_string()),
+            priority: None,
+            resolution: None,
+            tag: None,
+            category: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 1);
+
+        // Search by priority
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: Some("P0".to_string()),
+            resolution: None,
+            tag: None,
+            category: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 1);
+
+        // Search by tag
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: None,
+            resolution: None,
+            tag: Some("mvp".to_string()),
+            category: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 1);
+
+        // Search with no matches
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: Some("nonexistent".to_string()),
+            priority: None,
+            resolution: None,
+            tag: None,
+            category: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 0);
     }
 }
