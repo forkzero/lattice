@@ -1,9 +1,9 @@
 id: REQ-AGENT-005
 type: requirement
 title: Product Owner Sub-Agent Definition
-body: 'A dedicated sub-agent acts as product owner, with its own system prompt, tool access (lattice MCP tools + read-only file access), and enforced workflow. It runs in a separate context window from the coding agent, owns strategic reasoning, and writes decisions back to the lattice as nodes and edges. It must be composable — invocable from Claude Code, CI pipelines, chat interfaces, or cron jobs. The agent definition lives in .claude/agents/product-owner.md and specifies: (1) system prompt with PO responsibilities, (2) available tools (lattice MCP), (3) workflow enforcement (search, propose, challenge, finalize), (4) structured output format for returning recommendations to the parent context.'
+body: 'A dedicated sub-agent acts as product owner, with its own system prompt, CLI access (lattice commands with --format json), and enforced workflow. It runs in a separate context window from the coding agent, owns strategic reasoning, and writes decisions back to the lattice as nodes and edges. It must be composable — invocable from Claude Code, CI pipelines, chat interfaces, or cron jobs. The agent definition lives in .claude/agents/product-owner.md (installed by lattice init) and specifies: (1) system prompt with PO responsibilities, (2) available tools (lattice CLI via Bash with JSON output), (3) workflow enforcement (search, propose, challenge, finalize), (4) structured output format for returning recommendations to the parent context. The CLI-first approach avoids MCP server overhead for local file operations and works with any agent platform that has shell access.'
 status: active
-version: 1.0.0
+version: 1.1.0
 created_at: 2026-02-08T13:38:18.309544+00:00
 created_by: agent:claude-2026-02-08
 requested_by: George Moon <george.moon@gmail.com>
@@ -20,5 +20,5 @@ edges:
   depends_on:
   - target: REQ-AGENT-004
     version: 1.0.0
-  - target: REQ-API-004
+  - target: REQ-CLI-013
     version: 1.0.0

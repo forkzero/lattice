@@ -1,0 +1,23 @@
+id: REQ-CLI-013
+type: requirement
+title: JSON Output Mode for Agent-Friendly CLI
+body: 'All read commands (list, get, drift, summary, lint, search) support --format json for structured machine-readable output. Write commands (add, refine, resolve, verify) already return structured results but should also emit JSON on success/error when --format json is set. Errors emit JSON on stderr with error code and detail fields. Exit codes are semantic: 0 success, 1 error, 2 actionable condition (drift detected, lint issues). This makes the CLI the primary agent interface — sub-agents call lattice commands via Bash and parse JSON, no MCP server needed for local orchestration.'
+status: active
+version: 1.0.0
+created_at: 2026-02-08T14:05:08.793049+00:00
+created_by: agent:claude-2026-02-08
+requested_by: George Moon <george.moon@gmail.com>
+priority: P0
+category: CLI
+tags:
+- agent
+- cli
+- json
+- interface
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-003
+    version: 1.0.0

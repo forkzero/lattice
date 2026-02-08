@@ -1,0 +1,22 @@
+id: REQ-CLI-014
+type: requirement
+title: Machine-Readable Command Catalog
+body: A lattice help --json command outputs all available commands as structured JSON including command name, description, parameters with types and required/optional status, and examples. Serves the same role as MCP tool discovery but with zero infrastructure. Agents read this once at session start to know what CLI capabilities are available.
+status: active
+version: 1.0.0
+created_at: 2026-02-08T14:05:15.616367+00:00
+created_by: agent:claude-2026-02-08
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+tags:
+- agent
+- cli
+- discovery
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-013
+    version: 1.0.0

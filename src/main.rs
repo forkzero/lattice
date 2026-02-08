@@ -12,6 +12,8 @@ use lattice::{
     find_drift, find_lattice_root, fix_issues, generate_plan, init_lattice, lint_lattice,
     load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
 };
+use serde_json::json;
+use std::collections::HashSet;
 use std::env;
 use std::process;
 
@@ -55,6 +57,10 @@ enum Commands {
         /// Show only pending items (blocked or deferred)
         #[arg(long)]
         pending: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Resolve a requirement with a status
@@ -77,6 +83,10 @@ enum Commands {
         /// Mark as wontfix with reason (will not implement)
         #[arg(long, conflicts_with_all = ["verified", "blocked", "deferred"])]
         wontfix: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Plan implementation of requirements
@@ -91,12 +101,20 @@ enum Commands {
         /// Exit with non-zero status if drift detected
         #[arg(long)]
         check: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Get a specific node by ID
     Get {
         /// Node ID
         id: String,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Export the lattice to various formats
@@ -138,6 +156,10 @@ enum Commands {
         /// Exit with non-zero status on any issue (for CI)
         #[arg(long)]
         strict: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Verify that an implementation satisfies a requirement
@@ -163,6 +185,10 @@ enum Commands {
         /// Comma-separated file paths as evidence
         #[arg(long)]
         files: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Refine a requirement by creating a sub-requirement from a discovered gap
@@ -189,6 +215,53 @@ enum Commands {
         /// Implementation ID that discovered this gap
         #[arg(long)]
         implementation: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Search nodes with filters (text, priority, resolution, tags, category, proximity)
+    Search {
+        /// Node type to search (sources, theses, requirements, implementations)
+        #[arg(short = 't', long, default_value = "requirements")]
+        node_type: String,
+
+        /// Text search in title and body
+        #[arg(short, long)]
+        query: Option<String>,
+
+        /// Filter by priority (P0, P1, P2)
+        #[arg(short, long)]
+        priority: Option<String>,
+
+        /// Filter by resolution (verified, blocked, deferred, wontfix, unresolved)
+        #[arg(short, long)]
+        resolution: Option<String>,
+
+        /// Filter by tag (single tag)
+        #[arg(long)]
+        tag: Option<String>,
+
+        /// Filter by multiple tags (comma-separated, all must match)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// Filter by category
+        #[arg(short, long)]
+        category: Option<String>,
+
+        /// Filter by ID prefix
+        #[arg(long)]
+        id_prefix: Option<String>,
+
+        /// Find nodes related to this node ID (graph proximity)
+        #[arg(long)]
+        related_to: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Run as MCP server over stdio
@@ -245,6 +318,10 @@ enum AddCommands {
         /// Author (e.g., human:george, agent:claude)
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Add a thesis to the lattice
@@ -280,6 +357,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Add a source to the lattice
@@ -315,6 +396,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Add an implementation to the lattice
@@ -354,6 +439,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 }
 
@@ -446,6 +535,37 @@ fn parse_thesis_category(s: &str) -> lattice::types::ThesisCategory {
 
 fn split_csv(s: Option<String>) -> Option<Vec<String>> {
     s.map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+}
+
+fn is_json(format: &str) -> bool {
+    format == "json"
+}
+
+fn emit_created(format: &str, node_type: &str, id: &str, path: &std::path::Path) {
+    if is_json(format) {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "success": true,
+                "type": node_type,
+                "id": id,
+                "file": path.display().to_string(),
+            }))
+            .unwrap()
+        );
+    } else {
+        println!("{}", format!("Created {}: {}", node_type, id).green());
+        println!("{}", format!("File: {}", path.display()).dimmed());
+    }
+}
+
+fn emit_error(format: &str, code: &str, detail: &str) -> ! {
+    if is_json(format) {
+        eprintln!("{}", json!({"error": code, "detail": detail}));
+    } else {
+        eprintln!("{}", format!("Error: {}", detail).red());
+    }
+    process::exit(1);
 }
 
 fn print_plan(plan: &Plan, index: &lattice::NodeIndex) {
@@ -570,6 +690,7 @@ fn main() {
                 depends_on,
                 status,
                 created_by,
+                format,
             } => {
                 let root = get_lattice_root();
                 let priority = parse_priority(&priority);
@@ -592,14 +713,8 @@ fn main() {
                 };
 
                 match add_requirement(&root, options) {
-                    Ok(path) => {
-                        println!("{}", format!("Created requirement: {}", id).green());
-                        println!("{}", format!("File: {}", path.display()).dimmed());
-                    }
-                    Err(e) => {
-                        eprintln!("{}", format!("Error: {}", e).red());
-                        process::exit(1);
-                    }
+                    Ok(path) => emit_created(&format, "requirement", &id, &path),
+                    Err(e) => emit_error(&format, "add_error", &e.to_string()),
                 }
             }
 
@@ -612,6 +727,7 @@ fn main() {
                 supported_by,
                 status,
                 created_by,
+                format,
             } => {
                 let root = get_lattice_root();
                 let category = parse_thesis_category(&category);
@@ -630,14 +746,8 @@ fn main() {
                 };
 
                 match add_thesis(&root, options) {
-                    Ok(path) => {
-                        println!("{}", format!("Created thesis: {}", id).green());
-                        println!("{}", format!("File: {}", path.display()).dimmed());
-                    }
-                    Err(e) => {
-                        eprintln!("{}", format!("Error: {}", e).red());
-                        process::exit(1);
-                    }
+                    Ok(path) => emit_created(&format, "thesis", &id, &path),
+                    Err(e) => emit_error(&format, "add_error", &e.to_string()),
                 }
             }
 
@@ -650,6 +760,7 @@ fn main() {
                 reliability,
                 status,
                 created_by,
+                format,
             } => {
                 let root = get_lattice_root();
                 let reliability = parse_reliability(&reliability);
@@ -668,14 +779,8 @@ fn main() {
                 };
 
                 match add_source(&root, options) {
-                    Ok(path) => {
-                        println!("{}", format!("Created source: {}", id).green());
-                        println!("{}", format!("File: {}", path.display()).dimmed());
-                    }
-                    Err(e) => {
-                        eprintln!("{}", format!("Error: {}", e).red());
-                        process::exit(1);
-                    }
+                    Ok(path) => emit_created(&format, "source", &id, &path),
+                    Err(e) => emit_error(&format, "add_error", &e.to_string()),
                 }
             }
 
@@ -689,6 +794,7 @@ fn main() {
                 satisfies,
                 status,
                 created_by,
+                format,
             } => {
                 let root = get_lattice_root();
                 let status = parse_status(&status);
@@ -709,14 +815,8 @@ fn main() {
                 };
 
                 match add_implementation(&root, options) {
-                    Ok(path) => {
-                        println!("{}", format!("Created implementation: {}", id).green());
-                        println!("{}", format!("File: {}", path.display()).dimmed());
-                    }
-                    Err(e) => {
-                        eprintln!("{}", format!("Error: {}", e).red());
-                        process::exit(1);
-                    }
+                    Ok(path) => emit_created(&format, "implementation", &id, &path),
+                    Err(e) => emit_error(&format, "add_error", &e.to_string()),
                 }
             }
         },
@@ -726,45 +826,75 @@ fn main() {
             status: _,
             priority: _,
             pending,
+            format,
         } => {
             let root = get_lattice_root();
 
             let type_name = match node_type.as_str() {
-                "sources" => "sources",
-                "theses" => "theses",
-                "requirements" => "requirements",
-                "implementations" => "implementations",
-                _ => {
-                    eprintln!("{}", format!("Unknown type: {}", node_type).red());
-                    process::exit(1);
-                }
+                "sources" | "theses" | "requirements" | "implementations" => node_type.as_str(),
+                _ => emit_error(
+                    &format,
+                    "unknown_type",
+                    &format!("Unknown type: {}", node_type),
+                ),
             };
 
             match load_nodes_by_type(&root, type_name) {
                 Ok(nodes) => {
-                    for node in nodes {
-                        // If --pending, only show blocked or deferred items
-                        if pending {
-                            if let Some(ref res) = node.resolution {
-                                match res.status {
-                                    Resolution::Blocked | Resolution::Deferred => {
-                                        let status_str =
-                                            format!("[{:?}]", res.status).to_lowercase();
-                                        let reason = res.reason.as_deref().unwrap_or("");
-                                        println!(
-                                            "{} {} - {} {}",
-                                            node.id.cyan(),
-                                            status_str.yellow(),
-                                            node.title,
-                                            reason.dimmed()
-                                        );
-                                    }
-                                    _ => {}
-                                }
-                            }
+                    if is_json(&format) {
+                        let filtered: Vec<_> = if pending {
+                            nodes
+                                .into_iter()
+                                .filter(|n| {
+                                    n.resolution.as_ref().is_some_and(|r| {
+                                        matches!(
+                                            r.status,
+                                            Resolution::Blocked | Resolution::Deferred
+                                        )
+                                    })
+                                })
+                                .collect()
                         } else {
-                            // Show resolution status if present
-                            if let Some(ref res) = node.resolution {
+                            nodes
+                        };
+                        let json_nodes: Vec<_> = filtered
+                            .iter()
+                            .map(|n| {
+                                json!({
+                                    "id": n.id,
+                                    "title": n.title,
+                                    "type": format!("{:?}", n.node_type).to_lowercase(),
+                                    "status": format!("{:?}", n.status).to_lowercase(),
+                                    "version": n.version,
+                                    "priority": n.priority.as_ref().map(|p| format!("{:?}", p)),
+                                    "category": n.category,
+                                    "resolution": n.resolution.as_ref().map(|r| format!("{:?}", r.status).to_lowercase()),
+                                    "tags": n.tags,
+                                })
+                            })
+                            .collect();
+                        println!("{}", serde_json::to_string_pretty(&json_nodes).unwrap());
+                    } else {
+                        for node in nodes {
+                            if pending {
+                                if let Some(ref res) = node.resolution {
+                                    match res.status {
+                                        Resolution::Blocked | Resolution::Deferred => {
+                                            let status_str =
+                                                format!("[{:?}]", res.status).to_lowercase();
+                                            let reason = res.reason.as_deref().unwrap_or("");
+                                            println!(
+                                                "{} {} - {} {}",
+                                                node.id.cyan(),
+                                                status_str.yellow(),
+                                                node.title,
+                                                reason.dimmed()
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            } else if let Some(ref res) = node.resolution {
                                 let status_str = format!("[{:?}]", res.status).to_lowercase();
                                 println!(
                                     "{} {} - {}",
@@ -778,10 +908,7 @@ fn main() {
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
-                }
+                Err(e) => emit_error(&format, "load_error", &e.to_string()),
             }
         }
 
@@ -791,6 +918,7 @@ fn main() {
             blocked,
             deferred,
             wontfix,
+            format,
         } => {
             let root = get_lattice_root();
 
@@ -803,11 +931,11 @@ fn main() {
             } else if let Some(reason) = wontfix {
                 (Resolution::Wontfix, Some(reason))
             } else {
-                eprintln!(
-                    "{}",
-                    "Must specify one of: --verified, --blocked, --deferred, --wontfix".red()
+                emit_error(
+                    &format,
+                    "missing_status",
+                    "Must specify one of: --verified, --blocked, --deferred, --wontfix",
                 );
-                process::exit(1);
             };
 
             let resolved_by = format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"));
@@ -822,16 +950,27 @@ fn main() {
             match resolve_node(&root, options) {
                 Ok(path) => {
                     let status_str = format!("{:?}", resolution).to_lowercase();
-                    println!("{}", format!("Resolved {} as {}", id, status_str).green());
-                    if let Some(r) = reason {
-                        println!("{}", format!("Reason: {}", r).dimmed());
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "success": true,
+                                "id": id,
+                                "resolution": status_str,
+                                "reason": reason,
+                                "file": path.display().to_string(),
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("{}", format!("Resolved {} as {}", id, status_str).green());
+                        if let Some(r) = reason {
+                            println!("{}", format!("Reason: {}", r).dimmed());
+                        }
+                        println!("{}", format!("File: {}", path.display()).dimmed());
                     }
-                    println!("{}", format!("File: {}", path.display()).dimmed());
                 }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
-                }
+                Err(e) => emit_error(&format, "resolve_error", &e.to_string()),
             }
         }
 
@@ -850,85 +989,127 @@ fn main() {
             }
         }
 
-        Commands::Drift { check } => {
+        Commands::Drift { check, format } => {
             let root = get_lattice_root();
 
             match find_drift(&root) {
                 Ok(reports) => {
-                    if reports.is_empty() {
-                        println!("{}", "No drift detected".green());
-                        return;
-                    }
-
-                    println!(
-                        "{}",
-                        format!("DRIFT DETECTED ({} nodes):\n", reports.len()).yellow()
-                    );
-
-                    for report in &reports {
+                    if is_json(&format) {
+                        let json_reports: Vec<_> = reports
+                            .iter()
+                            .map(|r| {
+                                let items: Vec<_> = r
+                                    .drift_items
+                                    .iter()
+                                    .map(|i| {
+                                        json!({
+                                            "target_id": i.target_id,
+                                            "bound_version": i.bound_version,
+                                            "current_version": i.current_version,
+                                            "severity": format!("{:?}", i.severity).to_lowercase(),
+                                        })
+                                    })
+                                    .collect();
+                                json!({
+                                    "node_id": r.node_id,
+                                    "node_type": r.node_type,
+                                    "items": items,
+                                })
+                            })
+                            .collect();
                         println!(
                             "{}",
-                            format!("{} ({})", report.node_id, report.node_type).cyan()
+                            serde_json::to_string_pretty(&json!({
+                                "has_drift": !reports.is_empty(),
+                                "count": reports.len(),
+                                "reports": json_reports,
+                            }))
+                            .unwrap()
                         );
-                        for item in &report.drift_items {
-                            let severity_str = match item.severity {
-                                DriftSeverity::Major => "[major]".red(),
-                                DriftSeverity::Minor => "[minor]".yellow(),
-                                DriftSeverity::Patch => "[patch]".dimmed(),
-                            };
-                            println!(
-                                "  -> {}: {} -> {} {}",
-                                item.target_id,
-                                item.bound_version,
-                                item.current_version,
-                                severity_str
-                            );
+                        if check && !reports.is_empty() {
+                            process::exit(2);
                         }
-                        println!();
-                    }
+                    } else {
+                        if reports.is_empty() {
+                            println!("{}", "No drift detected".green());
+                            return;
+                        }
 
-                    if check {
-                        process::exit(1);
+                        println!(
+                            "{}",
+                            format!("DRIFT DETECTED ({} nodes):\n", reports.len()).yellow()
+                        );
+
+                        for report in &reports {
+                            println!(
+                                "{}",
+                                format!("{} ({})", report.node_id, report.node_type).cyan()
+                            );
+                            for item in &report.drift_items {
+                                let severity_str = match item.severity {
+                                    DriftSeverity::Major => "[major]".red(),
+                                    DriftSeverity::Minor => "[minor]".yellow(),
+                                    DriftSeverity::Patch => "[patch]".dimmed(),
+                                };
+                                println!(
+                                    "  -> {}: {} -> {} {}",
+                                    item.target_id,
+                                    item.bound_version,
+                                    item.current_version,
+                                    severity_str
+                                );
+                            }
+                            println!();
+                        }
+
+                        if check {
+                            process::exit(2);
+                        }
                     }
                 }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
-                }
+                Err(e) => emit_error(&format, "drift_error", &e.to_string()),
             }
         }
 
-        Commands::Get { id } => {
+        Commands::Get { id, format } => {
             let root = get_lattice_root();
 
             match build_node_index(&root) {
                 Ok(index) => {
                     if let Some(node) = index.get(&id) {
-                        println!(
-                            "{}",
-                            format!("{} ({:?})", node.id, node.node_type)
-                                .to_lowercase()
-                                .cyan()
-                        );
-                        println!("{}", node.title.bold());
-                        println!();
-                        println!("{}", node.body);
-                        println!();
-                        println!(
-                            "{}",
-                            format!("Status: {:?} | Version: {}", node.status, node.version)
-                                .to_lowercase()
-                                .dimmed()
-                        );
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&node)
+                                    .unwrap_or_else(|_| "{}".to_string())
+                            );
+                        } else {
+                            println!(
+                                "{}",
+                                format!("{} ({:?})", node.id, node.node_type)
+                                    .to_lowercase()
+                                    .cyan()
+                            );
+                            println!("{}", node.title.bold());
+                            println!();
+                            println!("{}", node.body);
+                            println!();
+                            println!(
+                                "{}",
+                                format!("Status: {:?} | Version: {}", node.status, node.version)
+                                    .to_lowercase()
+                                    .dimmed()
+                            );
+                        }
                     } else {
-                        eprintln!("{}", format!("Node not found: {}", id).red());
-                        process::exit(1);
+                        emit_error(
+                            &format,
+                            "node_not_found",
+                            &format!("Node not found: {}", id),
+                        );
                     }
                 }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
-                }
+                Err(e) => emit_error(&format, "load_error", &e.to_string()),
             }
         }
 
@@ -1201,55 +1382,95 @@ fn main() {
             }
         }
 
-        Commands::Lint { fix, strict } => {
+        Commands::Lint {
+            fix,
+            strict,
+            format,
+        } => {
             let root = get_lattice_root();
             let report = lint_lattice(&root);
 
-            if report.issues.is_empty() {
-                println!("{}", "No issues found".green());
-                return;
-            }
+            if is_json(&format) {
+                let json_issues: Vec<_> = report
+                    .issues
+                    .iter()
+                    .map(|i| {
+                        json!({
+                            "file": i.file.display().to_string(),
+                            "node_id": i.node_id,
+                            "severity": format!("{}", i.severity),
+                            "message": i.message,
+                            "fixable": i.fixable == lattice::lint::Fixable::Yes,
+                        })
+                    })
+                    .collect();
 
-            // Display issues
-            let errors = report.errors();
-            let warnings = report.warnings();
-
-            for issue in &report.issues {
-                let colored_msg = match issue.severity {
-                    LintSeverity::Error => format!("{}", issue).red().to_string(),
-                    LintSeverity::Warning => format!("{}", issue).yellow().to_string(),
-                };
-                println!("{}", colored_msg);
-            }
-            println!();
-
-            println!(
-                "{}",
-                format!(
-                    "{} error(s), {} warning(s), {} fixable",
-                    errors.len(),
-                    warnings.len(),
-                    report.fixable().len()
-                )
-                .bold()
-            );
-
-            // Auto-fix if requested
-            if fix && !report.fixable().is_empty() {
-                println!();
-                let fixed = fix_issues(&root, &report);
-                for msg in &fixed {
-                    println!("{}", format!("Fixed: {}", msg).green());
+                let mut fixed_msgs = Vec::new();
+                if fix && !report.fixable().is_empty() {
+                    fixed_msgs = fix_issues(&root, &report);
                 }
+
                 println!(
                     "{}",
-                    format!("{} issue(s) fixed", fixed.len()).green().bold()
+                    serde_json::to_string_pretty(&json!({
+                        "errors": report.errors().len(),
+                        "warnings": report.warnings().len(),
+                        "fixable": report.fixable().len(),
+                        "issues": json_issues,
+                        "fixed": fixed_msgs,
+                    }))
+                    .unwrap()
                 );
-            }
 
-            // Exit non-zero: strict mode exits on any issue, normal mode only on errors
-            if strict || report.has_errors() {
-                process::exit(1);
+                if report.has_errors() {
+                    process::exit(1);
+                } else if strict && !report.issues.is_empty() {
+                    process::exit(2);
+                }
+            } else {
+                if report.issues.is_empty() {
+                    println!("{}", "No issues found".green());
+                    return;
+                }
+
+                let errors = report.errors();
+                let warnings = report.warnings();
+
+                for issue in &report.issues {
+                    let colored_msg = match issue.severity {
+                        LintSeverity::Error => format!("{}", issue).red().to_string(),
+                        LintSeverity::Warning => format!("{}", issue).yellow().to_string(),
+                    };
+                    println!("{}", colored_msg);
+                }
+                println!();
+
+                println!(
+                    "{}",
+                    format!(
+                        "{} error(s), {} warning(s), {} fixable",
+                        errors.len(),
+                        warnings.len(),
+                        report.fixable().len()
+                    )
+                    .bold()
+                );
+
+                if fix && !report.fixable().is_empty() {
+                    println!();
+                    let fixed = fix_issues(&root, &report);
+                    for msg in &fixed {
+                        println!("{}", format!("Fixed: {}", msg).green());
+                    }
+                    println!(
+                        "{}",
+                        format!("{} issue(s) fixed", fixed.len()).green().bold()
+                    );
+                }
+
+                if strict || report.has_errors() {
+                    process::exit(1);
+                }
             }
         }
 
@@ -1260,6 +1481,7 @@ fn main() {
             tests_pass,
             coverage,
             files,
+            format,
         } => {
             let root = get_lattice_root();
 
@@ -1274,16 +1496,27 @@ fn main() {
 
             match verify_implementation(&root, options) {
                 Ok(path) => {
-                    println!(
-                        "{}",
-                        format!("Verified: {} satisfies {}", implementation, requirement).green()
-                    );
-                    println!("{}", format!("File: {}", path.display()).dimmed());
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "success": true,
+                                "implementation": implementation,
+                                "requirement": requirement,
+                                "file": path.display().to_string(),
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            format!("Verified: {} satisfies {}", implementation, requirement)
+                                .green()
+                        );
+                        println!("{}", format!("File: {}", path.display()).dimmed());
+                    }
                 }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
-                }
+                Err(e) => emit_error(&format, "verify_error", &e.to_string()),
             }
         }
 
@@ -1294,15 +1527,13 @@ fn main() {
             description,
             proposed,
             implementation,
+            format,
         } => {
             let root = get_lattice_root();
 
             let gap: GapType = match gap_type.parse() {
                 Ok(g) => g,
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
-                }
+                Err(e) => emit_error(&format, "invalid_gap_type", &e),
             };
 
             let options = RefineOptions {
@@ -1317,34 +1548,314 @@ fn main() {
 
             match refine_requirement(&root, options) {
                 Ok(result) => {
-                    println!(
-                        "{}",
-                        format!(
-                            "Created sub-requirement: {} (refines {})",
-                            result.sub_requirement_id, parent
-                        )
-                        .green()
-                    );
-                    println!(
-                        "{}",
-                        format!("File: {}", result.sub_requirement_path.display()).dimmed()
-                    );
-                    if result.parent_updated {
+                    if is_json(&format) {
                         println!(
                             "{}",
-                            format!("Updated {} with depends_on edge", parent).dimmed()
+                            serde_json::to_string_pretty(&json!({
+                                "success": true,
+                                "sub_requirement_id": result.sub_requirement_id,
+                                "parent": parent,
+                                "file": result.sub_requirement_path.display().to_string(),
+                                "parent_updated": result.parent_updated,
+                                "implementation_updated": result.implementation_updated,
+                            }))
+                            .unwrap()
                         );
-                    }
-                    if result.implementation_updated {
+                    } else {
                         println!(
                             "{}",
-                            "Updated implementation with reveals_gap_in edge".dimmed()
+                            format!(
+                                "Created sub-requirement: {} (refines {})",
+                                result.sub_requirement_id, parent
+                            )
+                            .green()
                         );
+                        println!(
+                            "{}",
+                            format!("File: {}", result.sub_requirement_path.display()).dimmed()
+                        );
+                        if result.parent_updated {
+                            println!(
+                                "{}",
+                                format!("Updated {} with depends_on edge", parent).dimmed()
+                            );
+                        }
+                        if result.implementation_updated {
+                            println!(
+                                "{}",
+                                "Updated implementation with reveals_gap_in edge".dimmed()
+                            );
+                        }
                     }
                 }
-                Err(e) => {
-                    eprintln!("{}", format!("Error: {}", e).red());
-                    process::exit(1);
+                Err(e) => emit_error(&format, "refine_error", &e.to_string()),
+            }
+        }
+
+        Commands::Search {
+            node_type,
+            query,
+            priority,
+            resolution,
+            tag,
+            tags,
+            category,
+            id_prefix,
+            related_to,
+            format,
+        } => {
+            let type_name = match node_type.as_str() {
+                "sources" => "sources",
+                "theses" => "theses",
+                "requirements" => "requirements",
+                "implementations" => "implementations",
+                _ => {
+                    emit_error(
+                        &format,
+                        "invalid_type",
+                        &format!(
+                            "Unknown type: {}. Use: sources, theses, requirements, implementations",
+                            node_type
+                        ),
+                    );
+                }
+            };
+
+            let root = get_lattice_root();
+
+            let nodes = match load_nodes_by_type(&root, type_name) {
+                Ok(n) => n,
+                Err(e) => emit_error(&format, "load_error", &e.to_string()),
+            };
+
+            // Build graph proximity set if related_to is specified
+            let related_ids: Option<HashSet<String>> = if let Some(ref related_to_id) = related_to {
+                match build_node_index(&root) {
+                    Ok(index) => {
+                        if let Some(source_node) = index.get(related_to_id) {
+                            let mut related = HashSet::new();
+                            let mut source_targets = HashSet::new();
+
+                            if let Some(edges) = &source_node.edges {
+                                for el in [
+                                    &edges.derives_from,
+                                    &edges.depends_on,
+                                    &edges.satisfies,
+                                    &edges.supported_by,
+                                ]
+                                .into_iter()
+                                .flatten()
+                                {
+                                    for edge in el {
+                                        source_targets.insert(edge.target.clone());
+                                    }
+                                }
+                            }
+
+                            // Find nodes sharing edge targets
+                            for node in index.values() {
+                                if node.id == *related_to_id {
+                                    continue;
+                                }
+                                if let Some(edges) = &node.edges {
+                                    let mut node_targets = HashSet::new();
+                                    for el in [
+                                        &edges.derives_from,
+                                        &edges.depends_on,
+                                        &edges.satisfies,
+                                        &edges.supported_by,
+                                    ]
+                                    .into_iter()
+                                    .flatten()
+                                    {
+                                        for edge in el {
+                                            node_targets.insert(edge.target.clone());
+                                        }
+                                    }
+                                    if !source_targets.is_disjoint(&node_targets) {
+                                        related.insert(node.id.clone());
+                                    }
+                                }
+                            }
+
+                            // Include direct references
+                            for target in &source_targets {
+                                related.insert(target.clone());
+                            }
+
+                            // Include nodes referencing the source
+                            for node in index.values() {
+                                if let Some(edges) = &node.edges {
+                                    let targets_source = [
+                                        &edges.derives_from,
+                                        &edges.depends_on,
+                                        &edges.satisfies,
+                                        &edges.supported_by,
+                                    ]
+                                    .iter()
+                                    .any(|edge_list| {
+                                        edge_list.as_ref().is_some_and(|v| {
+                                            v.iter().any(|e| e.target == *related_to_id)
+                                        })
+                                    });
+                                    if targets_source {
+                                        related.insert(node.id.clone());
+                                    }
+                                }
+                            }
+
+                            Some(related)
+                        } else {
+                            emit_error(
+                                &format,
+                                "node_not_found",
+                                &format!("Node not found: {}", related_to_id),
+                            );
+                        }
+                    }
+                    Err(e) => emit_error(&format, "index_error", &e.to_string()),
+                }
+            } else {
+                None
+            };
+
+            let tags_vec: Option<Vec<String>> =
+                tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect());
+
+            let results: Vec<_> = nodes
+                .iter()
+                .filter(|n| {
+                    if let Some(ref prefix) = id_prefix
+                        && !n.id.to_uppercase().starts_with(&prefix.to_uppercase())
+                    {
+                        return false;
+                    }
+                    if let Some(ref related) = related_ids
+                        && !related.contains(&n.id)
+                    {
+                        return false;
+                    }
+                    if let Some(ref q) = query {
+                        let q_lower = q.to_lowercase();
+                        if !n.title.to_lowercase().contains(&q_lower)
+                            && !n.body.to_lowercase().contains(&q_lower)
+                        {
+                            return false;
+                        }
+                    }
+                    if let Some(ref p) = priority {
+                        let node_priority = n.priority.as_ref().map(|p| format!("{:?}", p));
+                        if node_priority.as_deref() != Some(p.to_uppercase().as_str()) {
+                            return false;
+                        }
+                    }
+                    if let Some(ref res) = resolution {
+                        let res_lower = res.to_lowercase();
+                        let matches = match res_lower.as_str() {
+                            "verified" => matches!(
+                                n.resolution.as_ref().map(|r| &r.status),
+                                Some(Resolution::Verified)
+                            ),
+                            "blocked" => matches!(
+                                n.resolution.as_ref().map(|r| &r.status),
+                                Some(Resolution::Blocked)
+                            ),
+                            "deferred" => matches!(
+                                n.resolution.as_ref().map(|r| &r.status),
+                                Some(Resolution::Deferred)
+                            ),
+                            "wontfix" => matches!(
+                                n.resolution.as_ref().map(|r| &r.status),
+                                Some(Resolution::Wontfix)
+                            ),
+                            "unresolved" | "open" => n.resolution.is_none(),
+                            _ => true,
+                        };
+                        if !matches {
+                            return false;
+                        }
+                    }
+                    if let Some(ref t) = tag {
+                        let tag_lower = t.to_lowercase();
+                        let has_tag = n
+                            .tags
+                            .as_ref()
+                            .map(|tags| tags.iter().any(|t| t.to_lowercase() == tag_lower))
+                            .unwrap_or(false);
+                        if !has_tag {
+                            return false;
+                        }
+                    }
+                    if let Some(ref search_tags) = tags_vec {
+                        let node_tags: HashSet<String> = n
+                            .tags
+                            .as_ref()
+                            .map(|tags| tags.iter().map(|t| t.to_lowercase()).collect())
+                            .unwrap_or_default();
+                        for st in search_tags {
+                            if !node_tags.contains(&st.to_lowercase()) {
+                                return false;
+                            }
+                        }
+                    }
+                    if let Some(ref cat) = category {
+                        let matches_cat = n
+                            .category
+                            .as_ref()
+                            .map(|c| c.to_lowercase() == cat.to_lowercase())
+                            .unwrap_or(false);
+                        if !matches_cat {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .collect();
+
+            if is_json(&format) {
+                let json_results: Vec<_> = results
+                    .iter()
+                    .map(|n| {
+                        json!({
+                            "id": n.id,
+                            "title": n.title,
+                            "body": n.body,
+                            "version": n.version,
+                            "priority": n.priority.as_ref().map(|p| format!("{:?}", p)),
+                            "resolution": n.resolution.as_ref().map(|r| format!("{:?}", r.status).to_lowercase()),
+                            "category": n.category,
+                            "tags": n.tags
+                        })
+                    })
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "count": json_results.len(),
+                        "results": json_results
+                    }))
+                    .unwrap()
+                );
+            } else {
+                println!("{}", format!("Found {} results:", results.len()).bold());
+                for n in &results {
+                    let priority_str = n
+                        .priority
+                        .as_ref()
+                        .map(|p| format!("[{:?}]", p))
+                        .unwrap_or_default();
+                    let resolution_str = n
+                        .resolution
+                        .as_ref()
+                        .map(|r| format!(" ({})", format!("{:?}", r.status).to_lowercase()))
+                        .unwrap_or_default();
+                    println!(
+                        "  {} {} {}{}",
+                        n.id.cyan(),
+                        priority_str.yellow(),
+                        n.title,
+                        resolution_str.dimmed()
+                    );
                 }
             }
         }
