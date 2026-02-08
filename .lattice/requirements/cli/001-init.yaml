@@ -53,4 +53,5 @@ edges:
     rationale: Initialize file-based storage structure
   depends_on:
   - target: REQ-CORE-004
+    version: 1.0.0
     rationale: Creates the file structure defined in CORE-004

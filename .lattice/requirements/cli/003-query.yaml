@@ -68,4 +68,5 @@ edges:
     rationale: Structured queries are core to agent-native tools
   depends_on:
   - target: REQ-CORE-002
+    version: 1.0.0
     rationale: Graph traversal uses typed edges

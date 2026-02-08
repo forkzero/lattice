@@ -1,7 +1,6 @@
 id: THX-PROSE-PRIMARY
 type: thesis
-
-title: "Prose is Primary; Structure is Augmentation"
+title: Prose is Primary; Structure is Augmentation
 body: |
   Formal specification languages (Z, TLA+, Alloy) have never achieved
   mainstream adoption despite decades of research. The reason: formalizing
@@ -26,19 +25,13 @@ body: |
 
   Lattice should feel like writing documentation, with structure added
   incrementally, not like filling out forms.
-
-meta:
-  category: value_prop
-  confidence: 0.85
-  valid_until: null
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
+meta: {}
 edges:
   supported_by:
-    - target: SRC-TOOLS-FOR-HUMANS
-      strength: 0.7
-      rationale: "Human-friendly authoring is still valuable"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: SRC-TOOLS-FOR-HUMANS
+    version: 1.0.0
+    rationale: Human-friendly authoring is still valuable

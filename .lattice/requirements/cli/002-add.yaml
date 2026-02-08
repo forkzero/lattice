@@ -60,6 +60,8 @@ edges:
     rationale: CLI enables programmatic node creation
   depends_on:
   - target: REQ-CORE-001
+    version: 1.0.0
     rationale: Add creates nodes of defined types
   - target: REQ-CORE-004
+    version: 1.0.0
     rationale: Add writes to file-based storage

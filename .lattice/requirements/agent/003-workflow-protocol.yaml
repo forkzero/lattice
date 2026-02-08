@@ -1,7 +1,6 @@
 id: REQ-AGENT-003
 type: requirement
-
-title: "Documented Agent Workflow Protocol"
+title: Documented Agent Workflow Protocol
 body: |
   The lattice provides a documented protocol for agent interaction:
 
@@ -23,39 +22,39 @@ body: |
   9. Re-verify or update implementation
 
   This protocol is documented and agents are expected to follow it.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P1
 category: AGENT
-tags: [agent, protocol, workflow]
-
+tags:
+- agent
+- protocol
+- workflow
 acceptance:
-  - id: AT-001
-    given: "an agent following the protocol"
-    when: "implementing a requirement"
-    then: "full traceability exists from implementation → requirement → thesis → source"
-    verification: manual
-
-  - id: AT-002
-    given: "the agent workflow documentation"
-    when: "reviewed"
-    then: "it covers all edge types and query patterns"
-    verification: manual
-
+- id: AT-001
+  given: an agent following the protocol
+  when: implementing a requirement
+  then: full traceability exists from implementation → requirement → thesis → source
+  verification: manual
+- id: AT-002
+  given: the agent workflow documentation
+  when: reviewed
+  then: it covers all edge types and query patterns
+  verification: manual
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "Protocol enables consistent agent interaction"
-    - target: THX-BIDIRECTIONAL-FLOW
-      version: "1.0.0"
-      rationale: "Protocol includes feedback mechanisms"
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Protocol enables consistent agent interaction
+  - target: THX-BIDIRECTIONAL-FLOW
+    version: 1.0.0
+    rationale: Protocol includes feedback mechanisms
   depends_on:
-    - target: REQ-API-001
-      rationale: "Protocol uses API endpoints"
-    - target: REQ-AGENT-001
-      rationale: "Protocol uses feedback edges"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-API-001
+    version: 1.0.0
+    rationale: Protocol uses API endpoints
+  - target: REQ-AGENT-001
+    version: 1.0.0
+    rationale: Protocol uses feedback edges

@@ -1,7 +1,6 @@
 id: THX-FILES-SOURCE-OF-TRUTH
 type: thesis
-
-title: "Files in Git Should Be Source of Truth, Not a Database"
+title: Files in Git Should Be Source of Truth, Not a Database
 body: |
   Requirements management tools typically use databases as the source of
   truth, with files as exports. This creates problems:
@@ -27,19 +26,13 @@ body: |
 
   Trade-off: Some queries are slower than a database. But for requirement
   volumes (hundreds to low thousands), file-based is fast enough.
-
-meta:
-  category: technical
-  confidence: 0.8
-  valid_until: null
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
+meta: {}
 edges:
   supported_by:
-    - target: SRC-TOOLS-FOR-HUMANS
-      strength: 0.6
-      rationale: "Current tools' database-centricity is part of the problem"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: SRC-TOOLS-FOR-HUMANS
+    version: 1.0.0
+    rationale: Current tools' database-centricity is part of the problem

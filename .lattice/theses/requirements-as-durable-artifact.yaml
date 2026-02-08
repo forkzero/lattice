@@ -1,7 +1,6 @@
 id: THX-REQUIREMENTS-DURABLE
 type: thesis
-
-title: "Requirements Become the Most Durable Artifact in Agent-Built Systems"
+title: Requirements Become the Most Durable Artifact in Agent-Built Systems
 body: |
   As AI agents become capable of generating and regenerating code from
   specifications, the relative durability of artifacts inverts:
@@ -23,22 +22,16 @@ body: |
   - Investment should shift from code quality to requirements quality
 
   Implication: We need better tools for requirements, not just better tools for code.
-
-meta:
-  category: value_prop
-  confidence: 0.85
-  valid_until: null  # Fundamental thesis, no expiry
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
+meta: {}
 edges:
   supported_by:
-    - target: SRC-AGENT-CODE-GEN
-      strength: 0.9
-      rationale: "Agents can generate code from specs, making code less precious"
-    - target: SRC-REQUIREMENTS-DRIFT
-      strength: 0.7
-      rationale: "If requirements drift is the problem, fixing it becomes more valuable"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: SRC-AGENT-CODE-GEN
+    version: 1.0.0
+    rationale: Agents can generate code from specs, making code less precious
+  - target: SRC-REQUIREMENTS-DRIFT
+    version: 1.0.0
+    rationale: If requirements drift is the problem, fixing it becomes more valuable

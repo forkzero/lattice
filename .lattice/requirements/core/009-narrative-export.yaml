@@ -62,4 +62,5 @@ edges:
     rationale: Structured lattice enables automated document generation
   extends:
   - target: REQ-CORE-008
+    version: 1.0.0
     rationale: Narrative export is a specialized form of markdown export

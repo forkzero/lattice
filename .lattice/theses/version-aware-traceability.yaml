@@ -1,7 +1,6 @@
 id: THX-VERSION-AWARE
 type: thesis
-
-title: "Traceability Must Be Version-Aware to Enable Drift Detection"
+title: Traceability Must Be Version-Aware to Enable Drift Detection
 body: |
   Traditional traceability links are static: "Implementation X traces to
   Requirement Y." But both X and Y change over time. Without version
@@ -18,22 +17,16 @@ body: |
 
   This is the key to preventing requirements drift: not by preventing
   change, but by detecting when changes create inconsistencies.
-
-meta:
-  category: technical
-  confidence: 0.9
-  valid_until: null
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
+meta: {}
 edges:
   supported_by:
-    - target: SRC-REQUIREMENTS-TRACEABILITY
-      strength: 0.85
-      rationale: "Traceability research shows value; version-awareness extends it"
-    - target: SRC-REQUIREMENTS-DRIFT
-      strength: 0.9
-      rationale: "Drift is the problem; version-aware edges are the solution"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: SRC-REQUIREMENTS-TRACEABILITY
+    version: 1.0.0
+    rationale: Traceability research shows value; version-awareness extends it
+  - target: SRC-REQUIREMENTS-DRIFT
+    version: 1.0.0
+    rationale: Drift is the problem; version-aware edges are the solution

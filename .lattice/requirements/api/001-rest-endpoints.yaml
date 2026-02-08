@@ -1,7 +1,6 @@
 id: REQ-API-001
 type: requirement
-
-title: "REST API for Lattice Operations"
+title: REST API for Lattice Operations
 body: |
   The lattice exposes a REST API for programmatic access:
 
@@ -28,43 +27,41 @@ body: |
 
   The API reads/writes to the .lattice files; it does not maintain
   separate state.
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P1
 category: API
-tags: [api, rest, http]
-
+tags:
+- api
+- rest
+- http
 acceptance:
-  - id: AT-001
-    given: "API server running"
-    when: "`GET /lattice/nodes?type=requirement` is called"
-    then: "all requirement nodes are returned as JSON"
-    verification: automated
-
-  - id: AT-002
-    given: "`POST /lattice/nodes` with valid node"
-    when: "request completes"
-    then: "corresponding YAML file is created in .lattice/"
-    verification: automated
-
-  - id: AT-003
-    given: "a YAML file is modified externally"
-    when: "`GET /lattice/nodes/:id` is called"
-    then: "response reflects the file change (no stale cache)"
-    verification: automated
-
+- id: AT-001
+  given: API server running
+  when: '`GET /lattice/nodes?type=requirement` is called'
+  then: all requirement nodes are returned as JSON
+  verification: automated
+- id: AT-002
+  given: '`POST /lattice/nodes` with valid node'
+  when: request completes
+  then: corresponding YAML file is created in .lattice/
+  verification: automated
+- id: AT-003
+  given: a YAML file is modified externally
+  when: '`GET /lattice/nodes/:id` is called'
+  then: response reflects the file change (no stale cache)
+  verification: automated
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "API enables agent programmatic access"
-    - target: THX-FILES-SOURCE-OF-TRUTH
-      version: "1.0.0"
-      rationale: "API is a view over files, not separate database"
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: API enables agent programmatic access
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+    rationale: API is a view over files, not separate database
   depends_on:
-    - target: REQ-CORE-004
-      rationale: "API reads/writes file storage"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-CORE-004
+    version: 1.0.0
+    rationale: API reads/writes file storage

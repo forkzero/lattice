@@ -62,4 +62,5 @@ edges:
     rationale: CLI exposes drift detection
   depends_on:
   - target: REQ-CORE-005
+    version: 1.0.0
     rationale: Implements drift detection via CLI

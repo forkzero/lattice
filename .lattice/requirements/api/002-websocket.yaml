@@ -1,7 +1,6 @@
 id: REQ-API-002
 type: requirement
-
-title: "WebSocket for Real-Time Updates"
+title: WebSocket for Real-Time Updates
 body: |
   The API provides a WebSocket endpoint for real-time lattice updates:
 
@@ -21,34 +20,33 @@ body: |
   - Agents to watch for changes
   - UIs to update in real-time
   - CI to trigger on lattice changes
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
 priority: P2
 category: API
-tags: [api, websocket, realtime]
-
+tags:
+- api
+- websocket
+- realtime
 acceptance:
-  - id: AT-001
-    given: "WebSocket connection to /lattice/stream"
-    when: "a node is created via CLI or API"
-    then: "`node:created` event is received with node data"
-    verification: automated
-
-  - id: AT-002
-    given: "WebSocket connection"
-    when: "drift is detected"
-    then: "`drift:detected` event is received with drift details"
-    verification: automated
-
+- id: AT-001
+  given: WebSocket connection to /lattice/stream
+  when: a node is created via CLI or API
+  then: '`node:created` event is received with node data'
+  verification: automated
+- id: AT-002
+  given: WebSocket connection
+  when: drift is detected
+  then: '`drift:detected` event is received with drift details'
+  verification: automated
 edges:
   derives_from:
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: "1.0.0"
-      rationale: "Real-time updates enable reactive agent workflows"
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Real-time updates enable reactive agent workflows
   depends_on:
-    - target: REQ-API-001
-      rationale: "WebSocket supplements REST API"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: REQ-API-001
+    version: 1.0.0
+    rationale: WebSocket supplements REST API

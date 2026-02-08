@@ -1,7 +1,6 @@
 id: THX-BIDIRECTIONAL-FLOW
 type: thesis
-
-title: "Knowledge Flows Bidirectionally Between Layers"
+title: Knowledge Flows Bidirectionally Between Layers
 body: |
   The traditional view of requirements is top-down:
     Strategy → Requirements → Implementation
@@ -25,22 +24,16 @@ body: |
 
   Ignoring upward flow means losing knowledge gained during implementation.
   The system should make it easy to record feedback, not just consume specs.
-
-meta:
-  category: technical
-  confidence: 0.85
-  valid_until: null
-
+status: active
+version: 1.0.0
+created_at: 2026-02-03T00:00:00Z
+created_by: human:george
+meta: {}
 edges:
   supported_by:
-    - target: SRC-KNOWLEDGE-GRAPHS
-      strength: 0.8
-      rationale: "Graph models naturally support bidirectional edges"
-    - target: SRC-STRATEGIC-JUSTIFICATION
-      strength: 0.7
-      rationale: "Capturing feedback preserves knowledge"
-
-status: active
-version: "1.0.0"
-created_at: "2026-02-03T00:00:00Z"
-created_by: "human:george"
+  - target: SRC-KNOWLEDGE-GRAPHS
+    version: 1.0.0
+    rationale: Graph models naturally support bidirectional edges
+  - target: SRC-STRATEGIC-JUSTIFICATION
+    version: 1.0.0
+    rationale: Capturing feedback preserves knowledge

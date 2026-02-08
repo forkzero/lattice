@@ -59,4 +59,5 @@ edges:
     rationale: Version-bound edges enable drift detection
   depends_on:
   - target: REQ-CORE-002
+    version: 1.0.0
     rationale: Version binding applies to typed edges

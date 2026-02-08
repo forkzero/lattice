@@ -19,5 +19,5 @@ resolution:
   resolved_by: agent:claude-2026-02-08
 edges:
   derives_from:
-  - target: THX-PROSE-FIRST
+  - target: THX-PROSE-PRIMARY
     version: 1.0.0
