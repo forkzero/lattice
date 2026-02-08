@@ -163,7 +163,9 @@ jobs:
           key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install cargo-tarpaulin
-        run: cargo install cargo-tarpaulin
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-tarpaulin
 
       - name: Run coverage with threshold
         run: cargo tarpaulin --fail-under 4 --out Html --output-dir coverage
