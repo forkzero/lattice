@@ -213,17 +213,25 @@ struct TemplateNode {
     priority: Option<String>,
     resolution: Option<String>,
     url: Option<String>,
+    citations: Vec<String>,
 }
 
 impl From<&LatticeNode> for TemplateNode {
     fn from(node: &LatticeNode) -> Self {
-        let url = node.meta.as_ref().and_then(|m| {
-            if let NodeMeta::Source(sm) = m {
-                sm.url.clone()
-            } else {
-                None
-            }
-        });
+        let (url, citations) = node
+            .meta
+            .as_ref()
+            .map(|m| {
+                if let NodeMeta::Source(sm) = m {
+                    (
+                        sm.url.clone(),
+                        sm.citations.clone().unwrap_or_default(),
+                    )
+                } else {
+                    (None, Vec::new())
+                }
+            })
+            .unwrap_or((None, Vec::new()));
 
         TemplateNode {
             id: node.id.clone(),
@@ -235,6 +243,7 @@ impl From<&LatticeNode> for TemplateNode {
                 .as_ref()
                 .map(|r| format!("{:?}", r.status).to_lowercase()),
             url,
+            citations,
         }
     }
 }

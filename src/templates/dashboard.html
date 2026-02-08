@@ -158,7 +158,17 @@
             <div class="details-content">
                 <div class="node-body">{{ source.body }}</div>
                 {% if source.url %}
-                <p style="margin-top: 0.5rem;"><a href="{{ source.url }}" target="_blank">{{ source.url }}</a></p>
+                <p style="margin-top: 1rem;"><strong>URL:</strong> <a href="{{ source.url }}" target="_blank">{{ source.url }}</a></p>
+                {% endif %}
+                {% if source.citations | length > 0 %}
+                <div style="margin-top: 1rem;">
+                    <strong>Citations:</strong>
+                    <ul style="margin-top: 0.5rem; padding-left: 1.5rem;">
+                    {% for citation in source.citations %}
+                        <li style="margin-bottom: 0.25rem;">{{ citation }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
                 {% endif %}
             </div>
         </details>
