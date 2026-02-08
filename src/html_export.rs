@@ -223,10 +223,7 @@ impl From<&LatticeNode> for TemplateNode {
             .as_ref()
             .map(|m| {
                 if let NodeMeta::Source(sm) = m {
-                    (
-                        sm.url.clone(),
-                        sm.citations.clone().unwrap_or_default(),
-                    )
+                    (sm.url.clone(), sm.citations.clone().unwrap_or_default())
                 } else {
                     (None, Vec::new())
                 }
