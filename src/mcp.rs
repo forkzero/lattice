@@ -306,9 +306,131 @@ impl LatticeServer {
 
         let nodes = load_nodes_by_type(&self.root, type_name).map_err(|e| e.to_string())?;
 
+        // For graph proximity, build a set of related node IDs
+        let related_ids: Option<HashSet<String>> = if let Some(ref related_to) = params.related_to {
+            let index = build_node_index(&self.root).map_err(|e| e.to_string())?;
+            if let Some(source_node) = index.get(related_to) {
+                let mut related = HashSet::new();
+
+                // Collect edge targets from the source node
+                let mut source_targets: HashSet<String> = HashSet::new();
+                if let Some(edges) = &source_node.edges {
+                    if let Some(derives_from) = &edges.derives_from {
+                        for edge in derives_from {
+                            source_targets.insert(edge.target.clone());
+                        }
+                    }
+                    if let Some(depends_on) = &edges.depends_on {
+                        for edge in depends_on {
+                            source_targets.insert(edge.target.clone());
+                        }
+                    }
+                    if let Some(satisfies) = &edges.satisfies {
+                        for edge in satisfies {
+                            source_targets.insert(edge.target.clone());
+                        }
+                    }
+                    if let Some(supported_by) = &edges.supported_by {
+                        for edge in supported_by {
+                            source_targets.insert(edge.target.clone());
+                        }
+                    }
+                }
+
+                // Find nodes sharing any of these edge targets
+                for node in index.values() {
+                    if node.id == *related_to {
+                        continue; // Skip the source node itself
+                    }
+                    if let Some(edges) = &node.edges {
+                        let mut node_targets: HashSet<String> = HashSet::new();
+                        if let Some(derives_from) = &edges.derives_from {
+                            for edge in derives_from {
+                                node_targets.insert(edge.target.clone());
+                            }
+                        }
+                        if let Some(depends_on) = &edges.depends_on {
+                            for edge in depends_on {
+                                node_targets.insert(edge.target.clone());
+                            }
+                        }
+                        if let Some(satisfies) = &edges.satisfies {
+                            for edge in satisfies {
+                                node_targets.insert(edge.target.clone());
+                            }
+                        }
+                        if let Some(supported_by) = &edges.supported_by {
+                            for edge in supported_by {
+                                node_targets.insert(edge.target.clone());
+                            }
+                        }
+
+                        // Check for intersection
+                        if !source_targets.is_disjoint(&node_targets) {
+                            related.insert(node.id.clone());
+                        }
+                    }
+                }
+
+                // Also include nodes that the source directly references or is referenced by
+                for target in &source_targets {
+                    related.insert(target.clone());
+                }
+
+                // Find nodes that reference the source node
+                for node in index.values() {
+                    if let Some(edges) = &node.edges {
+                        let targets_source = edges
+                            .derives_from
+                            .as_ref()
+                            .map(|v| v.iter().any(|e| e.target == *related_to))
+                            .unwrap_or(false)
+                            || edges
+                                .depends_on
+                                .as_ref()
+                                .map(|v| v.iter().any(|e| e.target == *related_to))
+                                .unwrap_or(false)
+                            || edges
+                                .satisfies
+                                .as_ref()
+                                .map(|v| v.iter().any(|e| e.target == *related_to))
+                                .unwrap_or(false)
+                            || edges
+                                .supported_by
+                                .as_ref()
+                                .map(|v: &Vec<_>| v.iter().any(|e| e.target == *related_to))
+                                .unwrap_or(false);
+                        if targets_source {
+                            related.insert(node.id.clone());
+                        }
+                    }
+                }
+
+                Some(related)
+            } else {
+                return Err(format!("Node not found: {}", related_to));
+            }
+        } else {
+            None
+        };
+
         let results: Vec<Value> = nodes
             .iter()
             .filter(|n| {
+                // ID prefix filter
+                if let Some(ref prefix) = params.id_prefix {
+                    if !n.id.to_uppercase().starts_with(&prefix.to_uppercase()) {
+                        return false;
+                    }
+                }
+
+                // Graph proximity filter
+                if let Some(ref related) = related_ids {
+                    if !related.contains(&n.id) {
+                        return false;
+                    }
+                }
+
                 // Text search in title and body
                 if let Some(ref query) = params.query {
                     let query_lower = query.to_lowercase();
@@ -355,7 +477,7 @@ impl LatticeServer {
                     }
                 }
 
-                // Tag filter
+                // Single tag filter (backwards compatible)
                 if let Some(ref tag) = params.tag {
                     let tag_lower = tag.to_lowercase();
                     let has_tag = n
@@ -365,6 +487,20 @@ impl LatticeServer {
                         .unwrap_or(false);
                     if !has_tag {
                         return false;
+                    }
+                }
+
+                // Tags intersection filter (all specified tags must be present)
+                if let Some(ref search_tags) = params.tags {
+                    let node_tags: HashSet<String> = n
+                        .tags
+                        .as_ref()
+                        .map(|tags| tags.iter().map(|t| t.to_lowercase()).collect())
+                        .unwrap_or_default();
+                    for search_tag in search_tags {
+                        if !node_tags.contains(&search_tag.to_lowercase()) {
+                            return false;
+                        }
                     }
                 }
 
@@ -472,7 +608,13 @@ struct SearchParams {
     #[serde(default)]
     tag: Option<String>,
     #[serde(default)]
+    tags: Option<Vec<String>>,
+    #[serde(default)]
     category: Option<String>,
+    #[serde(default)]
+    id_prefix: Option<String>,
+    #[serde(default)]
+    related_to: Option<String>,
 }
 
 fn make_schema(properties: Value, required: Vec<&str>) -> Arc<Map<String, Value>> {
@@ -648,8 +790,9 @@ fn get_tools() -> Vec<Tool> {
         ),
         Tool::new(
             "lattice_search",
-            "Search for nodes with flexible filtering. Find open requirements, P0 items, \
-             nodes matching text, or any combination. All filters are optional and combined with AND.",
+            "Search for nodes with flexible filtering. Supports text search, priority/status filtering, \
+             tag intersection, ID prefix matching, and graph proximity (find related nodes). \
+             All filters are optional and combined with AND.",
             make_schema(
                 json!({
                     "node_type": {
@@ -673,11 +816,24 @@ fn get_tools() -> Vec<Tool> {
                     },
                     "tag": {
                         "type": "string",
-                        "description": "Filter by tag (exact match, case-insensitive)"
+                        "description": "Filter by single tag (exact match, case-insensitive)"
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Filter by multiple tags (intersection - all must match)"
                     },
                     "category": {
                         "type": "string",
                         "description": "Filter by category (e.g., API, CLI, CORE)"
+                    },
+                    "id_prefix": {
+                        "type": "string",
+                        "description": "Filter by ID prefix (e.g., 'REQ-API' matches REQ-API-001, REQ-API-002)"
+                    },
+                    "related_to": {
+                        "type": "string",
+                        "description": "Find nodes related to this ID via graph proximity (shared edges, dependencies)"
                     }
                 }),
                 vec![],
@@ -1003,7 +1159,10 @@ mod tests {
             priority: None,
             resolution: Some("unresolved".to_string()),
             tag: None,
+            tags: None,
             category: None,
+            id_prefix: None,
+            related_to: None,
         };
         let result = server.search(params);
         assert!(result.is_ok());
@@ -1023,7 +1182,7 @@ mod tests {
             body: "This requirement is for testing search".to_string(),
             priority: "P0".to_string(),
             category: "TEST".to_string(),
-            tags: Some(vec!["mvp".to_string()]),
+            tags: Some(vec!["mvp".to_string(), "core".to_string()]),
             derives_from: None,
             depends_on: None,
         };
@@ -1036,7 +1195,10 @@ mod tests {
             priority: None,
             resolution: None,
             tag: None,
+            tags: None,
             category: None,
+            id_prefix: None,
+            related_to: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1048,7 +1210,10 @@ mod tests {
             priority: Some("P0".to_string()),
             resolution: None,
             tag: None,
+            tags: None,
             category: None,
+            id_prefix: None,
+            related_to: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1060,7 +1225,10 @@ mod tests {
             priority: None,
             resolution: None,
             tag: Some("mvp".to_string()),
+            tags: None,
             category: None,
+            id_prefix: None,
+            related_to: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1072,9 +1240,134 @@ mod tests {
             priority: None,
             resolution: None,
             tag: None,
+            tags: None,
             category: None,
+            id_prefix: None,
+            related_to: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_search_by_id_prefix() {
+        let (_temp_dir, server) = setup_test_lattice();
+
+        // Add requirements with different prefixes
+        server
+            .add_req(AddRequirementParams {
+                id: "REQ-API-001".to_string(),
+                title: "API Requirement".to_string(),
+                body: "API body".to_string(),
+                priority: "P1".to_string(),
+                category: "API".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+            })
+            .unwrap();
+        server
+            .add_req(AddRequirementParams {
+                id: "REQ-CLI-001".to_string(),
+                title: "CLI Requirement".to_string(),
+                body: "CLI body".to_string(),
+                priority: "P1".to_string(),
+                category: "CLI".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+            })
+            .unwrap();
+
+        // Search by ID prefix
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: None,
+            resolution: None,
+            tag: None,
+            tags: None,
+            category: None,
+            id_prefix: Some("REQ-API".to_string()),
+            related_to: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 1);
+
+        // Search with broader prefix
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: None,
+            resolution: None,
+            tag: None,
+            tags: None,
+            category: None,
+            id_prefix: Some("REQ".to_string()),
+            related_to: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 2);
+    }
+
+    #[test]
+    fn test_search_by_tags_intersection() {
+        let (_temp_dir, server) = setup_test_lattice();
+
+        // Add requirements with different tags
+        server
+            .add_req(AddRequirementParams {
+                id: "REQ-TAGS-001".to_string(),
+                title: "Has both tags".to_string(),
+                body: "Body".to_string(),
+                priority: "P1".to_string(),
+                category: "TEST".to_string(),
+                tags: Some(vec!["mvp".to_string(), "core".to_string()]),
+                derives_from: None,
+                depends_on: None,
+            })
+            .unwrap();
+        server
+            .add_req(AddRequirementParams {
+                id: "REQ-TAGS-002".to_string(),
+                title: "Has only mvp".to_string(),
+                body: "Body".to_string(),
+                priority: "P1".to_string(),
+                category: "TEST".to_string(),
+                tags: Some(vec!["mvp".to_string()]),
+                derives_from: None,
+                depends_on: None,
+            })
+            .unwrap();
+
+        // Search requiring both tags (intersection)
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: None,
+            resolution: None,
+            tag: None,
+            tags: Some(vec!["mvp".to_string(), "core".to_string()]),
+            category: None,
+            id_prefix: None,
+            related_to: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 1);
+
+        // Search with single tag in array
+        let search_params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: None,
+            priority: None,
+            resolution: None,
+            tag: None,
+            tags: Some(vec!["mvp".to_string()]),
+            category: None,
+            id_prefix: None,
+            related_to: None,
+        };
+        let result = server.search(search_params).unwrap();
+        assert_eq!(result.get("count").unwrap(), 2);
     }
 }

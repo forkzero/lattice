@@ -1,6 +1,92 @@
 # Lattice
 
-A knowledge coordination protocol for the human-agent era.
+**A knowledge coordination protocol for the human-agent era.**
+
+Your AI agents write code. But do they know *why*? Lattice connects research, strategy, requirements, and implementation into a traversable knowledge graph—so agents (and humans) can trace any decision back to its source.
+
+```
+Sources (research, papers, data)
+    ↓ supports
+Theses (strategic claims)
+    ↓ derives
+Requirements (testable specifications)
+    ↓ satisfied by
+Implementations (code)
+```
+
+## The Problem
+
+Traditional tools fragment knowledge:
+- **Research** lives in docs, wikis, or someone's head
+- **Strategy** is implicit or buried in meetings
+- **Requirements** are in Jira/Notion without traceability
+- **Code** exists without knowing why it was built
+
+AI agents make this worse. They implement requirements without understanding the reasoning. When requirements change, nobody knows what code is affected.
+
+## How Lattice Helps
+
+| Capability | What it means |
+|------------|---------------|
+| **Traceability** | Every requirement links to strategic theses. Every thesis links to research. |
+| **Drift detection** | When requirements change, implementations bound to old versions are flagged. |
+| **Bidirectional feedback** | Implementations can `challenge` or `validate` theses. Gaps flow upstream. |
+| **Agent-native** | MCP server, structured queries, JSON output. Agents can reason about the graph. |
+| **Git-native** | YAML files in `.lattice/`. No database. Branch, merge, version control. |
+
+## Quick Look
+
+```bash
+# What should I work on?
+$ lattice plan REQ-AUTH-001 REQ-AUTH-002
+Ready to implement:
+  REQ-AUTH-001  JWT Authentication  (P0, all deps verified)
+
+Blocked:
+  REQ-AUTH-002  OAuth Integration   (depends on REQ-AUTH-001)
+
+# Why does this requirement exist?
+$ lattice get REQ-AUTH-001
+REQ-AUTH-001: JWT Authentication
+Derives from: THX-SECURITY-FIRST (v1.0.0)
+Body: Implement JWT-based authentication with refresh tokens...
+
+# Has anything drifted?
+$ lattice drift
+DRIFT DETECTED:
+  REQ-AUTH-001 changed: 1.0.0 → 1.1.0
+    ↳ IMP-AUTH-JWT bound to 1.0.0 — NEEDS RE-VERIFICATION
+```
+
+## Comparison
+
+| | Jira/Linear | Notion/Confluence | Beads | Spec Kit | **Lattice** |
+|---|:-----------:|:-----------------:|:-----:|:--------:|:-----------:|
+| Tracks requirements | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Links to research/strategy | | | | ~ | ✓ |
+| Version-bound edges | | | | | ✓ |
+| Drift detection | | | | | ✓ |
+| Bidirectional feedback | | | | | ✓ |
+| Git-native | | | ✓ | ✓ | ✓ |
+| MCP server | | | | | ✓ |
+
+## Core Concepts
+
+**Nodes** — Four artifact types:
+- **Source**: Research (papers, data, citations)
+- **Thesis**: Strategic claims derived from research
+- **Requirement**: Testable specifications derived from theses
+- **Implementation**: Code that satisfies requirements
+
+**Edges** — Typed, version-bound relationships:
+- `supports`, `derives`, `satisfies`, `depends_on`
+- `reveals_gap_in`, `challenges`, `validates` (feedback flows upstream)
+
+**Resolution** — Requirements track status:
+- `verified` (implemented + tested)
+- `blocked` (waiting on dependency)
+- `deferred` (postponed)
+- `wontfix` (rejected)
 
 ## Installation
 
@@ -8,23 +94,10 @@ A knowledge coordination protocol for the human-agent era.
 curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
 ```
 
-The installer automatically detects your OS and architecture (macOS/Linux, x86_64/ARM64).
+Or download from [GitHub Releases](https://github.com/forkzero/lattice/releases).
 
-### Verify Installation
-
-```bash
-lattice --version
-```
-
-### Install Specific Version
-
-```bash
-VERSION=0.0.1 curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
-```
-
-### Manual Installation
-
-Download binaries directly from [GitHub Releases](https://github.com/forkzero/lattice/releases):
+<details>
+<summary>Platform-specific binaries</summary>
 
 | Platform | Binary |
 |----------|--------|
@@ -33,163 +106,80 @@ Download binaries directly from [GitHub Releases](https://github.com/forkzero/la
 | Linux x86_64 | `lattice-VERSION-x86_64-unknown-linux-gnu.tar.gz` |
 | Linux ARM64 | `lattice-VERSION-aarch64-unknown-linux-gnu.tar.gz` |
 
-```bash
-# Example manual install (macOS Apple Silicon)
-curl -fsSL https://github.com/forkzero/lattice/releases/download/v0.0.1/lattice-0.0.1-aarch64-apple-darwin.tar.gz | tar -xz
-sudo mv lattice-0.0.1-aarch64-apple-darwin/lattice /usr/local/bin/
-```
+</details>
 
-### Uninstall
+## Getting Started
 
 ```bash
-sudo rm /usr/local/bin/lattice
-```
-
-## What is Lattice?
-
-Lattice connects research, strategy, requirements, and implementation into a single, traversable, version-aware knowledge graph.
-
-```
-Primary Research (papers, data, citations)
-    ↓ supports
-Strategic Theses (claims about the world)
-    ↓ derives
-Requirements (testable specifications)
-    ↓ satisfied by
-Implementations (code that does the work)
-```
-
-Unlike traditional requirements tools (Jira, Notion, Confluence), Lattice is designed for **human-agent collaboration**:
-
-- **Structured for machines**: Typed nodes, explicit edges, queryable graph
-- **Readable by humans**: Prose-first, with structure as augmentation
-- **Version-aware**: Drift detection when artifacts diverge
-- **Bidirectional**: Information flows up (feedback) and down (justification)
-- **File-native**: Git provides versioning; no database required
-
-## Quick Start
-
-```bash
-# Initialize lattice in your project
+# Initialize in your project
 lattice init
 
 # Add a requirement
 lattice add requirement \
   --id REQ-AUTH-001 \
   --title "JWT Authentication" \
-  --body "Implement JWT-based authentication" \
+  --body "Implement JWT-based auth with refresh tokens" \
   --priority P0 \
   --category AUTH
 
 # Query the lattice
-lattice list requirements
-lattice get REQ-AUTH-001
+lattice summary              # Overview
+lattice list requirements    # All requirements
+lattice get REQ-AUTH-001     # Full details
 
-# Check for drift
-lattice drift
-
-# Export narrative
-lattice export --audience overview
+# Export
+lattice export --format html --output docs/
 lattice export --audience investor
-lattice export --audience contributor
 ```
 
-## Directory Structure
+## For AI Agents
 
-```
-your-project/
-├── .lattice/
-│   ├── config.yaml           # Lattice configuration
-│   ├── sources/              # Research artifacts
-│   │   └── *.yaml
-│   ├── theses/               # Strategic claims
-│   │   └── *.yaml
-│   ├── requirements/         # Specifications
-│   │   ├── core/
-│   │   ├── api/
-│   │   └── *.yaml
-│   └── implementations/      # Code bindings
-│       └── *.yaml
-├── src/                      # Your code
-└── docs/
-    └── REQUIREMENTS.md       # Generated view
-```
-
-## Core Concepts
-
-### Nodes
-
-Four types of knowledge artifacts:
-
-| Type | Description | Example |
-|------|-------------|---------|
-| **Source** | Primary research | "RLHF incentivizes sycophancy" (Anthropic, 2024) |
-| **Thesis** | Strategic claim | "Multi-agent debate reduces sycophancy" |
-| **Requirement** | Testable spec | "REQ-DEBATE-001: Seven Specialized Agents" |
-| **Implementation** | Code binding | "IMP-DEBATE-ENGINE" → src/debate/*.ts |
-
-### Edges
-
-Typed relationships with version binding:
-
-| Edge | Meaning |
-|------|---------|
-| `supports` | Research backs a thesis |
-| `derives` | Requirement follows from thesis |
-| `satisfies` | Code implements requirement |
-| `depends_on` | Prerequisite relationship |
-| `reveals_gap_in` | Implementation found missing pieces |
-| `challenges` | Evidence contradicts a thesis |
-| `validates` | Evidence confirms a thesis |
-
-### Drift Detection
-
-When a requirement changes, implementations bound to the old version are flagged:
+Lattice includes an MCP server for AI integration:
 
 ```bash
-$ lattice drift
-DRIFT DETECTED:
-
-REQ-AUTH-001 changed: 1.0.0 → 1.1.0
-  ↳ IMP-AUTH-JWT bound to 1.0.0 — NEEDS RE-VERIFICATION
+# Run as MCP server
+lattice mcp
 ```
 
-## For Agents
+Or add to your project's `.mcp.json`:
 
-Lattice provides a structured protocol for agent interaction:
+```json
+{
+  "mcpServers": {
+    "lattice": {
+      "command": "lattice",
+      "args": ["mcp"]
+    }
+  }
+}
+```
 
-1. **Before implementing**: Query requirement and traverse upstream
-2. **During**: Record gaps and challenges via feedback edges
-3. **After**: Register implementation and verify
-4. **On drift**: Re-verify or update
+**MCP Tools**: `lattice_summary`, `lattice_search`, `lattice_get`, `lattice_list`, `lattice_resolve`, `lattice_add_requirement`, `lattice_drift`
+
+```bash
+# Generate CLAUDE.md integration snippet
+lattice prompt >> CLAUDE.md
+lattice prompt --mcp >> CLAUDE.md
+```
 
 ## Self-Describing
 
-Lattice is built with Lattice. View the current state of our knowledge graph and requirements:
+Lattice is built with Lattice. The `.lattice/` directory contains sources, theses, and requirements for Lattice itself.
 
-**[View Live Documentation](https://forkzero.github.io/lattice/)**
-
-The `.lattice/` directory contains:
-
-- **Sources**: Research on requirements engineering, knowledge graphs, agent systems
-- **Theses**: Why Lattice should exist and how it should work
-- **Requirements**: Specifications for Lattice itself
+**[View Live Documentation →](https://forkzero.github.io/lattice/)**
 
 ```bash
-# See the lattice for Lattice
 lattice list requirements
 lattice export --audience overview
 ```
 
 ## Status
 
-**v0.0.1** - Early development. Core CLI implemented, API in progress.
+**v0.0.1** — Early development. Core CLI and MCP server implemented.
 
 See [docs/STRATEGIC_VISION.md](docs/STRATEGIC_VISION.md) for the full vision.
 
 ## License
 
 Copyright (c) 2026 ForkZero. All rights reserved.
-
-This source code is provided for reference and evaluation purposes only.
 See [LICENSE](LICENSE) for details.

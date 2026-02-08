@@ -130,6 +130,13 @@ enum Commands {
 
     /// Run as MCP server over stdio
     Mcp,
+
+    /// Output CLAUDE.md integration snippet
+    Prompt {
+        /// Output MCP version instead of CLI version
+        #[arg(long)]
+        mcp: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1136,6 +1143,14 @@ fn main() {
             if let Err(e) = rt.block_on(lattice::mcp::run_server()) {
                 eprintln!("{}", format!("MCP server error: {}", e).red());
                 process::exit(1);
+            }
+        }
+
+        Commands::Prompt { mcp } => {
+            if mcp {
+                print!("{}", include_str!("../prompts/LATTICE_MCP_CLAUDE_MD.md"));
+            } else {
+                print!("{}", include_str!("../prompts/LATTICE_CLAUDE_MD.md"));
             }
         }
     }
