@@ -13,6 +13,10 @@ tags:
 - deployment
 - documentation
 - github-pages
+resolution:
+  status: verified
+  resolved_at: 2026-02-08T01:30:20.308784+00:00
+  resolved_by: agent:claude-2026-02-08
 edges:
   depends_on:
   - target: REQ-CLI-012
