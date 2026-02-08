@@ -6,10 +6,11 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience,
-    DriftSeverity, ExportOptions, HtmlExportOptions, LatticeData, Plan, Priority, Resolution,
-    ResolveOptions, Status, add_implementation, add_requirement, add_source, add_thesis,
-    build_node_index, export_html, export_narrative, find_drift, find_lattice_root, generate_plan,
-    init_lattice, load_nodes_by_type, resolve_node,
+    DriftSeverity, ExportOptions, HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority,
+    Resolution, ResolveOptions, Status, VerifyOptions, add_implementation, add_requirement,
+    add_source, add_thesis, build_node_index, export_html, export_narrative, find_drift,
+    find_lattice_root, fix_issues, generate_plan, init_lattice, lint_lattice, load_nodes_by_type,
+    resolve_node, verify_implementation,
 };
 use std::env;
 use std::process;
@@ -126,6 +127,42 @@ enum Commands {
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
+    },
+
+    /// Lint lattice files for issues
+    Lint {
+        /// Attempt to auto-fix fixable issues
+        #[arg(long)]
+        fix: bool,
+
+        /// Exit with non-zero status on any issue (for CI)
+        #[arg(long)]
+        strict: bool,
+    },
+
+    /// Verify that an implementation satisfies a requirement
+    Verify {
+        /// Implementation ID (e.g., IMP-STORAGE-001)
+        implementation: String,
+
+        /// Must be the literal word "satisfies"
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(["satisfies"]))]
+        relation: String,
+
+        /// Requirement ID (e.g., REQ-CORE-001)
+        requirement: String,
+
+        /// Record that tests pass
+        #[arg(long)]
+        tests_pass: bool,
+
+        /// Record coverage percentage (0.0-1.0)
+        #[arg(long)]
+        coverage: Option<f64>,
+
+        /// Comma-separated file paths as evidence
+        #[arg(long)]
+        files: Option<String>,
     },
 
     /// Run as MCP server over stdio
@@ -1134,6 +1171,92 @@ fn main() {
                     for id in &orphaned_theses {
                         println!("  - {}", id);
                     }
+                }
+            }
+        }
+
+        Commands::Lint { fix, strict } => {
+            let root = get_lattice_root();
+            let report = lint_lattice(&root);
+
+            if report.issues.is_empty() {
+                println!("{}", "No issues found".green());
+                return;
+            }
+
+            // Display issues
+            let errors = report.errors();
+            let warnings = report.warnings();
+
+            for issue in &report.issues {
+                let colored_msg = match issue.severity {
+                    LintSeverity::Error => format!("{}", issue).red().to_string(),
+                    LintSeverity::Warning => format!("{}", issue).yellow().to_string(),
+                };
+                println!("{}", colored_msg);
+            }
+            println!();
+
+            println!(
+                "{}",
+                format!(
+                    "{} error(s), {} warning(s), {} fixable",
+                    errors.len(),
+                    warnings.len(),
+                    report.fixable().len()
+                )
+                .bold()
+            );
+
+            // Auto-fix if requested
+            if fix && !report.fixable().is_empty() {
+                println!();
+                let fixed = fix_issues(&root, &report);
+                for msg in &fixed {
+                    println!("{}", format!("Fixed: {}", msg).green());
+                }
+                println!(
+                    "{}",
+                    format!("{} issue(s) fixed", fixed.len()).green().bold()
+                );
+            }
+
+            // Exit non-zero: strict mode exits on any issue, normal mode only on errors
+            if strict || report.has_errors() {
+                process::exit(1);
+            }
+        }
+
+        Commands::Verify {
+            implementation,
+            relation: _,
+            requirement,
+            tests_pass,
+            coverage,
+            files,
+        } => {
+            let root = get_lattice_root();
+
+            let options = VerifyOptions {
+                implementation_id: implementation.clone(),
+                requirement_id: requirement.clone(),
+                tests_pass,
+                coverage,
+                files: split_csv(files),
+                verified_by: format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d")),
+            };
+
+            match verify_implementation(&root, options) {
+                Ok(path) => {
+                    println!(
+                        "{}",
+                        format!("Verified: {} satisfies {}", implementation, requirement).green()
+                    );
+                    println!("{}", format!("File: {}", path.display()).dimmed());
+                }
+                Err(e) => {
+                    eprintln!("{}", format!("Error: {}", e).red());
+                    process::exit(1);
                 }
             }
         }

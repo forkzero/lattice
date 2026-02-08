@@ -1,8 +1,6 @@
 //! Integration tests for HTML export functionality.
 
-#![allow(deprecated)] // cargo_bin is deprecated but replacement not yet stable
-
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -13,7 +11,7 @@ fn test_export_html_creates_index() {
     let output_dir = TempDir::new().unwrap();
     let output_path = output_dir.path().join("site");
 
-    let mut cmd = Command::cargo_bin("lattice").unwrap();
+    let mut cmd = cargo_bin_cmd!("lattice");
     cmd.args([
         "export",
         "--format",
@@ -53,7 +51,7 @@ fn test_export_html_with_custom_title() {
     let output_dir = TempDir::new().unwrap();
     let output_path = output_dir.path().join("site");
 
-    let mut cmd = Command::cargo_bin("lattice").unwrap();
+    let mut cmd = cargo_bin_cmd!("lattice");
     cmd.args([
         "export",
         "--format",
@@ -81,7 +79,7 @@ fn test_export_html_includes_statistics() {
     let output_dir = TempDir::new().unwrap();
     let output_path = output_dir.path().join("site");
 
-    let mut cmd = Command::cargo_bin("lattice").unwrap();
+    let mut cmd = cargo_bin_cmd!("lattice");
     cmd.args([
         "export",
         "--format",

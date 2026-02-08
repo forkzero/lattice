@@ -449,3 +449,303 @@ pub fn export_narrative(data: &LatticeData, options: &ExportOptions) -> String {
         Audience::Overview => generate_overview_narrative(data, options),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::*;
+
+    fn make_thesis(id: &str, title: &str, body: &str) -> LatticeNode {
+        LatticeNode {
+            id: id.to_string(),
+            node_type: NodeType::Thesis,
+            title: title.to_string(),
+            body: body.to_string(),
+            status: Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            created_by: "test".to_string(),
+            requested_by: None,
+            priority: None,
+            category: None,
+            tags: None,
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges: None,
+        }
+    }
+
+    fn make_req(
+        id: &str,
+        title: &str,
+        priority: Priority,
+        resolution: Option<Resolution>,
+    ) -> LatticeNode {
+        LatticeNode {
+            id: id.to_string(),
+            node_type: NodeType::Requirement,
+            title: title.to_string(),
+            body: "Requirement body text".to_string(),
+            status: Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            created_by: "test".to_string(),
+            requested_by: None,
+            priority: Some(priority),
+            category: Some("CORE".to_string()),
+            tags: None,
+            acceptance: None,
+            visibility: None,
+            resolution: resolution.map(|s| ResolutionInfo {
+                status: s,
+                reason: None,
+                resolved_at: "2026-01-01T00:00:00Z".to_string(),
+                resolved_by: "test".to_string(),
+            }),
+            meta: None,
+            edges: None,
+        }
+    }
+
+    fn make_impl(id: &str, title: &str, satisfies: &[&str]) -> LatticeNode {
+        let edges = if satisfies.is_empty() {
+            None
+        } else {
+            Some(Edges {
+                satisfies: Some(
+                    satisfies
+                        .iter()
+                        .map(|t| EdgeReference {
+                            target: t.to_string(),
+                            version: Some("1.0.0".to_string()),
+                            rationale: None,
+                        })
+                        .collect(),
+                ),
+                ..Default::default()
+            })
+        };
+        LatticeNode {
+            id: id.to_string(),
+            node_type: NodeType::Implementation,
+            title: title.to_string(),
+            body: "Implementation body".to_string(),
+            status: Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            created_by: "test".to_string(),
+            requested_by: None,
+            priority: None,
+            category: None,
+            tags: None,
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges,
+        }
+    }
+
+    fn test_data() -> LatticeData {
+        LatticeData {
+            sources: vec![],
+            theses: vec![make_thesis(
+                "THX-001",
+                "Test Thesis",
+                "This is the thesis body.",
+            )],
+            requirements: vec![
+                make_req("REQ-A", "Core Feature", Priority::P0, None),
+                make_req("REQ-B", "Extended Feature", Priority::P1, None),
+                make_req("REQ-C", "Future Feature", Priority::P2, None),
+            ],
+            implementations: vec![make_impl("IMP-001", "Core Impl", &["REQ-A"])],
+        }
+    }
+
+    fn overview_options() -> ExportOptions {
+        ExportOptions {
+            audience: Audience::Overview,
+            title: "TestProject".to_string(),
+            include_internal: false,
+        }
+    }
+
+    fn investor_options() -> ExportOptions {
+        ExportOptions {
+            audience: Audience::Investor,
+            title: "TestProject".to_string(),
+            include_internal: false,
+        }
+    }
+
+    fn contributor_options() -> ExportOptions {
+        ExportOptions {
+            audience: Audience::Contributor,
+            title: "TestProject".to_string(),
+            include_internal: false,
+        }
+    }
+
+    // --- Audience parsing ---
+
+    #[test]
+    fn test_audience_from_str() {
+        assert_eq!("investor".parse::<Audience>().unwrap(), Audience::Investor);
+        assert_eq!(
+            "contributor".parse::<Audience>().unwrap(),
+            Audience::Contributor
+        );
+        assert_eq!("overview".parse::<Audience>().unwrap(), Audience::Overview);
+        assert!("invalid".parse::<Audience>().is_err());
+    }
+
+    // --- Overview narrative ---
+
+    #[test]
+    fn test_overview_contains_title() {
+        let data = test_data();
+        let output = export_narrative(&data, &overview_options());
+        assert!(output.contains("# TestProject Overview"));
+    }
+
+    #[test]
+    fn test_overview_contains_priority_counts() {
+        let data = test_data();
+        let output = export_narrative(&data, &overview_options());
+        assert!(output.contains("**P0 (MVP):** 1 requirements"));
+        assert!(output.contains("**P1 (Beta):** 1 requirements"));
+        assert!(output.contains("**P2 (Future):** 1 requirements"));
+    }
+
+    #[test]
+    fn test_overview_contains_progress() {
+        let data = test_data();
+        let output = export_narrative(&data, &overview_options());
+        assert!(output.contains("1/3 implemented (33%)"));
+    }
+
+    #[test]
+    fn test_overview_contains_why_section() {
+        let data = test_data();
+        let output = export_narrative(&data, &overview_options());
+        assert!(output.contains("## Why"));
+        assert!(output.contains("**Test Thesis**"));
+    }
+
+    // --- Investor narrative ---
+
+    #[test]
+    fn test_investor_contains_title() {
+        let data = test_data();
+        let output = export_narrative(&data, &investor_options());
+        assert!(output.contains("# TestProject"));
+    }
+
+    #[test]
+    fn test_investor_contains_strategic_thesis() {
+        let data = test_data();
+        let output = export_narrative(&data, &investor_options());
+        assert!(output.contains("## Strategic Thesis"));
+        assert!(output.contains("### Test Thesis"));
+    }
+
+    #[test]
+    fn test_investor_contains_priority_tables() {
+        let data = test_data();
+        let output = export_narrative(&data, &investor_options());
+        assert!(output.contains("### Core Platform (P0"));
+        assert!(output.contains("Core Feature"));
+    }
+
+    #[test]
+    fn test_investor_contains_progress() {
+        let data = test_data();
+        let output = export_narrative(&data, &investor_options());
+        assert!(output.contains("1 of 3 requirements implemented (33%)"));
+    }
+
+    // --- Contributor narrative ---
+
+    #[test]
+    fn test_contributor_contains_title() {
+        let data = test_data();
+        let output = export_narrative(&data, &contributor_options());
+        assert!(output.contains("# Contributing to TestProject"));
+    }
+
+    #[test]
+    fn test_contributor_shows_open_requirements() {
+        let data = test_data();
+        let output = export_narrative(&data, &contributor_options());
+        assert!(output.contains("## Open Requirements"));
+        assert!(output.contains("Extended Feature"));
+        assert!(output.contains("Future Feature"));
+    }
+
+    #[test]
+    fn test_contributor_shows_needs_count() {
+        let data = test_data();
+        let output = export_narrative(&data, &contributor_options());
+        assert!(output.contains("2 requirements need implementation"));
+    }
+
+    // --- Helper functions ---
+
+    #[test]
+    fn test_count_implemented() {
+        let reqs = vec![
+            make_req("REQ-A", "A", Priority::P0, None),
+            make_req("REQ-B", "B", Priority::P1, None),
+        ];
+        let impls = vec![make_impl("IMP-1", "Impl", &["REQ-A"])];
+        let (implemented, total) = count_implemented(&reqs, &impls);
+        assert_eq!(implemented, 1);
+        assert_eq!(total, 2);
+    }
+
+    #[test]
+    fn test_count_implemented_empty() {
+        let (implemented, total) = count_implemented(&[], &[]);
+        assert_eq!(implemented, 0);
+        assert_eq!(total, 0);
+    }
+
+    #[test]
+    fn test_group_by_priority() {
+        let reqs = vec![
+            make_req("REQ-A", "A", Priority::P0, None),
+            make_req("REQ-B", "B", Priority::P1, None),
+            make_req("REQ-C", "C", Priority::P0, None),
+        ];
+        let groups = group_by_priority(&reqs);
+        assert_eq!(groups[&Priority::P0].len(), 2);
+        assert_eq!(groups[&Priority::P1].len(), 1);
+        assert_eq!(groups[&Priority::P2].len(), 0);
+    }
+
+    #[test]
+    fn test_visibility_filter() {
+        let mut node = make_thesis("T1", "Test", "Body");
+        assert!(is_visible(&node, false));
+
+        node.visibility = Some("internal".to_string());
+        assert!(!is_visible(&node, false));
+        assert!(is_visible(&node, true));
+    }
+
+    #[test]
+    fn test_empty_data_produces_valid_output() {
+        let data = LatticeData {
+            sources: vec![],
+            theses: vec![],
+            requirements: vec![],
+            implementations: vec![],
+        };
+        let output = export_narrative(&data, &overview_options());
+        assert!(output.contains("# TestProject Overview"));
+        assert!(output.contains("0/0 implemented (0%)"));
+    }
+}

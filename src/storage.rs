@@ -484,6 +484,75 @@ pub fn resolve_node(root: &Path, options: ResolveOptions) -> Result<PathBuf, Sto
     Ok(path)
 }
 
+/// Options for verifying an implementation satisfies a requirement.
+pub struct VerifyOptions {
+    pub implementation_id: String,
+    pub requirement_id: String,
+    pub tests_pass: bool,
+    pub coverage: Option<f64>,
+    pub files: Option<Vec<String>>,
+    pub verified_by: String,
+}
+
+/// Record that an implementation satisfies a requirement.
+///
+/// Creates or updates a `satisfies` edge from the implementation to the
+/// requirement, bound to the requirement's current version. Records
+/// evidence (test results, coverage) as rationale on the edge.
+pub fn verify_implementation(root: &Path, options: VerifyOptions) -> Result<PathBuf, StorageError> {
+    // Load the requirement to get its current version
+    let req_path = find_node_path(root, &options.requirement_id)?;
+    let req_node = load_node(&req_path)?;
+
+    // Load the implementation
+    let impl_path = find_node_path(root, &options.implementation_id)?;
+    let mut impl_node = load_node(&impl_path)?;
+
+    // Build rationale from evidence
+    let mut evidence = Vec::new();
+    if options.tests_pass {
+        evidence.push("tests pass".to_string());
+    }
+    if let Some(cov) = options.coverage {
+        evidence.push(format!("coverage: {:.0}%", cov * 100.0));
+    }
+    if let Some(ref files) = options.files {
+        evidence.push(format!("files: {}", files.join(", ")));
+    }
+    let rationale = if evidence.is_empty() {
+        None
+    } else {
+        Some(evidence.join("; "))
+    };
+
+    let new_edge = EdgeReference {
+        target: options.requirement_id.clone(),
+        version: Some(req_node.version.clone()),
+        rationale,
+    };
+
+    // Update or create the satisfies edge
+    let edges = impl_node.edges.get_or_insert_with(Edges::default);
+
+    if let Some(satisfies) = &mut edges.satisfies {
+        // Update existing edge or add new one
+        if let Some(existing) = satisfies
+            .iter_mut()
+            .find(|e| e.target == options.requirement_id)
+        {
+            existing.version = Some(req_node.version.clone());
+            existing.rationale = new_edge.rationale;
+        } else {
+            satisfies.push(new_edge);
+        }
+    } else {
+        edges.satisfies = Some(vec![new_edge]);
+    }
+
+    save_node(&impl_path, &impl_node)?;
+    Ok(impl_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -568,5 +637,202 @@ mod tests {
         // This test just verifies the function doesn't panic
         // It may return Some or None depending on git config
         let _result = get_git_user();
+    }
+
+    #[test]
+    fn test_load_node_from_valid_yaml() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("test.yaml");
+        fs::write(
+            &file,
+            "id: REQ-TEST\ntype: requirement\ntitle: Test\nbody: Body\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\n",
+        ).unwrap();
+
+        let node = load_node(&file).unwrap();
+        assert_eq!(node.id, "REQ-TEST");
+        assert_eq!(node.title, "Test");
+    }
+
+    #[test]
+    fn test_load_node_from_invalid_yaml() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("bad.yaml");
+        fs::write(&file, "not: valid: yaml: {{").unwrap();
+
+        assert!(load_node(&file).is_err());
+    }
+
+    #[test]
+    fn test_load_node_missing_file() {
+        let result = load_node(Path::new("/nonexistent/file.yaml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_save_and_load_node_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let file = dir.path().join("node.yaml");
+
+        let node = crate::types::LatticeNode {
+            id: "REQ-RT".to_string(),
+            node_type: crate::types::NodeType::Requirement,
+            title: "Roundtrip Test".to_string(),
+            body: "Test body".to_string(),
+            status: crate::types::Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            created_by: "test".to_string(),
+            requested_by: None,
+            priority: Some(crate::types::Priority::P0),
+            category: Some("CORE".to_string()),
+            tags: Some(vec!["test".to_string()]),
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges: None,
+        };
+
+        save_node(&file, &node).unwrap();
+        let loaded = load_node(&file).unwrap();
+
+        assert_eq!(loaded.id, "REQ-RT");
+        assert_eq!(loaded.title, "Roundtrip Test");
+        assert_eq!(loaded.priority, Some(crate::types::Priority::P0));
+    }
+
+    #[test]
+    fn test_load_nodes_by_type_skips_bad_files() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let req_dir = root.join(LATTICE_DIR).join("requirements");
+        fs::create_dir_all(&req_dir).unwrap();
+
+        // Valid file
+        fs::write(
+            req_dir.join("good.yaml"),
+            "id: REQ-GOOD\ntype: requirement\ntitle: Good\nbody: OK\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\n",
+        ).unwrap();
+
+        // Bad file
+        fs::write(req_dir.join("bad.yaml"), "invalid yaml {{").unwrap();
+
+        let nodes = load_nodes_by_type(root, "requirements").unwrap();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].id, "REQ-GOOD");
+    }
+
+    #[test]
+    fn test_load_nodes_by_type_empty_dir() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let req_dir = root.join(LATTICE_DIR).join("requirements");
+        fs::create_dir_all(&req_dir).unwrap();
+
+        let nodes = load_nodes_by_type(root, "requirements").unwrap();
+        assert!(nodes.is_empty());
+    }
+
+    #[test]
+    fn test_load_nodes_by_type_nonexistent_dir() {
+        let dir = TempDir::new().unwrap();
+        let nodes = load_nodes_by_type(dir.path(), "requirements").unwrap();
+        assert!(nodes.is_empty());
+    }
+
+    #[test]
+    fn test_find_node_path_finds_existing() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let req_dir = root.join(LATTICE_DIR).join("requirements");
+        fs::write(
+            req_dir.join("test.yaml"),
+            "id: REQ-FIND\ntype: requirement\ntitle: Find Me\nbody: Body\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\n",
+        ).unwrap();
+
+        let path = find_node_path(root, "REQ-FIND").unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn test_find_node_path_returns_error_for_missing() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let result = find_node_path(root, "REQ-MISSING");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_requirement_creates_file() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let options = AddRequirementOptions {
+            id: "REQ-TEST-001".to_string(),
+            title: "Test Requirement".to_string(),
+            body: "Body text".to_string(),
+            priority: crate::types::Priority::P0,
+            category: "TEST".to_string(),
+            tags: Some(vec!["tag1".to_string()]),
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+
+        let path = add_requirement(root, options).unwrap();
+        assert!(path.exists());
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(node.id, "REQ-TEST-001");
+        assert_eq!(node.priority, Some(crate::types::Priority::P0));
+    }
+
+    #[test]
+    fn test_resolve_node_sets_resolution() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let options = AddRequirementOptions {
+            id: "REQ-RES-001".to_string(),
+            title: "Resolvable".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P1,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, options).unwrap();
+
+        let resolve_opts = ResolveOptions {
+            node_id: "REQ-RES-001".to_string(),
+            resolution: crate::types::Resolution::Verified,
+            reason: Some("Tests pass".to_string()),
+            resolved_by: "test".to_string(),
+        };
+        let path = resolve_node(root, resolve_opts).unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert!(node.resolution.is_some());
+        assert_eq!(
+            node.resolution.unwrap().status,
+            crate::types::Resolution::Verified
+        );
+    }
+
+    #[test]
+    fn test_slugify() {
+        assert_eq!(slugify("Hello World!", 20), "hello-world");
+        assert_eq!(slugify("Test", 2), "te");
+        assert_eq!(slugify("---test---", 20), "test");
     }
 }

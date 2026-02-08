@@ -418,17 +418,17 @@ impl LatticeServer {
             .iter()
             .filter(|n| {
                 // ID prefix filter
-                if let Some(ref prefix) = params.id_prefix {
-                    if !n.id.to_uppercase().starts_with(&prefix.to_uppercase()) {
-                        return false;
-                    }
+                if let Some(ref prefix) = params.id_prefix
+                    && !n.id.to_uppercase().starts_with(&prefix.to_uppercase())
+                {
+                    return false;
                 }
 
                 // Graph proximity filter
-                if let Some(ref related) = related_ids {
-                    if !related.contains(&n.id) {
-                        return false;
-                    }
+                if let Some(ref related) = related_ids
+                    && !related.contains(&n.id)
+                {
+                    return false;
                 }
 
                 // Text search in title and body

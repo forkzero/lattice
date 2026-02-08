@@ -21,6 +21,6 @@ edges:
       version: 1.0.0
   depends_on:
     - target: REQ-API-003
-      version: 1.0.0
+      version: 2.0.0
     - target: REQ-API-005
       version: 1.0.0
