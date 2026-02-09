@@ -1,0 +1,22 @@
+id: REQ-CLI-017
+type: requirement
+title: JSON Export Metadata Wrapper
+body: 'The JSON export format shall wrap the node array in a metadata object containing: project (from config.yaml), description (from config.yaml), generated_at (RFC 3339 timestamp), and nodes (the full node index). The reader shall handle both the legacy flat array format and the new wrapped format for backward compatibility.'
+status: active
+version: 1.0.0
+created_at: 2026-02-09T13:29:51.789425+00:00
+created_by: agent:claude-2026-02-09
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+resolution:
+  status: verified
+  resolved_at: 2026-02-09T13:30:12.421242+00:00
+  resolved_by: agent:claude-2026-02-09
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-013
+    version: 1.0.0

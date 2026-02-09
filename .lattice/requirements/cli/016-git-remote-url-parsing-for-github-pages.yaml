@@ -1,0 +1,22 @@
+id: REQ-CLI-016
+type: requirement
+title: Git Remote URL Parsing for GitHub Pages
+body: The CLI shall parse git remote origin URLs to derive GitHub Pages base URLs. Both HTTPS (https://github.com/owner/repo.git) and SSH (git@github.com:owner/repo.git) formats shall be supported. The derived URL follows the pattern https://{owner}.github.io/{repo}. If the remote is not a GitHub URL or no origin is configured, the command shall fail with a clear error message.
+status: active
+version: 1.0.0
+created_at: 2026-02-09T13:29:46.484196+00:00
+created_by: agent:claude-2026-02-09
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+resolution:
+  status: verified
+  resolved_at: 2026-02-09T13:30:12.412888+00:00
+  resolved_by: agent:claude-2026-02-09
+edges:
+  derives_from:
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-015
+    version: 1.0.0

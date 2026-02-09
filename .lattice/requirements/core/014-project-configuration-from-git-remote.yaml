@@ -1,0 +1,22 @@
+id: REQ-CORE-014
+type: requirement
+title: Project Configuration from Git Remote
+body: 'When initializing a lattice with ''lattice init'', the config.yaml shall be populated with project metadata derived from the git remote: the project name from the repository name and the description from the GitHub API (via gh CLI). This ensures config.yaml reflects the actual project identity without manual entry. The config shall be loadable via load_config() and used by export commands for metadata.'
+status: active
+version: 1.0.0
+created_at: 2026-02-09T13:29:57.531521+00:00
+created_by: agent:claude-2026-02-09
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: CORE
+resolution:
+  status: verified
+  resolved_at: 2026-02-09T13:30:51.902657+00:00
+  resolved_by: agent:claude-2026-02-09
+edges:
+  derives_from:
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-001
+    version: 1.0.0

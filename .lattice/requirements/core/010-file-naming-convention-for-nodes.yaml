@@ -13,10 +13,6 @@ tags:
 - naming
 - files
 - storage
-resolution:
-  status: verified
-  resolved_at: 2026-02-08T02:00:45.474900+00:00
-  resolved_by: agent:claude-2026-02-08
 edges:
   derives_from:
   - target: THX-FILES-SOURCE-OF-TRUTH
