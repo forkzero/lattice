@@ -335,6 +335,17 @@ pub struct AddSourceOptions {
     pub created_by: String,
 }
 
+/// Check that a node ID doesn't already exist in the lattice. Returns an error if it does.
+fn check_duplicate_id(root: &Path, id: &str) -> Result<(), StorageError> {
+    if find_node_path(root, id).is_ok() {
+        return Err(StorageError::AlreadyExists(format!(
+            "Node with ID '{}' already exists",
+            id
+        )));
+    }
+    Ok(())
+}
+
 fn make_edge_refs(targets: Option<Vec<String>>) -> Option<Vec<EdgeReference>> {
     targets.map(|t| {
         t.into_iter()
@@ -363,6 +374,7 @@ pub fn add_requirement(
     root: &Path,
     options: AddRequirementOptions,
 ) -> Result<PathBuf, StorageError> {
+    check_duplicate_id(root, &options.id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
@@ -407,6 +419,7 @@ pub fn add_requirement(
 
 /// Add a thesis to the lattice.
 pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, StorageError> {
+    check_duplicate_id(root, &options.id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
@@ -451,6 +464,7 @@ pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, Sto
 
 /// Add a source to the lattice.
 pub fn add_source(root: &Path, options: AddSourceOptions) -> Result<PathBuf, StorageError> {
+    check_duplicate_id(root, &options.id)?;
     let now = chrono::Utc::now().to_rfc3339();
     let today = now.split('T').next().unwrap_or(&now).to_string();
 
@@ -496,6 +510,7 @@ pub fn add_implementation(
     root: &Path,
     options: AddImplementationOptions,
 ) -> Result<PathBuf, StorageError> {
+    check_duplicate_id(root, &options.id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
@@ -1123,6 +1138,43 @@ mod tests {
         let node = load_node(&path).unwrap();
         assert_eq!(node.id, "REQ-TEST-001");
         assert_eq!(node.priority, Some(crate::types::Priority::P0));
+    }
+
+    #[test]
+    fn test_add_requirement_rejects_duplicate_id() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let options = AddRequirementOptions {
+            id: "REQ-DUP-001".to_string(),
+            title: "First".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P0,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, options).unwrap();
+
+        let duplicate = AddRequirementOptions {
+            id: "REQ-DUP-001".to_string(),
+            title: "Second with same ID".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P1,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        let result = add_requirement(root, duplicate);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("already exists"));
     }
 
     #[test]

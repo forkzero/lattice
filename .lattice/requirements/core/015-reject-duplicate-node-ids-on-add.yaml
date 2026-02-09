@@ -1,0 +1,22 @@
+id: REQ-CORE-015
+type: requirement
+title: Reject Duplicate Node IDs on Add
+body: All add commands (add requirement, add thesis, add source, add implementation) shall reject creating a node with an ID that already exists in the lattice. The check scans all existing nodes before writing and returns an AlreadyExists error with a message identifying the duplicate ID. This prevents silent data corruption where two files share the same ID, which causes resolve and get commands to operate on the wrong node.
+status: active
+version: 1.0.0
+created_at: 2026-02-09T13:34:08.555088+00:00
+created_by: agent:claude-2026-02-09
+requested_by: George Moon <george.moon@gmail.com>
+priority: P0
+category: CORE
+resolution:
+  status: verified
+  resolved_at: 2026-02-09T13:34:08.583902+00:00
+  resolved_by: agent:claude-2026-02-09
+edges:
+  derives_from:
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CORE-004
+    version: 1.0.0
