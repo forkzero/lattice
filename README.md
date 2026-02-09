@@ -195,7 +195,7 @@ lattice export --audience overview
 
 ## Status
 
-**v0.1.0** — Core CLI, MCP server, HTML/JSON export, drift detection, hosted reader.
+**v0.1.1** — Pages export format, JSON metadata wrapper, duplicate ID guard, git remote config.
 
 See [docs/STRATEGIC_VISION.md](docs/STRATEGIC_VISION.md) for the full vision.
 
