@@ -45,16 +45,20 @@ fn get_git_repo_name() -> Option<String> {
 /// Try to get repo description from GitHub API via `gh`.
 fn get_gh_repo_description() -> Option<String> {
     let output = Command::new("gh")
-        .args(["repo", "view", "--json", "description", "--jq", ".description"])
+        .args([
+            "repo",
+            "view",
+            "--json",
+            "description",
+            "--jq",
+            ".description",
+        ])
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    let desc = String::from_utf8(output.stdout)
-        .ok()?
-        .trim()
-        .to_string();
+    let desc = String::from_utf8(output.stdout).ok()?.trim().to_string();
     if desc.is_empty() { None } else { Some(desc) }
 }
 
