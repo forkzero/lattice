@@ -387,7 +387,8 @@ pub fn fix_issues(root: &Path, report: &LintReport) -> Vec<String> {
         // Fix missing config.yaml
         if issue.message == "Missing config.yaml" {
             let config_path = lattice_dir.join("config.yaml");
-            if std::fs::write(&config_path, crate::storage::DEFAULT_CONFIG).is_ok() {
+            let default_config = "# Lattice configuration\nversion: \"1.0\"\n";
+            if std::fs::write(&config_path, default_config).is_ok() {
                 fixed.push(format!("Created {}", config_path.display()));
             }
             continue;

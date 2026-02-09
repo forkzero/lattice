@@ -13,9 +13,93 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 pub const LATTICE_DIR: &str = ".lattice";
-pub const DEFAULT_CONFIG: &str = r#"# Lattice configuration
-version: "1.0"
-"#;
+
+/// Git remote info (owner/repo name and description).
+pub struct GitRepoInfo {
+    pub name: String,
+    pub description: String,
+}
+
+/// Get repo name from git remote URL.
+/// Parses "https://github.com/forkzero/lattice.git" → "lattice"
+/// or "git@github.com:forkzero/lattice.git" → "lattice"
+fn get_git_repo_name() -> Option<String> {
+    let output = Command::new("git")
+        .args(["remote", "get-url", "origin"])
+        .output()
+        .ok()?;
+    let url = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    if url.is_empty() {
+        return None;
+    }
+    // Extract repo name from URL (strip .git suffix, take last path segment)
+    url.trim_end_matches('/')
+        .trim_end_matches(".git")
+        .rsplit('/')
+        .next()
+        .or_else(|| url.rsplit(':').next())
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Try to get repo description from GitHub API via `gh`.
+fn get_gh_repo_description() -> Option<String> {
+    let output = Command::new("gh")
+        .args(["repo", "view", "--json", "description", "--jq", ".description"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let desc = String::from_utf8(output.stdout)
+        .ok()?
+        .trim()
+        .to_string();
+    if desc.is_empty() { None } else { Some(desc) }
+}
+
+/// Get repo info from git remote and GitHub API.
+pub fn get_git_repo_info() -> GitRepoInfo {
+    let name = get_git_repo_name()
+        .or_else(|| {
+            // Fallback: use current directory name
+            std::env::current_dir()
+                .ok()
+                .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+        })
+        .unwrap_or_else(|| "my-project".to_string());
+    let description = get_gh_repo_description().unwrap_or_default();
+    GitRepoInfo { name, description }
+}
+
+/// Lattice project configuration read from config.yaml.
+#[derive(Debug, serde::Deserialize, serde::Serialize, Default)]
+pub struct LatticeConfig {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub project: String,
+    #[serde(default)]
+    pub description: String,
+}
+
+/// Read config.yaml from a lattice root.
+pub fn load_config(root: &Path) -> LatticeConfig {
+    let config_path = root.join(LATTICE_DIR).join("config.yaml");
+    fs::read_to_string(&config_path)
+        .ok()
+        .and_then(|content| serde_yaml::from_str(&content).ok())
+        .unwrap_or_default()
+}
+
+fn build_config_yaml(info: &GitRepoInfo) -> String {
+    let mut config = String::from("# Lattice configuration\nversion: \"1.0\"\n");
+    config.push_str(&format!("project: \"{}\"\n", info.name));
+    if !info.description.is_empty() {
+        config.push_str(&format!("description: \"{}\"\n", info.description));
+    }
+    config
+}
 
 /// Get the git user name and email from git config.
 pub fn get_git_user() -> Option<String> {
@@ -99,9 +183,11 @@ pub fn init_lattice(root: &Path, force: bool) -> Result<Vec<PathBuf>, StorageErr
         created.push(path);
     }
 
-    // Create config.yaml
+    // Create config.yaml with repo info
     let config_path = lattice_dir.join("config.yaml");
-    fs::write(&config_path, DEFAULT_CONFIG)?;
+    let repo_info = get_git_repo_info();
+    let config_content = build_config_yaml(&repo_info);
+    fs::write(&config_path, config_content)?;
     created.push(config_path);
 
     Ok(created)

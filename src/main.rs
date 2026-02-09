@@ -10,7 +10,7 @@ use lattice::{
     Priority, RefineOptions, Resolution, ResolveOptions, Status, VerifyOptions, add_implementation,
     add_requirement, add_source, add_thesis, build_node_index, export_html, export_narrative,
     find_drift, find_lattice_root, fix_issues, generate_plan, init_lattice, lint_lattice,
-    load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
+    load_config, load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -1475,11 +1475,18 @@ fn main() {
             if format == "json" {
                 match build_node_index(&root) {
                     Ok(index) => {
+                        let config = load_config(&root);
                         let nodes: Vec<_> = index.values().collect();
+                        let output = json!({
+                            "project": config.project,
+                            "description": config.description,
+                            "generated_at": chrono::Utc::now().to_rfc3339(),
+                            "nodes": nodes,
+                        });
                         println!(
                             "{}",
-                            serde_json::to_string_pretty(&nodes)
-                                .unwrap_or_else(|_| "[]".to_string())
+                            serde_json::to_string_pretty(&output)
+                                .unwrap_or_else(|_| "{}".to_string())
                         );
                     }
                     Err(e) => {
