@@ -96,6 +96,7 @@ lattice export                  # Export narrative (overview)
 lattice export -a investor      # Export for investors
 lattice export -a contributor   # Export for contributors
 lattice export -f json          # Export as JSON
+lattice export -f pages -o _site  # Export for GitHub Pages
 ```
 
 ## Self-Describing

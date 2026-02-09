@@ -20,26 +20,59 @@ pub struct GitRepoInfo {
     pub description: String,
 }
 
-/// Get repo name from git remote URL.
-/// Parses "https://github.com/forkzero/lattice.git" → "lattice"
-/// or "git@github.com:forkzero/lattice.git" → "lattice"
-fn get_git_repo_name() -> Option<String> {
+/// Get the git remote origin URL.
+fn get_git_remote_url() -> Option<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])
         .output()
         .ok()?;
     let url = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if url.is_empty() {
-        return None;
+    if url.is_empty() { None } else { Some(url) }
+}
+
+/// Parse owner/repo from a git remote URL.
+/// Handles both HTTPS and SSH formats:
+/// - "https://github.com/forkzero/lattice.git" → ("forkzero", "lattice")
+/// - "git@github.com:forkzero/lattice.git" → ("forkzero", "lattice")
+fn parse_owner_repo(url: &str) -> Option<(String, String)> {
+    let cleaned = url.trim_end_matches('/').trim_end_matches(".git");
+    // Try HTTPS format: https://github.com/owner/repo
+    if let Some(path) = cleaned.strip_prefix("https://github.com/") {
+        let parts: Vec<&str> = path.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            return Some((parts[0].to_string(), parts[1].to_string()));
+        }
     }
-    // Extract repo name from URL (strip .git suffix, take last path segment)
-    url.trim_end_matches('/')
-        .trim_end_matches(".git")
-        .rsplit('/')
-        .next()
-        .or_else(|| url.rsplit(':').next())
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty())
+    // Try SSH format: git@github.com:owner/repo
+    if let Some(path) = cleaned.strip_prefix("git@github.com:") {
+        let parts: Vec<&str> = path.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            return Some((parts[0].to_string(), parts[1].to_string()));
+        }
+    }
+    None
+}
+
+/// Get repo name from git remote URL.
+fn get_git_repo_name() -> Option<String> {
+    let url = get_git_remote_url()?;
+    parse_owner_repo(&url).map(|(_, repo)| repo).or_else(|| {
+        // Fallback: last path segment
+        url.trim_end_matches('/')
+            .trim_end_matches(".git")
+            .rsplit('/')
+            .next()
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+    })
+}
+
+/// Derive the GitHub Pages base URL from git remote.
+/// e.g. "https://github.com/forkzero/lattice" → "https://forkzero.github.io/lattice"
+pub fn get_github_pages_url() -> Option<String> {
+    let url = get_git_remote_url()?;
+    let (owner, repo) = parse_owner_repo(&url)?;
+    Some(format!("https://{}.github.io/{}", owner, repo))
 }
 
 /// Try to get repo description from GitHub API via `gh`.
@@ -1356,6 +1389,39 @@ mod tests {
             GapType::Contradiction
         );
         assert!("invalid".parse::<GapType>().is_err());
+    }
+
+    #[test]
+    fn test_parse_owner_repo_https() {
+        let result = parse_owner_repo("https://github.com/forkzero/lattice.git");
+        assert_eq!(
+            result,
+            Some(("forkzero".to_string(), "lattice".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_owner_repo_https_no_git() {
+        let result = parse_owner_repo("https://github.com/forkzero/lattice");
+        assert_eq!(
+            result,
+            Some(("forkzero".to_string(), "lattice".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_owner_repo_ssh() {
+        let result = parse_owner_repo("git@github.com:forkzero/lattice.git");
+        assert_eq!(
+            result,
+            Some(("forkzero".to_string(), "lattice".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_owner_repo_non_github() {
+        let result = parse_owner_repo("https://gitlab.com/user/repo.git");
+        assert_eq!(result, None);
     }
 
     #[test]

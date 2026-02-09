@@ -131,20 +131,22 @@ lattice get REQ-AUTH-001     # Full details
 
 # Export
 lattice export --format json > lattice-data.json
+lattice export --format pages --output _site
 lattice export --format html --output docs/
 lattice export --audience investor
 ```
 
 ## Publishing Documentation
 
-Lattice exports JSON that the [hosted reader](https://forkzero.ai/reader) renders as an interactive dashboard. Add this to your CI:
+Lattice can publish an interactive dashboard to GitHub Pages with a single command. Add this to your CI:
 
 ```yaml
-# In your GitHub Actions workflow:
-- run: lattice export --format json > _site/lattice-data.json
+# .github/workflows/pages.yml
+- run: curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
+- run: lattice export --format pages --output _site
 ```
 
-Then link to: `https://forkzero.ai/reader?url=<your-published-json-url>`
+The `pages` format exports `lattice-data.json` and a redirect `index.html` that points to the [hosted reader](https://forkzero.ai/reader) on forkzero.ai. The GitHub Pages URL is derived automatically from your git remote.
 
 The reader displays stats, coverage, resolution status, priority breakdown, traceability tree, and filterable requirements — all from the JSON export.
 

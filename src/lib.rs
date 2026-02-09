@@ -22,7 +22,7 @@ pub use storage::{
     AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions, GapType,
     LATTICE_DIR, LatticeConfig, RefineOptions, RefineResult, ResolveOptions, VerifyOptions,
     add_implementation, add_requirement, add_source, add_thesis, find_lattice_root, find_node_path,
-    get_git_user, init_lattice, load_all_nodes, load_config, load_nodes_by_type,
-    refine_requirement, resolve_node, verify_implementation,
+    get_git_user, get_github_pages_url, init_lattice, load_all_nodes, load_config,
+    load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
 };
 pub use types::{LatticeNode, NodeIndex, NodeType, Priority, Resolution, ResolutionInfo, Status};

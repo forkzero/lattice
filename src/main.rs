@@ -9,8 +9,9 @@ use lattice::{
     DriftSeverity, ExportOptions, GapType, HtmlExportOptions, LatticeData, LintSeverity, Plan,
     Priority, RefineOptions, Resolution, ResolveOptions, Status, VerifyOptions, add_implementation,
     add_requirement, add_source, add_thesis, build_node_index, export_html, export_narrative,
-    find_drift, find_lattice_root, fix_issues, generate_plan, init_lattice, lint_lattice,
-    load_config, load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
+    find_drift, find_lattice_root, fix_issues, generate_plan, get_github_pages_url, init_lattice,
+    lint_lattice, load_config, load_nodes_by_type, refine_requirement, resolve_node,
+    verify_implementation,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -124,7 +125,7 @@ enum Commands {
 
     /// Export the lattice to various formats
     Export {
-        /// Export format (narrative, json, html)
+        /// Export format (narrative, json, html, pages)
         #[arg(short, long, default_value = "narrative")]
         format: String,
 
@@ -918,18 +919,19 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "export",
-                "description": "Export the lattice to narrative, JSON, or HTML",
+                "description": "Export the lattice to narrative, JSON, HTML, or GitHub Pages",
                 "parameters": [
-                    param("--format", "string", false, "Export format: narrative, json, html (default: narrative)"),
+                    param("--format", "string", false, "Export format: narrative, json, html, pages (default: narrative)"),
                     param("--audience", "string", false, "Target audience: investor, contributor, overview (default: overview)"),
                     param("--title", "string", false, "Document title (default: Lattice)"),
                     param("--include-internal", "bool", false, "Include nodes marked as internal"),
-                    param("--output", "string", false, "Output directory for HTML export")
+                    param("--output", "string", false, "Output directory for HTML/pages export")
                 ],
                 "examples": [
                     "lattice export",
                     "lattice export --format json",
-                    "lattice export --format html --output ./docs"
+                    "lattice export --format html --output ./docs",
+                    "lattice export --format pages --output _site"
                 ]
             },
             {
@@ -1488,6 +1490,93 @@ fn main() {
                             serde_json::to_string_pretty(&output)
                                 .unwrap_or_else(|_| "{}".to_string())
                         );
+                    }
+                    Err(e) => {
+                        eprintln!("{}", format!("Error: {}", e).red());
+                        process::exit(1);
+                    }
+                }
+                return;
+            }
+
+            if format == "pages" {
+                let output_dir = output.unwrap_or_else(|| "_site".to_string());
+
+                // Derive GitHub Pages URL from git remote
+                let pages_base = match get_github_pages_url() {
+                    Some(url) => url,
+                    None => {
+                        eprintln!(
+                            "{}",
+                            "Error: Could not derive GitHub Pages URL from git remote. Ensure a GitHub origin is configured."
+                                .red()
+                        );
+                        process::exit(1);
+                    }
+                };
+
+                let json_url = format!("{}/lattice-data.json", pages_base);
+                let reader_url = format!("https://forkzero.ai/reader?url={}", json_url);
+
+                // Build JSON export
+                match build_node_index(&root) {
+                    Ok(index) => {
+                        let config = load_config(&root);
+                        let nodes: Vec<_> = index.values().collect();
+                        let json_output = json!({
+                            "project": config.project,
+                            "description": config.description,
+                            "generated_at": chrono::Utc::now().to_rfc3339(),
+                            "nodes": nodes,
+                        });
+
+                        // Create output directory
+                        if let Err(e) = std::fs::create_dir_all(&output_dir) {
+                            eprintln!("{}", format!("Error creating {}: {}", output_dir, e).red());
+                            process::exit(1);
+                        }
+
+                        // Write lattice-data.json
+                        let json_path = std::path::Path::new(&output_dir).join("lattice-data.json");
+                        let json_str = serde_json::to_string_pretty(&json_output)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        if let Err(e) = std::fs::write(&json_path, &json_str) {
+                            eprintln!(
+                                "{}",
+                                format!("Error writing {}: {}", json_path.display(), e).red()
+                            );
+                            process::exit(1);
+                        }
+
+                        // Write redirect index.html
+                        let project_name = if config.project.is_empty() {
+                            "Lattice".to_string()
+                        } else {
+                            config.project
+                        };
+                        let html = format!(
+                            r#"<!DOCTYPE html>
+<html><head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0;url={reader_url}">
+  <title>{project_name} - Lattice</title>
+</head><body>
+  <p>Redirecting to <a href="{reader_url}">{project_name} Lattice Documentation</a>...</p>
+</body></html>
+"#
+                        );
+                        let html_path = std::path::Path::new(&output_dir).join("index.html");
+                        if let Err(e) = std::fs::write(&html_path, &html) {
+                            eprintln!(
+                                "{}",
+                                format!("Error writing {}: {}", html_path.display(), e).red()
+                            );
+                            process::exit(1);
+                        }
+
+                        eprintln!("{}", format!("Pages exported to {}/", output_dir).green());
+                        eprintln!("  {} lattice-data.json", "✓".green());
+                        eprintln!("  {} index.html → {}", "✓".green(), reader_url);
                     }
                     Err(e) => {
                         eprintln!("{}", format!("Error: {}", e).red());
