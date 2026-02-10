@@ -1,0 +1,23 @@
+id: REQ-WEB-009
+type: requirement
+title: Blog Visual Redesign and Engagement Features
+body: >-
+  The blog renderer shall support styled blockquotes with attribution, callout/insight boxes,
+  an inline flow diagram showing the Lattice node type pipeline, source cards replacing plain
+  markdown links, and an author bio section. Engagement features shall include a discussion CTA
+  prompt, share links (X, LinkedIn, Hacker News), and Giscus-powered GitHub Discussions comments.
+  All features render on individual post pages only, not the blog listing.
+status: active
+version: 1.0.0
+created_at: 2026-02-09T00:00:00.000000+00:00
+created_by: agent:claude-2026-02-09
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: WEB
+tags:
+- blog
+- engagement
+- visual-design
+- giscus
+edges:
+  depends_on: []
