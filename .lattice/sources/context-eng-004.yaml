@@ -1,0 +1,13 @@
+id: SRC-CONTEXT-ENG-004
+type: source
+title: 'LangChain: The Rise of Context Engineering'
+body: 'Harrison Chase''s framework organizing context engineering into four strategies: write context (persist for later retrieval), select context (pull relevant info), compress context (reduce tokens), isolate context (segregate via sub-agents). Frames prompt engineering as a subset of context engineering.'
+status: active
+version: 1.0.0
+created_at: 2026-02-10T03:35:38.691262+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://blog.langchain.com/the-rise-of-context-engineering/
+  reliability: industry
+  retrieved_at: 2026-02-10

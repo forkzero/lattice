@@ -1,0 +1,13 @@
+id: SRC-CONTEXT-ENG-002
+type: source
+title: 'Anthropic: Effective Context Engineering for AI Agents'
+body: Anthropic Applied AI team guide on context engineering. Defines the guiding principle as finding 'the smallest set of high-signal tokens that maximize the likelihood of your desired outcome.' Covers system prompts, tool design, sub-agent architectures, and memory patterns.
+status: active
+version: 1.0.0
+created_at: 2026-02-10T03:35:34.436783+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents
+  reliability: industry
+  retrieved_at: 2026-02-10

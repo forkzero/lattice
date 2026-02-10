@@ -1,0 +1,13 @@
+id: SRC-CONTEXT-ENG-001
+type: source
+title: Karpathy on Context Engineering
+body: Andrej Karpathy's endorsement of 'context engineering' over 'prompt engineering'. Defines it as 'the delicate art and science of filling the context window with just the right information for the next step' — involving task descriptions, few-shot examples, RAG, related data, tools, state/history, and compacting.
+status: active
+version: 1.0.0
+created_at: 2026-02-10T03:35:30.248152+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://x.com/karpathy/status/1937902205765607626
+  reliability: industry
+  retrieved_at: 2026-02-10

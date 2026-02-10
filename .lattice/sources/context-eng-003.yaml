@@ -1,0 +1,13 @@
+id: SRC-CONTEXT-ENG-003
+type: source
+title: Tobi Lutke on Context Engineering
+body: 'Shopify CEO Tobi Lutke''s tweet that catalyzed the term: ''I really like the term context engineering over prompt engineering. It describes the core skill better: the art of providing all the context for the task to be plausibly solvable by the LLM.'''
+status: active
+version: 1.0.0
+created_at: 2026-02-10T03:35:36.097986+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://x.com/tobi/status/1935533422589399127
+  reliability: industry
+  retrieved_at: 2026-02-10

@@ -1,0 +1,13 @@
+id: SRC-CONTEXT-ENG-006
+type: source
+title: 'Gartner: Context Engineering Is In, Prompt Engineering Is Out'
+body: Gartner declared in July 2025 that 'context engineering is in, and prompt engineering is out' and recommended AI leaders 'prioritize context over prompts.' Provides institutional validation of the shift from prompt-level to system-level thinking.
+status: active
+version: 1.0.0
+created_at: 2026-02-10T03:35:45.045799+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://www.gartner.com/en/articles/context-engineering
+  reliability: industry
+  retrieved_at: 2026-02-10

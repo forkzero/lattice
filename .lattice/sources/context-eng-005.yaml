@@ -1,0 +1,13 @@
+id: SRC-CONTEXT-ENG-005
+type: source
+title: 'Manus: Context Engineering for AI Agents'
+body: 'Production lessons from building the Manus AI agent. Key insights: KV-cache hit rate is the most important metric, treat file system as unlimited extended memory, update todo.md to push objectives into recent context, preserve errors in context for implicit belief updating.'
+status: active
+version: 1.0.0
+created_at: 2026-02-10T03:35:42.111389+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://manus.im/blog/Context-Engineering-for-AI-Agents-Lessons-from-Building-Manus
+  reliability: industry
+  retrieved_at: 2026-02-10
