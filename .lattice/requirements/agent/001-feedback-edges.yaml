@@ -58,6 +58,10 @@ acceptance:
   when: '`lattice graph THX-* --direction downstream` runs'
   then: the implementation's feedback edge is included
   verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-15T13:55:57.990322+00:00
+  resolved_by: agent:claude-2026-02-15
 edges:
   derives_from:
   - target: THX-BIDIRECTIONAL-FLOW

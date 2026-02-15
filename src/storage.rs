@@ -831,6 +831,92 @@ fn next_suffix(root: &Path, parent_id: &str) -> Result<String, StorageError> {
     }
 }
 
+/// Valid edge type names.
+pub const EDGE_TYPES: &[&str] = &[
+    "supported_by",
+    "derives_from",
+    "depends_on",
+    "satisfies",
+    "extends",
+    "reveals_gap_in",
+    "challenges",
+    "validates",
+    "conflicts_with",
+    "supersedes",
+];
+
+/// Options for adding a standalone edge between two existing nodes.
+pub struct AddEdgeOptions {
+    pub from_id: String,
+    pub edge_type: String,
+    pub to_id: String,
+    pub rationale: Option<String>,
+}
+
+/// Add an edge from one node to another.
+///
+/// Loads the source node, looks up the target node's current version,
+/// creates or updates the edge, and saves. If an edge of the same type
+/// to the same target already exists, it is updated (version + rationale).
+pub fn add_edge(root: &Path, options: AddEdgeOptions) -> Result<PathBuf, StorageError> {
+    if !EDGE_TYPES.contains(&options.edge_type.as_str()) {
+        return Err(StorageError::InvalidNodeType(format!(
+            "Unknown edge type '{}'. Valid types: {}",
+            options.edge_type,
+            EDGE_TYPES.join(", ")
+        )));
+    }
+
+    // Load target node to capture its current version
+    let target_path = find_node_path(root, &options.to_id)?;
+    let target_node = load_node(&target_path)?;
+
+    // Load source node
+    let from_path = find_node_path(root, &options.from_id)?;
+    let mut from_node = load_node(&from_path)?;
+
+    let new_edge = EdgeReference {
+        target: options.to_id.clone(),
+        version: Some(target_node.version.clone()),
+        rationale: options.rationale,
+    };
+
+    let edges = from_node.edges.get_or_insert_with(Edges::default);
+
+    // Get the correct edge vector by type and upsert
+    macro_rules! upsert_edge {
+        ($field:ident) => {{
+            if let Some(vec) = &mut edges.$field {
+                if let Some(existing) = vec.iter_mut().find(|e| e.target == options.to_id) {
+                    existing.version = Some(target_node.version.clone());
+                    existing.rationale = new_edge.rationale;
+                } else {
+                    vec.push(new_edge);
+                }
+            } else {
+                edges.$field = Some(vec![new_edge]);
+            }
+        }};
+    }
+
+    match options.edge_type.as_str() {
+        "supported_by" => upsert_edge!(supported_by),
+        "derives_from" => upsert_edge!(derives_from),
+        "depends_on" => upsert_edge!(depends_on),
+        "satisfies" => upsert_edge!(satisfies),
+        "extends" => upsert_edge!(extends),
+        "reveals_gap_in" => upsert_edge!(reveals_gap_in),
+        "challenges" => upsert_edge!(challenges),
+        "validates" => upsert_edge!(validates),
+        "conflicts_with" => upsert_edge!(conflicts_with),
+        "supersedes" => upsert_edge!(supersedes),
+        _ => unreachable!(),
+    }
+
+    save_node(&from_path, &from_node)?;
+    Ok(from_path)
+}
+
 /// Options for verifying an implementation satisfies a requirement.
 pub struct VerifyOptions {
     pub implementation_id: String,
@@ -1492,6 +1578,178 @@ mod tests {
                 proposed: None,
                 implementation_id: None,
                 created_by: "test".to_string(),
+            },
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_edge_creates_edge() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        // Create two nodes
+        let req_opts = AddRequirementOptions {
+            id: "REQ-EDGE-001".to_string(),
+            title: "Edge target".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P1,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, req_opts).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-EDGE-001".to_string(),
+            title: "Edge source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        // Add edge
+        let edge_opts = AddEdgeOptions {
+            from_id: "IMP-EDGE-001".to_string(),
+            edge_type: "reveals_gap_in".to_string(),
+            to_id: "REQ-EDGE-001".to_string(),
+            rationale: Some("Missing timeout spec".to_string()),
+        };
+        let path = add_edge(root, edge_opts).unwrap();
+
+        // Verify edge was persisted
+        let node = load_node(&path).unwrap();
+        let edges = node.edges.unwrap();
+        let gaps = edges.reveals_gap_in.unwrap();
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].target, "REQ-EDGE-001");
+        assert_eq!(gaps[0].version.as_deref(), Some("1.0.0"));
+        assert_eq!(gaps[0].rationale.as_deref(), Some("Missing timeout spec"));
+    }
+
+    #[test]
+    fn test_add_edge_upserts_existing() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let req_opts = AddRequirementOptions {
+            id: "REQ-UPS-001".to_string(),
+            title: "Upsert target".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P0,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, req_opts).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-UPS-001".to_string(),
+            title: "Upsert source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        // Add edge first time
+        add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-UPS-001".to_string(),
+                edge_type: "validates".to_string(),
+                to_id: "REQ-UPS-001".to_string(),
+                rationale: Some("First rationale".to_string()),
+            },
+        )
+        .unwrap();
+
+        // Add same edge again with different rationale (should upsert)
+        let path = add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-UPS-001".to_string(),
+                edge_type: "validates".to_string(),
+                to_id: "REQ-UPS-001".to_string(),
+                rationale: Some("Updated rationale".to_string()),
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        let edges = node.edges.unwrap();
+        let validates = edges.validates.unwrap();
+        assert_eq!(validates.len(), 1); // Should not duplicate
+        assert_eq!(validates[0].rationale.as_deref(), Some("Updated rationale"));
+    }
+
+    #[test]
+    fn test_add_edge_invalid_type() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let result = add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-X".to_string(),
+                edge_type: "bad_type".to_string(),
+                to_id: "REQ-Y".to_string(),
+                rationale: None,
+            },
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown edge type")
+        );
+    }
+
+    #[test]
+    fn test_add_edge_nonexistent_target() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-EXIST-001".to_string(),
+            title: "Exists".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        let result = add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-EXIST-001".to_string(),
+                edge_type: "validates".to_string(),
+                to_id: "NONEXISTENT".to_string(),
+                rationale: None,
             },
         );
         assert!(result.is_err());

@@ -1,32 +1,26 @@
 id: IMP-CLI-001
 type: implementation
 title: CLI Entry Point (main.rs)
-body: >
-  Clap-based CLI with subcommands: init, add (requirement/thesis/source),
-  list, get, resolve, plan, drift, export. Handles argument parsing,
-  validation, colored output, and error reporting. Delegates to storage
-  and graph modules for operations.
+body: |
+  Clap-based CLI with subcommands: init, add (requirement/thesis/source), list, get, resolve, plan, drift, export. Handles argument parsing, validation, colored output, and error reporting. Delegates to storage and graph modules for operations.
 status: active
 version: 1.0.0
 created_at: 2026-02-04T21:00:00.000000+00:00
 created_by: agent:claude-opus-4.5-2026-02-04
-meta:
-  language: rust
-  files:
-    - path: src/main.rs
-      functions:
-        - main
-        - parse_priority
-        - parse_status
-        - parse_reliability
-        - parse_thesis_category
-        - print_plan
-        - get_lattice_root
+meta: {}
 edges:
   satisfies:
-    - target: REQ-CLI-003
-      version: 1.0.0
-      rationale: list and get subcommands for querying the lattice
-    - target: REQ-CLI-008
-      version: 1.0.0
-      rationale: resolve subcommand with verified/blocked/deferred/wontfix
+  - target: REQ-CLI-003
+    version: 1.0.0
+    rationale: list and get subcommands for querying the lattice
+  - target: REQ-CLI-008
+    version: 1.0.0
+    rationale: resolve subcommand with verified/blocked/deferred/wontfix
+  reveals_gap_in:
+  - target: REQ-AGENT-001
+    version: 1.0.0
+    rationale: No CLI command existed for standalone edge creation
+  validates:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: CLI with --format json confirms agents consume structured, queryable knowledge effectively

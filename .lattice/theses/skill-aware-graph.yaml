@@ -1,0 +1,24 @@
+id: THX-SKILL-AWARE-GRAPH
+type: thesis
+title: A Knowledge Graph Should Be Skill-Aware
+body: "A knowledge graph that connects research to strategy to requirements to implementation knows what needs doing — but not who or what can do it. Extending the graph with awareness of external capabilities (agent skills, tools, specs) closes this gap. When the product owner evaluates theses, it should know which analytical skills exist to stress-test them. When requirements are ready for implementation, it should know which coding skills match the tech stack. When a skill is updated in a registry, the graph should surface it as a potential source update — the same drift detection that tracks node versions can track skill versions. This makes the lattice a coordination layer not just for knowledge but for capability: it answers 'what do we know, what do we need to do, and what can help us do it.' The principle is platform-agnostic — registries like Tessl, community catalogs like SkillsMP, or internal skill libraries are all valid capability sources. The lattice should not depend on any single marketplace but should model external capabilities as a queryable dimension of the graph."
+status: active
+version: 1.0.0
+created_at: 2026-02-15T12:00:00+00:00
+created_by: human:george
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  category: strategic
+  confidence: 0.7
+edges:
+  supported_by:
+  - target: SRC-SKILLS-MARKETPLACE-001
+    version: 1.0.0
+    rationale: Tessl demonstrates that skills need lifecycle management and registries provide queryable capability catalogs
+  validates:
+  - target: THX-AGENT-PRODUCT-OWNER
+    version: 1.0.0
+    rationale: A skill-aware graph gives the product owner agent the ability to recommend capabilities, not just identify gaps
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Skill registries are structured, queryable capability data — exactly the kind of information agents consume better than humans

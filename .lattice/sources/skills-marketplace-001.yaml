@@ -1,0 +1,13 @@
+id: SRC-SKILLS-MARKETPLACE-001
+type: source
+title: 'Tessl: Skills as Software with a Full Lifecycle'
+body: "Tessl treats agent skills as versioned software artifacts with a full lifecycle: build, evaluate, distribute, and optimize. Their registry indexes 3,000+ skills and 10,000+ usage specs, providing a package manager (CLI: tessl i github:owner/repo) with version tracking via tessl.json manifests. Skills use a SKILL.md format and are agent/model-agnostic — the same skill works across Claude Code, Cursor, Codex, and Gemini. Tessl's evaluation system scores skills against Anthropic's best practices (review evals) and measures real-world task performance (task evals). Their spec-driven development framework is philosophically adjacent to requirements-first development: specs describe intent in structured, testable language before coding begins. The key architectural insight is that agent context — skills, documentation, rules — needs the same lifecycle management as code dependencies."
+status: active
+version: 1.0.0
+created_at: 2026-02-15T12:00:00+00:00
+created_by: human:george
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://tessl.io/blog/skills-are-software-and-they-need-a-lifecycle-introducing-skills-on-tessl/
+  reliability: industry
+  retrieved_at: 2026-02-15

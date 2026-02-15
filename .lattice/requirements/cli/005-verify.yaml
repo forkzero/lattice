@@ -50,6 +50,10 @@ acceptance:
   when: '`lattice verify` runs'
   then: edge version is updated to current requirement version
   verification: automated
+resolution:
+  status: verified
+  resolved_at: 2026-02-15T13:47:58.518008+00:00
+  resolved_by: agent:claude-2026-02-15
 edges:
   derives_from:
   - target: THX-VERSION-AWARE

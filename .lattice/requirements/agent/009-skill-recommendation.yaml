@@ -1,0 +1,26 @@
+id: REQ-AGENT-009
+type: requirement
+title: Skill Recommendation from Graph Analysis
+body: "The product owner agent should analyze the lattice graph to recommend external skills or agents that could help evaluate theses or implement requirements. Given a thesis in status 'active' with low confidence, the agent should suggest analytical or research skills that could stress-test the claim. Given a requirement in status 'active' with no satisfying implementation, the agent should suggest implementation skills matching the tech stack and domain. Recommendations are recorded as edges (e.g. 'recommends_skill') pointing to a lightweight skill-reference node, so the reasoning is persistent and auditable. The recommendation logic should be registry-agnostic — it reasons about capability needs from the graph structure and matches against whatever skill catalogs are configured as sources. Initial implementation can use the product owner's own reasoning over skill descriptions; later iterations may use structured search APIs."
+status: active
+version: 1.0.0
+created_at: 2026-02-15T12:00:00+00:00
+created_by: human:george
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: AGENT
+tags:
+- agent
+- skills
+- recommendation
+edges:
+  derives_from:
+  - target: THX-SKILL-AWARE-GRAPH
+    version: 1.0.0
+  depends_on:
+  - target: REQ-AGENT-005
+    version: 1.1.0
+    rationale: Requires the product owner sub-agent to exist as the primary consumer
+  - target: REQ-AGENT-007
+    version: 1.0.0
+    rationale: Recommendations must be written to the lattice as persistent working memory

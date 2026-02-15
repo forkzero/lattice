@@ -5,13 +5,13 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
-    AddImplementationOptions, AddRequirementOptions, AddSourceOptions, AddThesisOptions, Audience,
-    DriftSeverity, ExportOptions, GapType, HtmlExportOptions, LatticeData, LintSeverity, Plan,
-    Priority, RefineOptions, Resolution, ResolveOptions, Status, VerifyOptions, add_implementation,
-    add_requirement, add_source, add_thesis, build_node_index, export_html, export_narrative,
-    find_drift, find_lattice_root, fix_issues, generate_plan, get_github_pages_url, init_lattice,
-    lint_lattice, load_config, load_nodes_by_type, refine_requirement, resolve_node,
-    verify_implementation,
+    AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
+    AddThesisOptions, Audience, DriftSeverity, ExportOptions, GapType, HtmlExportOptions,
+    LatticeData, LintSeverity, Plan, Priority, RefineOptions, Resolution, ResolveOptions, Status,
+    VerifyOptions, add_edge, add_implementation, add_requirement, add_source, add_thesis,
+    build_node_index, export_html, export_narrative, find_drift, find_lattice_root, fix_issues,
+    generate_plan, get_github_pages_url, init_lattice, lint_lattice, load_config,
+    load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -409,6 +409,30 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Add an edge between two existing nodes
+    Edge {
+        /// Source node ID (edge goes FROM this node)
+        #[arg(long)]
+        from: String,
+
+        /// Edge type (supported_by, derives_from, depends_on, satisfies, extends,
+        /// reveals_gap_in, challenges, validates, conflicts_with, supersedes)
+        #[arg(long, name = "type")]
+        edge_type: String,
+
+        /// Target node ID (edge goes TO this node)
+        #[arg(long)]
+        to: String,
+
+        /// Why this edge exists
+        #[arg(long)]
+        rationale: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -823,6 +847,22 @@ fn build_command_catalog() -> serde_json::Value {
                 ]
             },
             {
+                "name": "add edge",
+                "description": "Add an edge between two existing nodes (feedback, dependency, traceability)",
+                "parameters": [
+                    param("--from", "string", true, "Source node ID (edge goes FROM this node)"),
+                    param("--type", "string", true, "Edge type: supported_by, derives_from, depends_on, satisfies, extends, reveals_gap_in, challenges, validates, conflicts_with, supersedes"),
+                    param("--to", "string", true, "Target node ID (edge goes TO this node)"),
+                    param("--rationale", "string", false, "Why this edge exists"),
+                    param("--format", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice add edge --from IMP-CLI-001 --type reveals_gap_in --to REQ-CORE-005 --rationale 'Requirement does not specify timeout behavior'",
+                    "lattice add edge --from IMP-CLI-001 --type validates --to THX-AGENT-NATIVE-TOOLS --rationale 'CLI confirms structured knowledge is queryable'",
+                    "lattice add edge --from IMP-CLI-001 --type challenges --to THX-PROSE-PRIMARY --rationale 'Agents prefer JSON over prose'"
+                ]
+            },
+            {
                 "name": "resolve",
                 "description": "Resolve a requirement with a status",
                 "parameters": [
@@ -1169,6 +1209,48 @@ fn main() {
                 match add_implementation(&root, options) {
                     Ok(path) => emit_created(&format, "implementation", &id, &path),
                     Err(e) => emit_error(&format, "add_error", &e.to_string()),
+                }
+            }
+
+            AddCommands::Edge {
+                from,
+                edge_type,
+                to,
+                rationale,
+                format,
+            } => {
+                let root = get_lattice_root();
+
+                let options = AddEdgeOptions {
+                    from_id: from.clone(),
+                    edge_type: edge_type.clone(),
+                    to_id: to.clone(),
+                    rationale,
+                };
+
+                match add_edge(&root, options) {
+                    Ok(path) => {
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "success": true,
+                                    "from": from,
+                                    "edge_type": edge_type,
+                                    "to": to,
+                                    "file": path.display().to_string(),
+                                }))
+                                .unwrap()
+                            );
+                        } else {
+                            println!(
+                                "{}",
+                                format!("Added edge: {} --[{}]--> {}", from, edge_type, to).green()
+                            );
+                            println!("{}", format!("File: {}", path.display()).dimmed());
+                        }
+                    }
+                    Err(e) => emit_error(&format, "add_edge_error", &e.to_string()),
                 }
             }
         },
