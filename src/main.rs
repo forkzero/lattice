@@ -21,7 +21,7 @@ use std::process;
 #[derive(Parser)]
 #[command(name = "lattice")]
 #[command(about = "A knowledge coordination protocol for human-agent collaboration")]
-#[command(version = "0.1.1")]
+#[command(version = "0.1.3")]
 #[command(disable_help_subcommand = true)]
 struct Cli {
     #[command(subcommand)]
@@ -732,7 +732,7 @@ fn build_command_catalog() -> serde_json::Value {
         };
 
     json!({
-        "version": "0.1.0",
+        "version": "0.1.3",
         "commands": [
             {
                 "name": "init",
