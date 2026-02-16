@@ -487,6 +487,20 @@ OUT=$(lattice export --audience investor)
 assert_contains "$OUT" "Lattice" "Investor export: has title"
 pass "Investor audience export succeeded"
 
+# === Init --skill ===
+echo ""
+echo "--- Init --skill (Claude Code Skill Installation) ---"
+
+lattice init --skill
+assert_file_exists ".claude/skills/lattice/SKILL.md" "init --skill: SKILL.md created"
+assert_file_exists ".claude/agents/product-owner.md" "init --skill: product-owner agent created"
+
+SKILL_CONTENT=$(cat .claude/skills/lattice/SKILL.md)
+assert_contains "$SKILL_CONTENT" "lattice summary" "SKILL.md: contains summary command"
+assert_contains "$SKILL_CONTENT" "lattice list" "SKILL.md: contains list command"
+assert_contains "$SKILL_CONTENT" "product-owner" "SKILL.md: references product-owner agent"
+assert_contains "$SKILL_CONTENT" "knowledge graph integration" "SKILL.md: has frontmatter description"
+
 # === Init Idempotency ===
 echo ""
 echo "--- Init Idempotency ---"

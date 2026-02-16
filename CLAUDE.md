@@ -89,7 +89,8 @@ The `.lattice/` directory is the source of truth. YAML files organized by node t
 ## CLI Commands
 
 ```bash
-lattice init                    # Initialize lattice (stub)
+lattice init                    # Initialize lattice
+lattice init --skill            # Initialize + install Claude Code skill + agents
 lattice list <type>             # List nodes (sources, theses, requirements, implementations)
 lattice get <id>                # Get a specific node
 lattice drift                   # Check for version drift

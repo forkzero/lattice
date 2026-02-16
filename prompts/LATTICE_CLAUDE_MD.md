@@ -46,3 +46,7 @@ lattice add requirement \
 - `blocked` - Waiting on dependency
 - `deferred` - Postponed to later milestone
 - `wontfix` - Rejected/out of scope
+
+---
+
+> **Using Claude Code?** Run `lattice init --skill` to install the `/lattice` skill instead of pasting this manually.

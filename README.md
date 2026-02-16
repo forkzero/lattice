@@ -121,6 +121,9 @@ Or download from [GitHub Releases](https://github.com/forkzero/lattice/releases)
 # Initialize in your project
 lattice init
 
+# Or initialize with Claude Code skill + agent support
+lattice init --skill
+
 # Add a requirement
 lattice add requirement \
   --id REQ-AUTH-001 \
@@ -159,7 +162,18 @@ You can also use `lattice export --format html` for a self-contained HTML dashbo
 
 ## For AI Agents
 
-Lattice includes an MCP server for AI integration:
+### Claude Code (recommended)
+
+```bash
+# Install the /lattice skill and product-owner agent
+lattice init --skill
+```
+
+This creates `.claude/skills/lattice/SKILL.md` (a `/lattice` skill with commands, workflow, and node/edge reference) and `.claude/agents/product-owner.md` (a product owner agent for backlog triage and planning).
+
+### MCP Server
+
+Lattice includes an MCP server for broader AI integration:
 
 ```bash
 # Run as MCP server
@@ -180,6 +194,8 @@ Or add to your project's `.mcp.json`:
 ```
 
 **MCP Tools**: `lattice_summary`, `lattice_search`, `lattice_get`, `lattice_list`, `lattice_resolve`, `lattice_add_requirement`, `lattice_drift`
+
+### Manual CLAUDE.md snippet
 
 ```bash
 # Generate CLAUDE.md integration snippet

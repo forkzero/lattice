@@ -45,6 +45,10 @@ enum Commands {
         /// Also install agent definitions (.claude/agents/)
         #[arg(long)]
         agents: bool,
+
+        /// Install Claude Code skill and agent definitions
+        #[arg(long)]
+        skill: bool,
     },
 
     /// Add a node (requirement, thesis, source, implementation, or edge) to the lattice
@@ -633,6 +637,35 @@ fn install_agent_definitions(root: &std::path::Path) -> Result<Vec<std::path::Pa
     Ok(created)
 }
 
+fn install_skill_definitions(root: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let skill_dir = root.join(".claude").join("skills").join("lattice");
+    std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
+
+    let skill_path = skill_dir.join("SKILL.md");
+    std::fs::write(&skill_path, include_str!("../skills/lattice/SKILL.md"))
+        .map_err(|e| e.to_string())?;
+
+    Ok(vec![skill_path])
+}
+
+fn detect_claude_code(root: &std::path::Path) -> bool {
+    root.join("CLAUDE.md").exists() || root.join(".claude").exists()
+}
+
+fn prompt_yes_no(message: &str) -> bool {
+    use std::io::{self, BufRead, Write};
+
+    eprint!("{} ", message);
+    io::stderr().flush().ok();
+
+    let stdin = io::stdin();
+    let mut line = String::new();
+    if stdin.lock().read_line(&mut line).is_err() {
+        return false;
+    }
+    matches!(line.trim().to_lowercase().as_str(), "y" | "yes")
+}
+
 fn print_plan(plan: &Plan, index: &lattice::NodeIndex) {
     // Print summary
     println!("{}", "IMPLEMENTATION PLAN".bold());
@@ -795,12 +828,14 @@ fn build_command_catalog() -> serde_json::Value {
                 "description": "Initialize a new lattice in the current directory",
                 "parameters": [
                     param("--force", "bool", false, "Overwrite existing lattice"),
-                    param("--agents", "bool", false, "Install agent definitions (.claude/agents/)")
+                    param("--agents", "bool", false, "Install agent definitions (.claude/agents/)"),
+                    param("--skill", "bool", false, "Install Claude Code skill and agent definitions (.claude/skills/lattice/)")
                 ],
                 "examples": [
                     "lattice init",
                     "lattice init --force",
-                    "lattice init --agents"
+                    "lattice init --agents",
+                    "lattice init --skill"
                 ]
             },
             {
@@ -1100,25 +1135,49 @@ fn main() {
     };
 
     match command {
-        Commands::Init { force, agents } => {
+        Commands::Init {
+            force,
+            agents,
+            skill,
+        } => {
             let cwd = env::current_dir().expect("Failed to get current directory");
-
-            // If --agents is passed on an existing lattice, just install agents
             let lattice_exists = cwd.join(".lattice").exists();
-            if agents && lattice_exists && !force {
-                match install_agent_definitions(&cwd) {
-                    Ok(agent_paths) => {
-                        for path in &agent_paths {
-                            let display = path.strip_prefix(&cwd).unwrap_or(path);
-                            println!("{}", format!("Created {}", display.display()).green());
+            let install_agents = agents || skill;
+
+            // If --skill or --agents on an existing lattice, install standalone
+            if (install_agents) && lattice_exists && !force {
+                let mut installed = Vec::new();
+
+                if skill {
+                    match install_skill_definitions(&cwd) {
+                        Ok(paths) => installed.extend(paths),
+                        Err(e) => {
+                            eprintln!("{}", format!("Error: {}", e).red());
+                            process::exit(1);
                         }
-                        println!();
-                        println!("{}", "Agent definitions installed.".green().bold());
                     }
+                }
+
+                match install_agent_definitions(&cwd) {
+                    Ok(paths) => installed.extend(paths),
                     Err(e) => {
                         eprintln!("{}", format!("Error: {}", e).red());
                         process::exit(1);
                     }
+                }
+
+                for path in &installed {
+                    let display = path.strip_prefix(&cwd).unwrap_or(path);
+                    println!("{}", format!("Created {}", display.display()).green());
+                }
+                println!();
+                if skill {
+                    println!(
+                        "{}",
+                        "Skill and agent definitions installed.".green().bold()
+                    );
+                } else {
+                    println!("{}", "Agent definitions installed.".green().bold());
                 }
             } else {
                 match init_lattice(&cwd, force) {
@@ -1128,7 +1187,67 @@ fn main() {
                             println!("{}", format!("Created {}", display.display()).green());
                         }
 
-                        if agents {
+                        if install_agents {
+                            if skill {
+                                match install_skill_definitions(&cwd) {
+                                    Ok(paths) => {
+                                        for path in &paths {
+                                            let display = path.strip_prefix(&cwd).unwrap_or(path);
+                                            println!(
+                                                "{}",
+                                                format!("Created {}", display.display()).green()
+                                            );
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!(
+                                            "{}",
+                                            format!("Warning: failed to install skill: {}", e)
+                                                .yellow()
+                                        );
+                                    }
+                                }
+                            }
+                            match install_agent_definitions(&cwd) {
+                                Ok(agent_paths) => {
+                                    for path in &agent_paths {
+                                        let display = path.strip_prefix(&cwd).unwrap_or(path);
+                                        println!(
+                                            "{}",
+                                            format!("Created {}", display.display()).green()
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "{}",
+                                        format!("Warning: failed to install agents: {}", e)
+                                            .yellow()
+                                    );
+                                }
+                            }
+                        } else if detect_claude_code(&cwd)
+                            && prompt_yes_no(
+                                "Detected CLAUDE.md. Install Lattice skill for Claude Code? (y/N)",
+                            )
+                        {
+                            match install_skill_definitions(&cwd) {
+                                Ok(paths) => {
+                                    for path in &paths {
+                                        let display = path.strip_prefix(&cwd).unwrap_or(path);
+                                        println!(
+                                            "{}",
+                                            format!("Created {}", display.display()).green()
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "{}",
+                                        format!("Warning: failed to install skill: {}", e).yellow()
+                                    );
+                                }
+                            }
                             match install_agent_definitions(&cwd) {
                                 Ok(agent_paths) => {
                                     for path in &agent_paths {
@@ -1155,8 +1274,10 @@ fn main() {
                         println!("Next steps:");
                         println!("  lattice seed              # Bootstrap from vision");
                         println!("  lattice add requirement   # Add a requirement manually");
-                        if !agents {
-                            println!("  lattice init --agents     # Install agent definitions");
+                        if !install_agents {
+                            println!(
+                                "  lattice init --skill      # Install Claude Code skill + agents"
+                            );
                         }
                     }
                     Err(e) => {
@@ -2531,6 +2652,12 @@ fn main() {
             } else {
                 print!("{}", include_str!("../prompts/LATTICE_CLAUDE_MD.md"));
             }
+            eprintln!();
+            eprintln!(
+                "{}",
+                "Tip: If using Claude Code, run `lattice init --skill` to install as a skill instead."
+                    .dimmed()
+            );
         }
 
         Commands::Help { json } => {
