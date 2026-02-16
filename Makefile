@@ -1,8 +1,12 @@
-.PHONY: fmt lint test check build clean install docker-e2e
+.PHONY: fmt lint test check build clean install docker-e2e pre-commit pre-push
 
 # Format code
 fmt:
 	cargo fmt
+
+# Check formatting without modifying files
+fmt-check:
+	cargo fmt --check
 
 # Run clippy lints
 lint:
@@ -12,7 +16,15 @@ lint:
 test:
 	cargo test
 
-# Pre-commit check: format, lint, test
+# Pre-commit gate: fast checks (format + lint)
+pre-commit: fmt-check lint
+	@echo "Pre-commit checks passed."
+
+# Pre-push gate: full checks (format + lint + test + build)
+pre-push: pre-commit test build
+	@echo "Pre-push checks passed."
+
+# Legacy alias
 check: fmt lint test
 	@echo "All checks passed!"
 
@@ -54,12 +66,13 @@ watch:
 # Help
 help:
 	@echo "Available targets:"
-	@echo "  make fmt      - Format code with cargo fmt"
-	@echo "  make lint     - Run clippy lints"
-	@echo "  make test     - Run tests"
-	@echo "  make check    - Run fmt, lint, test (pre-commit)"
-	@echo "  make build    - Build release binary"
-	@echo "  make clean    - Clean build artifacts"
+	@echo "  make pre-commit - Check formatting + lint (run before commit)"
+	@echo "  make pre-push   - Full check: format + lint + test + build (run before push)"
+	@echo "  make fmt        - Format code with cargo fmt"
+	@echo "  make lint       - Run clippy lints"
+	@echo "  make test       - Run tests"
+	@echo "  make build      - Build release binary"
+	@echo "  make clean      - Clean build artifacts"
 	@echo "  make install  - Install to ~/.cargo/bin"
 	@echo "  make smoke      - Run CLI smoke tests"
 	@echo "  make docker-e2e - Run Docker end-to-end integration test"

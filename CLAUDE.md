@@ -54,9 +54,14 @@ cargo run -- <command>
 ./target/debug/lattice <command>
 ./target/release/lattice <command>
 
-# Check all (format, clippy, test, build)
-cargo fmt --check && cargo clippy -- -D warnings && cargo test && cargo build --release
+# Pre-commit gate (ALWAYS run before committing)
+make pre-commit
+
+# Pre-push gate (ALWAYS run before pushing)
+make pre-push
 ```
+
+**Important**: Always run `make pre-commit` before any commit and `make pre-push` before any push. This matches what CI checks and prevents push-then-fix cycles.
 
 ## Key Concepts
 
