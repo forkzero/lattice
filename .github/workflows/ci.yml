@@ -50,6 +50,12 @@ jobs:
       - name: Build release
         run: cargo build --release
 
+      - name: Upload release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: lattice-linux
+          path: target/release/lattice
+
   # Validate lattice structure (self-describing)
   validate-lattice:
     name: Validate Lattice Structure
@@ -102,44 +108,57 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Download release binary
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release
-        run: cargo build --release
+          name: lattice-linux
+          path: bin
 
       - name: Smoke test - version
-        run: ./target/release/lattice --version
+        run: chmod +x bin/lattice && bin/lattice --version
 
       - name: Smoke test - list requirements
-        run: ./target/release/lattice list requirements
+        run: bin/lattice list requirements
 
       - name: Smoke test - list theses
-        run: ./target/release/lattice list theses
+        run: bin/lattice list theses
 
       - name: Smoke test - list sources
-        run: ./target/release/lattice list sources
+        run: bin/lattice list sources
 
       - name: Smoke test - get requirement
-        run: ./target/release/lattice get REQ-CICD-001
+        run: bin/lattice get REQ-CICD-001
 
       - name: Smoke test - drift check
-        run: ./target/release/lattice drift
+        run: bin/lattice drift
 
       - name: Smoke test - export overview
-        run: ./target/release/lattice export --audience overview
+        run: bin/lattice export --audience overview
 
       - name: Smoke test - export contributor
-        run: ./target/release/lattice export --audience contributor
+        run: bin/lattice export --audience contributor
+
+  # End-to-end integration test (full CLI workflow from scratch)
+  e2e-test:
+    name: E2E Integration Test
+    runs-on: ubuntu-latest
+    needs: ci
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release binary
+        uses: actions/download-artifact@v4
+        with:
+          name: lattice-linux
+          path: bin
+
+      - name: Run e2e tests
+        run: |
+          chmod +x bin/lattice
+          export PATH="$PWD/bin:$PATH"
+          bash tests/docker/e2e-test.sh
 
   # Code coverage measurement
   coverage:

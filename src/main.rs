@@ -60,9 +60,13 @@ enum Commands {
         #[arg(short, long)]
         priority: Option<String>,
 
-        /// Show only pending items (blocked or deferred)
+        /// Show only blocked items
         #[arg(long)]
-        pending: bool,
+        blocked: bool,
+
+        /// Show only deferred items
+        #[arg(long)]
+        deferred: bool,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -215,11 +219,11 @@ enum Commands {
         description: String,
 
         /// Proposed resolution
-        #[arg(long)]
+        #[arg(long, alias = "proposal")]
         proposed: Option<String>,
 
         /// Implementation ID that discovered this gap
-        #[arg(long)]
+        #[arg(long, alias = "discovered-by")]
         implementation: Option<String>,
 
         /// Output format (text, json)
@@ -230,8 +234,12 @@ enum Commands {
     /// Search nodes with filters (text, priority, resolution, tags, category, proximity)
     Search {
         /// Node type to search (sources, theses, requirements, implementations)
-        #[arg(short = 't', long, default_value = "requirements")]
-        node_type: String,
+        #[arg(value_name = "NODE_TYPE")]
+        positional_type: Option<String>,
+
+        /// Node type to search (alternative to positional arg)
+        #[arg(short = 't', long)]
+        node_type: Option<String>,
 
         /// Text search in title and body
         #[arg(short, long)]
@@ -423,7 +431,7 @@ enum AddCommands {
 
         /// Edge type (supported_by, derives_from, depends_on, satisfies, extends,
         /// reveals_gap_in, challenges, validates, conflicts_with, supersedes)
-        #[arg(long, name = "type")]
+        #[arg(long, alias = "type", name = "type")]
         edge_type: String,
 
         /// Target node ID (edge goes TO this node)
@@ -712,6 +720,17 @@ fn build_command_catalog() -> serde_json::Value {
         })
     };
 
+    let param_s =
+        |name: &str, short: &str, typ: &str, required: bool, desc: &str| -> serde_json::Value {
+            json!({
+                "name": name,
+                "short": short,
+                "type": typ,
+                "required": required,
+                "description": desc
+            })
+        };
+
     json!({
         "version": "0.1.0",
         "commands": [
@@ -733,10 +752,11 @@ fn build_command_catalog() -> serde_json::Value {
                 "description": "List nodes of a given type",
                 "parameters": [
                     param("node_type", "string", true, "Node type: sources, theses, requirements, implementations"),
-                    param("--status", "string", false, "Filter by status"),
-                    param("--priority", "string", false, "Filter by priority (P0, P1, P2)"),
-                    param("--pending", "bool", false, "Show only blocked/deferred items"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--status", "-s", "string", false, "Filter by status"),
+                    param_s("--priority", "-p", "string", false, "Filter by priority (P0, P1, P2)"),
+                    param("--blocked", "bool", false, "Show only blocked items"),
+                    param("--deferred", "bool", false, "Show only deferred items"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice list requirements",
@@ -746,10 +766,10 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "get",
-                "description": "Get a specific node by ID with full details",
+                "description": "Get a specific node by ID with full details. Text mode shows resolution and edge summary.",
                 "parameters": [
                     param("id", "string", true, "Node ID (e.g. REQ-CORE-001)"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice get REQ-CORE-001",
@@ -758,21 +778,23 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "search",
-                "description": "Search nodes with filters (text, priority, resolution, tags, category, graph proximity)",
+                "description": "Search nodes with filters. Node type can be a positional arg or -t flag (default: requirements).",
                 "parameters": [
-                    param("--node-type", "string", false, "Node type to search (default: requirements)"),
-                    param("--query", "string", false, "Text search in title and body"),
-                    param("--priority", "string", false, "Filter by priority (P0, P1, P2)"),
-                    param("--resolution", "string", false, "Filter: verified, blocked, deferred, wontfix, unresolved"),
+                    param("node_type", "string", false, "Node type (positional or -t): sources, theses, requirements, implementations (default: requirements)"),
+                    param_s("--node-type", "-t", "string", false, "Node type to search (alternative to positional arg)"),
+                    param_s("--query", "-q", "string", false, "Text search in title and body"),
+                    param_s("--priority", "-p", "string", false, "Filter by priority (P0, P1, P2)"),
+                    param_s("--resolution", "-r", "string", false, "Filter: verified, blocked, deferred, wontfix, unresolved"),
                     param("--tag", "string", false, "Filter by single tag"),
                     param("--tags", "string", false, "Comma-separated tags (all must match)"),
-                    param("--category", "string", false, "Filter by category"),
+                    param_s("--category", "-c", "string", false, "Filter by category"),
                     param("--id-prefix", "string", false, "Filter by ID prefix"),
                     param("--related-to", "string", false, "Find nodes related to this node ID"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
-                    "lattice search --query 'product owner' --format json",
+                    "lattice search requirements -q 'vibes'",
+                    "lattice search -q 'product owner' --format json",
                     "lattice search --priority P0 --resolution unresolved",
                     "lattice search --tag agent --category AGENT"
                 ]
@@ -791,7 +813,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--depends-on", "string", false, "Comma-separated requirement IDs"),
                     param("--status", "string", false, "Status: draft, active (default: active)"),
                     param("--created-by", "string", false, "Author (e.g. human:george)"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice add requirement --id REQ-FEAT-001 --title 'New feature' --body 'Description' --priority P1 --category FEAT"
@@ -808,7 +830,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--confidence", "float", false, "Confidence level 0.0-1.0"),
                     param("--tags", "string", false, "Comma-separated tags"),
                     param("--supported-by", "string", false, "Comma-separated source IDs"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice add thesis --id THX-NEW --title 'Thesis' --body 'Claim' --category technical"
@@ -824,7 +846,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--url", "string", false, "Source URL"),
                     param("--source-type", "string", false, "Type: paper, article, report, data"),
                     param("--tags", "string", false, "Comma-separated tags"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice add source --id SRC-NEW --title 'Paper' --body 'Summary' --url https://example.com"
@@ -840,7 +862,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--satisfies", "string", false, "Comma-separated requirement IDs"),
                     param("--files", "string", false, "Comma-separated file paths"),
                     param("--tags", "string", false, "Comma-separated tags"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice add implementation --id IMP-NEW --title 'Impl' --body 'Description' --satisfies REQ-CORE-001"
@@ -851,10 +873,10 @@ fn build_command_catalog() -> serde_json::Value {
                 "description": "Add an edge between two existing nodes (feedback, dependency, traceability)",
                 "parameters": [
                     param("--from", "string", true, "Source node ID (edge goes FROM this node)"),
-                    param("--type", "string", true, "Edge type: supported_by, derives_from, depends_on, satisfies, extends, reveals_gap_in, challenges, validates, conflicts_with, supersedes"),
+                    param("--edge-type / --type", "string", true, "Edge type: supported_by, derives_from, depends_on, satisfies, extends, reveals_gap_in, challenges, validates, conflicts_with, supersedes"),
                     param("--to", "string", true, "Target node ID (edge goes TO this node)"),
                     param("--rationale", "string", false, "Why this edge exists"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice add edge --from IMP-CLI-001 --type reveals_gap_in --to REQ-CORE-005 --rationale 'Requirement does not specify timeout behavior'",
@@ -871,7 +893,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--blocked", "string", false, "Mark as blocked with reason"),
                     param("--deferred", "string", false, "Mark as deferred with reason"),
                     param("--wontfix", "string", false, "Mark as wontfix with reason"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice resolve REQ-CORE-001 --verified",
@@ -888,7 +910,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--tests-pass", "bool", false, "Record that tests pass"),
                     param("--coverage", "float", false, "Coverage percentage 0.0-1.0"),
                     param("--files", "string", false, "Comma-separated evidence file paths"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice verify IMP-STORAGE-001 satisfies REQ-CORE-004 --tests-pass --coverage 0.94"
@@ -902,9 +924,9 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--gap-type", "string", true, "Gap type: clarification, design_decision, missing_requirement, contradiction"),
                     param("--title", "string", true, "Brief title for the sub-requirement"),
                     param("--description", "string", true, "What is underspecified and why"),
-                    param("--proposed", "string", false, "Proposed resolution"),
-                    param("--implementation", "string", false, "Implementation ID that discovered this gap"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param("--proposed / --proposal", "string", false, "Proposed resolution (alias: --proposal)"),
+                    param("--implementation / --discovered-by", "string", false, "Implementation ID that discovered this gap (alias: --discovered-by)"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice refine REQ-CORE-005 --gap-type design_decision --title 'Drift threshold' --description 'Should minor version drift be flagged?'"
@@ -915,7 +937,7 @@ fn build_command_catalog() -> serde_json::Value {
                 "description": "Check for version drift in edge bindings",
                 "parameters": [
                     param("--check", "bool", false, "Exit with code 2 if drift detected"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice drift",
@@ -928,7 +950,7 @@ fn build_command_catalog() -> serde_json::Value {
                 "parameters": [
                     param("--fix", "bool", false, "Attempt to auto-fix fixable issues"),
                     param("--strict", "bool", false, "Exit with non-zero status on any issue"),
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice lint",
@@ -940,7 +962,7 @@ fn build_command_catalog() -> serde_json::Value {
                 "name": "summary",
                 "description": "Show a compact status overview of the lattice",
                 "parameters": [
-                    param("--format", "string", false, "Output format: text, json (default: text)")
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice summary",
@@ -1063,8 +1085,17 @@ fn main() {
                         }
                     }
                     Err(e) => {
-                        eprintln!("{}", format!("Error: {}", e).red());
-                        process::exit(1);
+                        let err_str = e.to_string();
+                        if err_str.contains("already initialized") {
+                            println!(
+                                "{}",
+                                "Lattice already initialized. Use --force to reinitialize."
+                                    .dimmed()
+                            );
+                        } else {
+                            eprintln!("{}", format!("Error: {}", e).red());
+                            process::exit(1);
+                        }
                     }
                 }
             }
@@ -1259,7 +1290,8 @@ fn main() {
             node_type,
             status: _,
             priority: _,
-            pending,
+            blocked,
+            deferred,
             format,
         } => {
             let root = get_lattice_root();
@@ -1276,15 +1308,14 @@ fn main() {
             match load_nodes_by_type(&root, type_name) {
                 Ok(nodes) => {
                     if is_json(&format) {
-                        let filtered: Vec<_> = if pending {
+                        let filtered: Vec<_> = if blocked || deferred {
                             nodes
                                 .into_iter()
                                 .filter(|n| {
                                     n.resolution.as_ref().is_some_and(|r| {
-                                        matches!(
-                                            r.status,
-                                            Resolution::Blocked | Resolution::Deferred
-                                        )
+                                        (blocked && matches!(r.status, Resolution::Blocked))
+                                            || (deferred
+                                                && matches!(r.status, Resolution::Deferred))
                                     })
                                 })
                                 .collect()
@@ -1310,22 +1341,22 @@ fn main() {
                         println!("{}", serde_json::to_string_pretty(&json_nodes).unwrap());
                     } else {
                         for node in nodes {
-                            if pending {
+                            if blocked || deferred {
                                 if let Some(ref res) = node.resolution {
-                                    match res.status {
-                                        Resolution::Blocked | Resolution::Deferred => {
-                                            let status_str =
-                                                format!("[{:?}]", res.status).to_lowercase();
-                                            let reason = res.reason.as_deref().unwrap_or("");
-                                            println!(
-                                                "{} {} - {} {}",
-                                                node.id.cyan(),
-                                                status_str.yellow(),
-                                                node.title,
-                                                reason.dimmed()
-                                            );
-                                        }
-                                        _ => {}
+                                    let show = (blocked
+                                        && matches!(res.status, Resolution::Blocked))
+                                        || (deferred && matches!(res.status, Resolution::Deferred));
+                                    if show {
+                                        let status_str =
+                                            format!("[{:?}]", res.status).to_lowercase();
+                                        let reason = res.reason.as_deref().unwrap_or("");
+                                        println!(
+                                            "{} {} - {} {}",
+                                            node.id.cyan(),
+                                            status_str.yellow(),
+                                            node.title,
+                                            reason.dimmed()
+                                        );
                                     }
                                 }
                             } else if let Some(ref res) = node.resolution {
@@ -1528,6 +1559,67 @@ fn main() {
                             println!();
                             println!("{}", node.body);
                             println!();
+
+                            // Show resolution if present
+                            if let Some(ref res) = node.resolution {
+                                let res_text = if let Some(ref reason) = res.reason {
+                                    format!("Resolution: {:?} ({})", res.status, reason)
+                                        .to_lowercase()
+                                } else {
+                                    format!("Resolution: {:?}", res.status).to_lowercase()
+                                };
+                                println!("{}", res_text.yellow());
+                            }
+
+                            // Show edge summary if edges exist
+                            if let Some(ref edges) = node.edges {
+                                let edge_fields: Vec<(&str, usize)> = [
+                                    (
+                                        "supported_by",
+                                        edges.supported_by.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                    (
+                                        "derives_from",
+                                        edges.derives_from.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                    (
+                                        "depends_on",
+                                        edges.depends_on.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                    ("satisfies", edges.satisfies.as_ref().map_or(0, |v| v.len())),
+                                    ("extends", edges.extends.as_ref().map_or(0, |v| v.len())),
+                                    (
+                                        "reveals_gap_in",
+                                        edges.reveals_gap_in.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                    (
+                                        "challenges",
+                                        edges.challenges.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                    ("validates", edges.validates.as_ref().map_or(0, |v| v.len())),
+                                    (
+                                        "conflicts_with",
+                                        edges.conflicts_with.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                    (
+                                        "supersedes",
+                                        edges.supersedes.as_ref().map_or(0, |v| v.len()),
+                                    ),
+                                ]
+                                .iter()
+                                .filter(|(_, count)| *count > 0)
+                                .cloned()
+                                .collect();
+
+                                if !edge_fields.is_empty() {
+                                    let parts: Vec<String> = edge_fields
+                                        .iter()
+                                        .map(|(name, count)| format!("{} {}", count, name))
+                                        .collect();
+                                    println!("{}", format!("Edges: {}", parts.join(", ")).dimmed());
+                                }
+                            }
+
                             println!(
                                 "{}",
                                 format!("Status: {:?} | Version: {}", node.status, node.version)
@@ -2121,6 +2213,7 @@ fn main() {
         }
 
         Commands::Search {
+            positional_type,
             node_type,
             query,
             priority,
@@ -2132,7 +2225,10 @@ fn main() {
             related_to,
             format,
         } => {
-            let type_name = match node_type.as_str() {
+            let effective_type = positional_type
+                .or(node_type)
+                .unwrap_or_else(|| "requirements".to_string());
+            let type_name = match effective_type.as_str() {
                 "sources" => "sources",
                 "theses" => "theses",
                 "requirements" => "requirements",
@@ -2143,7 +2239,7 @@ fn main() {
                         "invalid_type",
                         &format!(
                             "Unknown type: {}. Use: sources, theses, requirements, implementations",
-                            node_type
+                            effective_type
                         ),
                     );
                 }

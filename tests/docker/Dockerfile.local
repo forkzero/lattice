@@ -1,0 +1,27 @@
+FROM rust:1-bookworm AS builder
+
+WORKDIR /build
+COPY Cargo.toml Cargo.lock ./
+COPY src/ src/
+COPY tests/ tests/
+COPY agents/ agents/
+COPY prompts/ prompts/
+
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/lattice /usr/local/bin/lattice
+
+RUN lattice --version
+
+COPY tests/docker/e2e-test.sh /e2e-test.sh
+RUN chmod +x /e2e-test.sh
+
+WORKDIR /workspace
+
+CMD ["/e2e-test.sh"]

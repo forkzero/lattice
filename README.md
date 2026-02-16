@@ -1,5 +1,10 @@
 # Lattice
 
+[![CI](https://github.com/forkzero/lattice/actions/workflows/ci.yml/badge.svg)](https://github.com/forkzero/lattice/actions/workflows/ci.yml)
+[![Release](https://github.com/forkzero/lattice/actions/workflows/release.yml/badge.svg)](https://github.com/forkzero/lattice/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/forkzero/lattice)](https://github.com/forkzero/lattice/releases/latest)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 **A knowledge coordination protocol for the human-agent era.**
 
 Built by [Forkzero](https://forkzero.ai).

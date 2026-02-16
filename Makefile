@@ -1,4 +1,4 @@
-.PHONY: fmt lint test check build clean install
+.PHONY: fmt lint test check build clean install docker-e2e
 
 # Format code
 fmt:
@@ -37,6 +37,16 @@ smoke: build
 	./target/release/lattice drift
 	@echo "Smoke tests passed!"
 
+# Run Docker end-to-end integration test (from GitHub release)
+docker-e2e:
+	docker build -t lattice-e2e tests/docker
+	docker run --rm lattice-e2e
+
+# Run Docker e2e with locally-built source (builds in container)
+docker-e2e-local:
+	docker build -f tests/docker/Dockerfile.local -t lattice-e2e-local .
+	docker run --rm lattice-e2e-local
+
 # Watch for changes and rebuild (requires cargo-watch)
 watch:
 	cargo watch -x 'build'
@@ -51,5 +61,6 @@ help:
 	@echo "  make build    - Build release binary"
 	@echo "  make clean    - Clean build artifacts"
 	@echo "  make install  - Install to ~/.cargo/bin"
-	@echo "  make smoke    - Run CLI smoke tests"
-	@echo "  make watch    - Watch and rebuild on changes"
+	@echo "  make smoke      - Run CLI smoke tests"
+	@echo "  make docker-e2e - Run Docker end-to-end integration test"
+	@echo "  make watch      - Watch and rebuild on changes"

@@ -110,3 +110,19 @@ jobs:
           draft: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Verify the published release works end-to-end via install script
+  e2e-verify:
+    name: E2E Verify Release
+    needs: release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install lattice via install script
+        run: curl -fsSL https://lattice.forkzero.ai/install.sh | sh
+
+      - name: Run e2e tests
+        run: bash tests/docker/e2e-test.sh
