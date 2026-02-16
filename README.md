@@ -97,8 +97,14 @@ DRIFT DETECTED:
 
 ## Installation
 
+**macOS / Linux:**
 ```bash
 curl -fsSL https://forkzero.ai/lattice/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://forkzero.ai/lattice/install.ps1 | iex
 ```
 
 Or download from [GitHub Releases](https://github.com/forkzero/lattice/releases).
@@ -112,6 +118,7 @@ Or download from [GitHub Releases](https://github.com/forkzero/lattice/releases)
 | macOS Intel | `lattice-VERSION-x86_64-apple-darwin.tar.gz` |
 | Linux x86_64 | `lattice-VERSION-x86_64-unknown-linux-gnu.tar.gz` |
 | Linux ARM64 | `lattice-VERSION-aarch64-unknown-linux-gnu.tar.gz` |
+| Windows x86_64 | `lattice-VERSION-x86_64-pc-windows-msvc.tar.gz` |
 
 </details>
 

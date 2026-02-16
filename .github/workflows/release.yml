@@ -34,6 +34,9 @@ jobs:
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             cross: true
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            cross: false
 
     steps:
       - name: Checkout repository
@@ -49,6 +52,7 @@ jobs:
         run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Build release binary
+        shell: bash
         run: |
           if [ "${{ matrix.cross }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }}
@@ -57,12 +61,17 @@ jobs:
           fi
 
       - name: Package binary
+        shell: bash
         run: |
           VERSION=${GITHUB_REF#refs/tags/v}
           ARCHIVE_NAME=lattice-${VERSION}-${{ matrix.target }}
 
           mkdir -p dist/${ARCHIVE_NAME}
-          cp target/${{ matrix.target }}/release/lattice dist/${ARCHIVE_NAME}/
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            cp target/${{ matrix.target }}/release/lattice.exe dist/${ARCHIVE_NAME}/
+          else
+            cp target/${{ matrix.target }}/release/lattice dist/${ARCHIVE_NAME}/
+          fi
           cp README.md LICENSE* dist/${ARCHIVE_NAME}/ 2>/dev/null || true
 
           cd dist
@@ -183,6 +192,8 @@ jobs:
         run: |
           aws s3 cp install.sh s3://forkzero-lattice-prod/lattice/install.sh \
             --content-type "text/plain"
+          aws s3 cp install.ps1 s3://forkzero-lattice-prod/lattice/install.ps1 \
+            --content-type "text/plain"
 
       - name: Invalidate CloudFront cache
         env:
@@ -209,3 +220,25 @@ jobs:
 
       - name: Run e2e tests
         run: bash tests/docker/e2e-test.sh
+
+  # Verify the published release works on Windows
+  e2e-verify-windows:
+    name: E2E Verify Release (Windows)
+    needs: [publish, deploy-install-script]
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install lattice via install script
+        shell: pwsh
+        run: irm https://forkzero.ai/lattice/install.ps1 | iex
+
+      - name: Add lattice to PATH
+        shell: pwsh
+        run: echo "$env:LOCALAPPDATA\lattice" >> $env:GITHUB_PATH
+
+      - name: Run Windows e2e tests
+        shell: pwsh
+        run: .\tests\e2e-windows.ps1
