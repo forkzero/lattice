@@ -1725,6 +1725,19 @@ mod tests {
     }
 
     #[test]
+    fn test_init_already_exists_error_contains_sentinel() {
+        let dir = TempDir::new().unwrap();
+        init_lattice(dir.path(), false).unwrap();
+        let err = init_lattice(dir.path(), false).unwrap_err();
+        // This string is matched by main.rs init handler; must not silently change
+        assert!(
+            err.to_string().contains("already initialized"),
+            "Error message must contain 'already initialized' for main.rs handler. Got: {}",
+            err
+        );
+    }
+
+    #[test]
     fn test_add_edge_nonexistent_target() {
         let dir = TempDir::new().unwrap();
         let root = dir.path();

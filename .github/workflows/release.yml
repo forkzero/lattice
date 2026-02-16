@@ -122,7 +122,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install lattice via install script
-        run: curl -fsSL https://lattice.forkzero.ai/install.sh | sh
+        run: curl -fsSL ${{ vars.INSTALL_URL }} | sh
 
       - name: Run e2e tests
         run: bash tests/docker/e2e-test.sh

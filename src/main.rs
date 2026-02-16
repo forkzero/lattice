@@ -21,7 +21,7 @@ use std::process;
 #[derive(Parser)]
 #[command(name = "lattice")]
 #[command(about = "A knowledge coordination protocol for human-agent collaboration")]
-#[command(version = "0.1.3")]
+#[command(version)]
 #[command(disable_help_subcommand = true)]
 struct Cli {
     #[command(subcommand)]
@@ -710,6 +710,56 @@ fn print_plan(plan: &Plan, index: &lattice::NodeIndex) {
     }
 }
 
+fn summarize_edges(edges: &lattice::types::Edges) -> Option<String> {
+    let edge_fields: Vec<(&str, usize)> = [
+        (
+            "supported_by",
+            edges.supported_by.as_ref().map_or(0, |v| v.len()),
+        ),
+        (
+            "derives_from",
+            edges.derives_from.as_ref().map_or(0, |v| v.len()),
+        ),
+        (
+            "depends_on",
+            edges.depends_on.as_ref().map_or(0, |v| v.len()),
+        ),
+        ("satisfies", edges.satisfies.as_ref().map_or(0, |v| v.len())),
+        ("extends", edges.extends.as_ref().map_or(0, |v| v.len())),
+        (
+            "reveals_gap_in",
+            edges.reveals_gap_in.as_ref().map_or(0, |v| v.len()),
+        ),
+        (
+            "challenges",
+            edges.challenges.as_ref().map_or(0, |v| v.len()),
+        ),
+        ("validates", edges.validates.as_ref().map_or(0, |v| v.len())),
+        (
+            "conflicts_with",
+            edges.conflicts_with.as_ref().map_or(0, |v| v.len()),
+        ),
+        (
+            "supersedes",
+            edges.supersedes.as_ref().map_or(0, |v| v.len()),
+        ),
+    ]
+    .iter()
+    .filter(|(_, count)| *count > 0)
+    .cloned()
+    .collect();
+
+    if edge_fields.is_empty() {
+        None
+    } else {
+        let parts: Vec<String> = edge_fields
+            .iter()
+            .map(|(name, count)| format!("{} {}", count, name))
+            .collect();
+        Some(format!("Edges: {}", parts.join(", ")))
+    }
+}
+
 fn build_command_catalog() -> serde_json::Value {
     let param = |name: &str, typ: &str, required: bool, desc: &str| -> serde_json::Value {
         json!({
@@ -732,7 +782,7 @@ fn build_command_catalog() -> serde_json::Value {
         };
 
     json!({
-        "version": "0.1.3",
+        "version": env!("CARGO_PKG_VERSION"),
         "commands": [
             {
                 "name": "init",
@@ -1572,52 +1622,10 @@ fn main() {
                             }
 
                             // Show edge summary if edges exist
-                            if let Some(ref edges) = node.edges {
-                                let edge_fields: Vec<(&str, usize)> = [
-                                    (
-                                        "supported_by",
-                                        edges.supported_by.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                    (
-                                        "derives_from",
-                                        edges.derives_from.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                    (
-                                        "depends_on",
-                                        edges.depends_on.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                    ("satisfies", edges.satisfies.as_ref().map_or(0, |v| v.len())),
-                                    ("extends", edges.extends.as_ref().map_or(0, |v| v.len())),
-                                    (
-                                        "reveals_gap_in",
-                                        edges.reveals_gap_in.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                    (
-                                        "challenges",
-                                        edges.challenges.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                    ("validates", edges.validates.as_ref().map_or(0, |v| v.len())),
-                                    (
-                                        "conflicts_with",
-                                        edges.conflicts_with.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                    (
-                                        "supersedes",
-                                        edges.supersedes.as_ref().map_or(0, |v| v.len()),
-                                    ),
-                                ]
-                                .iter()
-                                .filter(|(_, count)| *count > 0)
-                                .cloned()
-                                .collect();
-
-                                if !edge_fields.is_empty() {
-                                    let parts: Vec<String> = edge_fields
-                                        .iter()
-                                        .map(|(name, count)| format!("{} {}", count, name))
-                                        .collect();
-                                    println!("{}", format!("Edges: {}", parts.join(", ")).dimmed());
-                                }
+                            if let Some(ref edges) = node.edges
+                                && let Some(summary) = summarize_edges(edges)
+                            {
+                                println!("{}", summary.dimmed());
                             }
 
                             println!(
@@ -2541,5 +2549,130 @@ fn main() {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lattice::types::{EdgeReference, Edges};
+
+    // --- Gap 2: Edge summary counting tests ---
+
+    #[test]
+    fn test_summarize_edges_empty() {
+        let edges = Edges::default();
+        assert_eq!(summarize_edges(&edges), None);
+    }
+
+    #[test]
+    fn test_summarize_edges_single_type() {
+        let edges = Edges {
+            satisfies: Some(vec![EdgeReference {
+                target: "REQ-001".to_string(),
+                version: None,
+                rationale: None,
+            }]),
+            ..Default::default()
+        };
+        assert_eq!(
+            summarize_edges(&edges),
+            Some("Edges: 1 satisfies".to_string())
+        );
+    }
+
+    #[test]
+    fn test_summarize_edges_multiple_types() {
+        let edges = Edges {
+            satisfies: Some(vec![
+                EdgeReference {
+                    target: "REQ-001".to_string(),
+                    version: None,
+                    rationale: None,
+                },
+                EdgeReference {
+                    target: "REQ-002".to_string(),
+                    version: None,
+                    rationale: None,
+                },
+            ]),
+            challenges: Some(vec![EdgeReference {
+                target: "THX-001".to_string(),
+                version: None,
+                rationale: None,
+            }]),
+            ..Default::default()
+        };
+        let result = summarize_edges(&edges).unwrap();
+        assert!(result.contains("2 satisfies"));
+        assert!(result.contains("1 challenges"));
+    }
+
+    #[test]
+    fn test_summarize_edges_some_empty_vec() {
+        let edges = Edges {
+            satisfies: Some(vec![]),
+            ..Default::default()
+        }; // Some but empty
+        assert_eq!(summarize_edges(&edges), None);
+    }
+
+    // --- Gap 4: Command catalog completeness tests ---
+
+    #[test]
+    fn test_catalog_contains_all_commands() {
+        let catalog = build_command_catalog();
+        let commands = catalog["commands"].as_array().unwrap();
+        let names: Vec<&str> = commands
+            .iter()
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+
+        // All CLI subcommands must be in the catalog
+        for expected in &[
+            "init",
+            "list",
+            "get",
+            "search",
+            "add requirement",
+            "add thesis",
+            "add source",
+            "add implementation",
+            "add edge",
+            "resolve",
+            "verify",
+            "refine",
+            "drift",
+            "lint",
+            "summary",
+            "plan",
+            "export",
+            "help",
+        ] {
+            assert!(
+                names.contains(expected),
+                "Catalog missing command: {}",
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_catalog_version_matches_cargo() {
+        let catalog = build_command_catalog();
+        assert_eq!(
+            catalog["version"].as_str().unwrap(),
+            env!("CARGO_PKG_VERSION")
+        );
+    }
+
+    #[test]
+    fn test_catalog_params_have_short_field_where_expected() {
+        let catalog = build_command_catalog();
+        let commands = catalog["commands"].as_array().unwrap();
+        let search = commands.iter().find(|c| c["name"] == "search").unwrap();
+        let params = search["parameters"].as_array().unwrap();
+        let query_param = params.iter().find(|p| p["name"] == "--query").unwrap();
+        assert_eq!(query_param["short"].as_str().unwrap(), "-q");
     }
 }

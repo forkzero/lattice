@@ -4,8 +4,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
 
+ARG INSTALL_URL=https://forkzero.ai/lattice/install.sh
+
 # Install lattice via the official install script
-RUN curl -fsSL https://lattice.forkzero.ai/install.sh | sh
+RUN curl -fsSL ${INSTALL_URL} | sh
 
 # Verify install
 RUN lattice --version

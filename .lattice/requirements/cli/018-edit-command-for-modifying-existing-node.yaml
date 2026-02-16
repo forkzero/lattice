@@ -1,0 +1,16 @@
+id: REQ-CLI-018
+type: requirement
+title: Edit command for modifying existing nodes
+body: 'The CLI should provide an ''edit'' command that allows modifying mutable fields of existing nodes: title, body, status, priority, tags, and category. Syntax: lattice edit <ID> [--title ...] [--body ...] [--status ...] [--priority ...] [--tags ...] [--category ...]. Only specified fields are updated; others remain unchanged. The node version is auto-bumped (patch increment) on any change, which triggers drift detection on version-bound edges. The command should reject edits to immutable fields (id, type, created_at, created_by). Supports --format text|json output.'
+status: active
+version: 1.0.0
+created_at: 2026-02-16T12:47:45.261725+00:00
+created_by: agent:claude-2026-02-16
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+tags:
+- edit
+- nodes
+- version-bump
+edges: {}

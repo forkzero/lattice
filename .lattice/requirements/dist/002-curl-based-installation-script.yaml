@@ -1,7 +1,7 @@
 id: REQ-DIST-002
 type: requirement
 title: Curl-based Installation Script
-body: 'Users can install lattice via a single curl command: curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh. The install script: (1) detects OS and architecture, (2) downloads appropriate binary from GitHub Releases, (3) verifies checksum, (4) installs to ~/.local/bin or /usr/local/bin, (5) provides clear success/error messages. Script supports --version flag to install specific versions. Uninstall instructions are documented.'
+body: 'Users can install lattice via a single curl command: curl -fsSL https://forkzero.ai/lattice/install.sh | sh. The install script: (1) detects OS and architecture, (2) downloads appropriate binary from GitHub Releases, (3) verifies checksum, (4) installs to ~/.local/bin or /usr/local/bin, (5) provides clear success/error messages. Script supports --version flag to install specific versions. Uninstall instructions are documented.'
 status: active
 version: 1.0.0
 created_at: 2026-02-04T07:44:42.730212+00:00

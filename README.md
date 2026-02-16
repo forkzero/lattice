@@ -98,7 +98,7 @@ DRIFT DETECTED:
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
+curl -fsSL https://forkzero.ai/lattice/install.sh | sh
 ```
 
 Or download from [GitHub Releases](https://github.com/forkzero/lattice/releases).
@@ -147,7 +147,7 @@ Lattice can publish an interactive dashboard to GitHub Pages with a single comma
 
 ```yaml
 # .github/workflows/pages.yml
-- run: curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
+- run: curl -fsSL https://forkzero.ai/lattice/install.sh | sh
 - run: lattice export --format pages --output _site
 ```
 

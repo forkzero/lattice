@@ -1,6 +1,6 @@
 #!/bin/sh
 # Lattice installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/forkzero/lattice/main/install.sh | sh
+# Usage: curl -fsSL https://forkzero.ai/lattice/install.sh | sh
 
 set -e
 

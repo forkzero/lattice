@@ -1,0 +1,41 @@
+name: Verify Install Script
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6am UTC
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  verify:
+    name: Verify install script integrity
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute expected checksum
+        id: expected
+        run: echo "sha256=$(sha256sum install.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch live install script
+        run: curl -fsSL ${{ vars.INSTALL_URL }} -o /tmp/live-install.sh
+
+      - name: Compute live checksum
+        id: live
+        run: echo "sha256=$(sha256sum /tmp/live-install.sh | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Compare checksums
+        run: |
+          echo "Expected: ${{ steps.expected.outputs.sha256 }}"
+          echo "Live:     ${{ steps.live.outputs.sha256 }}"
+          if [ "${{ steps.expected.outputs.sha256 }}" != "${{ steps.live.outputs.sha256 }}" ]; then
+            echo "::error::Install script integrity check FAILED — live script differs from repository"
+            exit 1
+          fi
+          echo "Install script integrity verified"
+
+      - name: Verify install script works
+        run: |
+          sh /tmp/live-install.sh
+          lattice --version
