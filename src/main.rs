@@ -20,12 +20,18 @@ use std::process;
 
 #[derive(Parser)]
 #[command(name = "lattice")]
-#[command(about = "A knowledge coordination protocol for human-agent collaboration")]
+#[command(
+    about = "A knowledge coordination protocol for human-agent collaboration.\nDesigned to be discoverable by LLMs — try: lattice --json"
+)]
 #[command(version)]
 #[command(disable_help_subcommand = true)]
 struct Cli {
+    /// Output machine-readable command catalog as JSON
+    #[arg(long)]
+    json: bool,
+
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
@@ -41,7 +47,7 @@ enum Commands {
         agents: bool,
     },
 
-    /// Add a node to the lattice
+    /// Add a node (requirement, thesis, source, implementation, or edge) to the lattice
     Add {
         #[command(subcommand)]
         add_command: AddCommands,
@@ -298,7 +304,7 @@ enum Commands {
 
 #[derive(Subcommand)]
 enum AddCommands {
-    /// Add a requirement to the lattice
+    /// Add a requirement (testable specification derived from theses)
     Requirement {
         /// Requirement ID (e.g., REQ-API-003)
         #[arg(long)]
@@ -345,7 +351,7 @@ enum AddCommands {
         format: String,
     },
 
-    /// Add a thesis to the lattice
+    /// Add a thesis (strategic claim backed by sources)
     Thesis {
         /// Thesis ID (e.g., THX-AGENT-PROTOCOL)
         #[arg(long)]
@@ -384,7 +390,7 @@ enum AddCommands {
         format: String,
     },
 
-    /// Add a source to the lattice
+    /// Add a source (research, paper, or reference material)
     Source {
         /// Source ID (e.g., SRC-JSON-RPC)
         #[arg(long)]
@@ -423,7 +429,7 @@ enum AddCommands {
         format: String,
     },
 
-    /// Add an edge between two existing nodes
+    /// Add an edge (typed, version-bound link between two nodes)
     Edge {
         /// Source node ID (edge goes FROM this node)
         #[arg(long)]
@@ -447,7 +453,7 @@ enum AddCommands {
         format: String,
     },
 
-    /// Add an implementation to the lattice
+    /// Add an implementation (code that satisfies requirements)
     Implementation {
         /// Implementation ID (e.g., IMP-STORAGE-001)
         #[arg(long)]
@@ -851,7 +857,7 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "add requirement",
-                "description": "Add a requirement node to the lattice",
+                "description": "Add a requirement (testable specification derived from theses)",
                 "parameters": [
                     param("--id", "string", true, "Requirement ID (e.g. REQ-API-003)"),
                     param("--title", "string", true, "Requirement title"),
@@ -871,7 +877,7 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "add thesis",
-                "description": "Add a thesis node to the lattice",
+                "description": "Add a thesis (strategic claim backed by sources)",
                 "parameters": [
                     param("--id", "string", true, "Thesis ID (e.g. THX-AGENT-PROTOCOL)"),
                     param("--title", "string", true, "Thesis title"),
@@ -888,7 +894,7 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "add source",
-                "description": "Add a source node to the lattice",
+                "description": "Add a source (research, paper, or reference material)",
                 "parameters": [
                     param("--id", "string", true, "Source ID (e.g. SRC-PAPER-001)"),
                     param("--title", "string", true, "Source title"),
@@ -904,7 +910,7 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "add implementation",
-                "description": "Add an implementation node to the lattice",
+                "description": "Add an implementation (code that satisfies requirements)",
                 "parameters": [
                     param("--id", "string", true, "Implementation ID (e.g. IMP-STORAGE-001)"),
                     param("--title", "string", true, "Implementation title"),
@@ -1074,7 +1080,26 @@ fn build_command_catalog() -> serde_json::Value {
 fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
+    // Handle top-level --json flag (outputs command catalog)
+    if cli.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&build_command_catalog()).unwrap()
+        );
+        return;
+    }
+
+    // If no subcommand given, show help
+    let command = match cli.command {
+        Some(cmd) => cmd,
+        None => {
+            // Re-parse with --help to show usage
+            Cli::parse_from(["lattice", "--help"]);
+            return;
+        }
+    };
+
+    match command {
         Commands::Init { force, agents } => {
             let cwd = env::current_dir().expect("Failed to get current directory");
 

@@ -122,7 +122,7 @@ cargo run -- get REQ-CORE-001
 When told **"checkpoint"** or **"commit and push"**:
 1. `git status` to check changes
 2. `git add` relevant files
-3. Commit with descriptive message + `Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>`
+3. Commit with descriptive message + `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 4. Push to `origin/main`
 
 ## Requirements Traceability
@@ -145,14 +145,71 @@ See `.lattice/prompts/` for agent workflows (e.g., `lattice next` planning).
 5. **Attribution required** — Every node/edge has `created_by` field
 6. **Semver for nodes** — MAJOR.MINOR.PATCH versioning on all nodes
 
+## Releasing
+
+When told **"release"**, **"bump the release"**, or **"cut a release"**:
+
+1. **Bump version** in `Cargo.toml` (follow semver: patch for fixes, minor for features, major for breaking changes)
+2. **Commit** the version bump: `Bump version to vX.Y.Z`
+3. **Push** to `origin/main`
+4. **Wait for CI** to pass (use ci-monitor agent)
+5. **Create the release** with `gh release create` using good release notes (see below)
+6. **Monitor the release workflow** (use ci-monitor agent) — it runs CI again, cross-builds 4 platform binaries, deploys pages + install script, and runs e2e verification
+
+### Release Notes
+
+Write meaningful release notes — not just a changelog link. Include:
+
+- **Summary**: 1-2 sentence overview of what this release brings
+- **What's New / Changed / Fixed**: Grouped bullet points describing user-visible changes
+- **Full Changelog link**: Append at the end for completeness
+
+Example format:
+```bash
+gh release create vX.Y.Z --title "vX.Y.Z" --notes "$(cat <<'EOF'
+## Summary
+
+Brief description of the release theme.
+
+## What's New
+
+- Feature A: short description
+- Feature B: short description
+
+## What's Changed
+
+- Improvement to X
+- Refactored Y for better Z
+
+## Fixes
+
+- Fixed issue with W
+
+**Full Changelog**: https://github.com/forkzero/lattice/compare/vPREV...vX.Y.Z
+EOF
+)"
+```
+
+### Release Workflow
+
+The `release.yml` workflow triggers on `release: published` and runs:
+1. Full CI (reuses `ci.yml` via `workflow_call`)
+2. Cross-compile for 4 targets (aarch64/x86_64 × macOS/Linux)
+3. Upload binaries + checksums to the GitHub Release
+4. Deploy documentation to GitHub Pages
+5. Deploy install script to S3 (`forkzero.ai/lattice/install.sh`)
+6. E2E verification of the published release via install script
+
 ## CI/CD
 
-GitHub Actions runs on every push:
+GitHub Actions (`ci.yml`) runs on every push and as part of releases:
 - Format check (rustfmt)
 - Lint (clippy)
 - Test (cargo test)
 - Build (debug + release)
 - CLI smoke tests against `.lattice/`
+- E2E integration tests
+- Code coverage (40% threshold)
 
 ## CI/CD Monitoring
 
