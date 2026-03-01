@@ -63,6 +63,8 @@ make pre-push
 
 **Important**: Always run `make pre-commit` before any commit and `make pre-push` before any push. This matches what CI checks and prevents push-then-fix cycles.
 
+**Code review**: Before non-trivial commits, run `/simplify` to review changed code for reuse, quality, and efficiency issues. Skip for version bumps, doc-only changes, or single-line fixes.
+
 ## Key Concepts
 
 ### Node Types
@@ -103,6 +105,9 @@ lattice export -a investor      # Export for investors
 lattice export -a contributor   # Export for contributors
 lattice export -f json          # Export as JSON
 lattice export -f pages -o _site  # Export for GitHub Pages
+lattice update                    # Self-update to latest version
+lattice update --check            # Check for updates without installing
+lattice update --version 0.1.5   # Install a specific version
 ```
 
 ## Self-Describing

@@ -56,7 +56,8 @@ try {
         --title "Windows Test Source" `
         --body "Testing on Windows" `
         --created-by "human:e2e-windows"
-    Test-Pass "Added SRC-WIN-001"
+    if ($LASTEXITCODE -eq 0) { Test-Pass "Added SRC-WIN-001" }
+    else { Test-Fail "Failed to add SRC-WIN-001" }
 
     & lattice add thesis `
         --id THX-WIN-001 `
@@ -66,7 +67,8 @@ try {
         --confidence 0.9 `
         --supported-by SRC-WIN-001 `
         --created-by "human:e2e-windows"
-    Test-Pass "Added THX-WIN-001"
+    if ($LASTEXITCODE -eq 0) { Test-Pass "Added THX-WIN-001" }
+    else { Test-Fail "Failed to add THX-WIN-001" }
 
     & lattice add requirement `
         --id REQ-WIN-001 `
@@ -76,7 +78,8 @@ try {
         --category PLATFORM `
         --derives-from THX-WIN-001 `
         --created-by "human:e2e-windows"
-    Test-Pass "Added REQ-WIN-001"
+    if ($LASTEXITCODE -eq 0) { Test-Pass "Added REQ-WIN-001" }
+    else { Test-Fail "Failed to add REQ-WIN-001" }
 
     # === List / Get ===
     Write-Host ""

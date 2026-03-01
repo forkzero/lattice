@@ -11,6 +11,7 @@ pub mod lint;
 pub mod mcp;
 pub mod storage;
 pub mod types;
+pub mod update;
 
 pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
 pub use graph::{

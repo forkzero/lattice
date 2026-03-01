@@ -291,6 +291,25 @@ enum Commands {
     /// Run as MCP server over stdio
     Mcp,
 
+    /// Update lattice to the latest version
+    Update {
+        /// Only check for updates, don't install
+        #[arg(long)]
+        check: bool,
+
+        /// Force update even if already up to date
+        #[arg(long)]
+        force: bool,
+
+        /// Install a specific version (e.g., 0.1.5 or v0.1.5)
+        #[arg(long)]
+        version: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
     /// Output CLAUDE.md integration snippet
     Prompt {
         /// Output MCP version instead of CLI version
@@ -650,6 +669,46 @@ fn install_skill_definitions(root: &std::path::Path) -> Result<Vec<std::path::Pa
 
 fn detect_claude_code(root: &std::path::Path) -> bool {
     root.join("CLAUDE.md").exists() || root.join(".claude").exists()
+}
+
+fn print_created_paths(paths: &[std::path::PathBuf], cwd: &std::path::Path) {
+    for path in paths {
+        let display = path.strip_prefix(cwd).unwrap_or(path);
+        println!("{}", format!("Created {}", display.display()).green());
+    }
+}
+
+/// Install skill and/or agent definitions, printing results and handling errors.
+/// If `fatal` is true, errors cause process::exit(1); otherwise they print a warning.
+fn install_extras(cwd: &std::path::Path, include_skill: bool, fatal: bool) {
+    if include_skill {
+        match install_skill_definitions(cwd) {
+            Ok(paths) => print_created_paths(&paths, cwd),
+            Err(e) if fatal => {
+                eprintln!("{}", format!("Error: {}", e).red());
+                process::exit(1);
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("Warning: failed to install skill: {}", e).yellow()
+                );
+            }
+        }
+    }
+    match install_agent_definitions(cwd) {
+        Ok(paths) => print_created_paths(&paths, cwd),
+        Err(e) if fatal => {
+            eprintln!("{}", format!("Error: {}", e).red());
+            process::exit(1);
+        }
+        Err(e) => {
+            eprintln!(
+                "{}",
+                format!("Warning: failed to install agents: {}", e).yellow()
+            );
+        }
+    }
 }
 
 fn prompt_yes_no(message: &str) -> bool {
@@ -1088,6 +1147,22 @@ fn build_command_catalog() -> serde_json::Value {
                 ]
             },
             {
+                "name": "update",
+                "description": "Update lattice to the latest version (self-update)",
+                "parameters": [
+                    param("--check", "bool", false, "Only check for updates, don't install"),
+                    param("--force", "bool", false, "Force update even if already up to date"),
+                    param("--version", "string", false, "Install a specific version (e.g. 0.1.5)"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice update",
+                    "lattice update --check",
+                    "lattice update --version 0.1.5",
+                    "lattice update --format json"
+                ]
+            },
+            {
                 "name": "help",
                 "description": "Show available commands (use --json for machine-readable catalog)",
                 "parameters": [
@@ -1145,31 +1220,8 @@ fn main() {
             let install_agents = agents || skill;
 
             // If --skill or --agents on an existing lattice, install standalone
-            if (install_agents) && lattice_exists && !force {
-                let mut installed = Vec::new();
-
-                if skill {
-                    match install_skill_definitions(&cwd) {
-                        Ok(paths) => installed.extend(paths),
-                        Err(e) => {
-                            eprintln!("{}", format!("Error: {}", e).red());
-                            process::exit(1);
-                        }
-                    }
-                }
-
-                match install_agent_definitions(&cwd) {
-                    Ok(paths) => installed.extend(paths),
-                    Err(e) => {
-                        eprintln!("{}", format!("Error: {}", e).red());
-                        process::exit(1);
-                    }
-                }
-
-                for path in &installed {
-                    let display = path.strip_prefix(&cwd).unwrap_or(path);
-                    println!("{}", format!("Created {}", display.display()).green());
-                }
+            if install_agents && lattice_exists && !force {
+                install_extras(&cwd, skill, true);
                 println!();
                 if skill {
                     println!(
@@ -1182,90 +1234,16 @@ fn main() {
             } else {
                 match init_lattice(&cwd, force) {
                     Ok(created) => {
-                        for path in &created {
-                            let display = path.strip_prefix(&cwd).unwrap_or(path);
-                            println!("{}", format!("Created {}", display.display()).green());
-                        }
+                        print_created_paths(&created, &cwd);
 
                         if install_agents {
-                            if skill {
-                                match install_skill_definitions(&cwd) {
-                                    Ok(paths) => {
-                                        for path in &paths {
-                                            let display = path.strip_prefix(&cwd).unwrap_or(path);
-                                            println!(
-                                                "{}",
-                                                format!("Created {}", display.display()).green()
-                                            );
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "{}",
-                                            format!("Warning: failed to install skill: {}", e)
-                                                .yellow()
-                                        );
-                                    }
-                                }
-                            }
-                            match install_agent_definitions(&cwd) {
-                                Ok(agent_paths) => {
-                                    for path in &agent_paths {
-                                        let display = path.strip_prefix(&cwd).unwrap_or(path);
-                                        println!(
-                                            "{}",
-                                            format!("Created {}", display.display()).green()
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "{}",
-                                        format!("Warning: failed to install agents: {}", e)
-                                            .yellow()
-                                    );
-                                }
-                            }
+                            install_extras(&cwd, skill, false);
                         } else if detect_claude_code(&cwd)
                             && prompt_yes_no(
                                 "Detected CLAUDE.md. Install Lattice skill for Claude Code? (y/N)",
                             )
                         {
-                            match install_skill_definitions(&cwd) {
-                                Ok(paths) => {
-                                    for path in &paths {
-                                        let display = path.strip_prefix(&cwd).unwrap_or(path);
-                                        println!(
-                                            "{}",
-                                            format!("Created {}", display.display()).green()
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "{}",
-                                        format!("Warning: failed to install skill: {}", e).yellow()
-                                    );
-                                }
-                            }
-                            match install_agent_definitions(&cwd) {
-                                Ok(agent_paths) => {
-                                    for path in &agent_paths {
-                                        let display = path.strip_prefix(&cwd).unwrap_or(path);
-                                        println!(
-                                            "{}",
-                                            format!("Created {}", display.display()).green()
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "{}",
-                                        format!("Warning: failed to install agents: {}", e)
-                                            .yellow()
-                                    );
-                                }
-                            }
+                            install_extras(&cwd, true, false);
                         }
 
                         println!();
@@ -2497,8 +2475,7 @@ fn main() {
                 None
             };
 
-            let tags_vec: Option<Vec<String>> =
-                tags.map(|t| t.split(',').map(|s| s.trim().to_string()).collect());
+            let tags_vec = split_csv(tags);
 
             let results: Vec<_> = nodes
                 .iter()
@@ -2643,6 +2620,132 @@ fn main() {
             if let Err(e) = rt.block_on(lattice::mcp::run_server()) {
                 eprintln!("{}", format!("MCP server error: {}", e).red());
                 process::exit(1);
+            }
+        }
+
+        Commands::Update {
+            check,
+            force,
+            version,
+            format,
+        } => {
+            use lattice::update::{UpdateOptions, UpdateResult};
+
+            if !lattice::update::is_installed_binary() {
+                if is_json(&format) {
+                    eprintln!(
+                        "{}",
+                        json!({"error": "not_installed", "detail": "Running from a development build. Use the install script or `cargo install` instead."})
+                    );
+                } else {
+                    eprintln!(
+                        "{}",
+                        "Warning: running from a development build (target/). Update may not work as expected."
+                            .yellow()
+                    );
+                }
+            }
+
+            if !check {
+                if is_json(&format) {
+                    println!(
+                        "{}",
+                        json!({"status": "checking", "current_version": env!("CARGO_PKG_VERSION"), "target": lattice::update::TARGET_TRIPLE})
+                    );
+                } else {
+                    eprintln!("{}", "Checking for updates...".dimmed());
+                }
+            }
+
+            let options = UpdateOptions {
+                check_only: check,
+                force,
+                target_version: version,
+            };
+
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+            match rt.block_on(lattice::update::run_update(options)) {
+                Ok(UpdateResult::AlreadyUpToDate { version: v }) => {
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "status": "up_to_date",
+                                "version": v.to_string()
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            format!("lattice v{} is already up to date.", v).green()
+                        );
+                    }
+                }
+                Ok(UpdateResult::UpdateAvailable {
+                    current: c,
+                    latest: l,
+                }) => {
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "status": "update_available",
+                                "current_version": c.to_string(),
+                                "latest_version": l.to_string()
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("Current: v{}, Latest: v{}", c, l);
+                        println!("{}", "Run `lattice update` to install.".dimmed());
+                    }
+                }
+                Ok(UpdateResult::Updated { from, to }) => {
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "status": "updated",
+                                "from_version": from.to_string(),
+                                "to_version": to.to_string()
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            format!("Updated lattice from v{} to v{}", from, to).green()
+                        );
+                    }
+                }
+                Err(e) => {
+                    let detail = e.to_string();
+                    let hint = match &e {
+                        lattice::update::UpdateError::Replace(_) => {
+                            if cfg!(unix) {
+                                Some("Try: sudo lattice update")
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
+                    };
+
+                    if is_json(&format) {
+                        let mut err = json!({"error": "update_failed", "detail": detail});
+                        if let Some(h) = hint {
+                            err["hint"] = json!(h);
+                        }
+                        eprintln!("{}", err);
+                    } else {
+                        eprintln!("{}", format!("Error: {}", detail).red());
+                        if let Some(h) = hint {
+                            eprintln!("{}", h.dimmed());
+                        }
+                    }
+                    process::exit(1);
+                }
             }
         }
 
@@ -2799,6 +2902,7 @@ mod tests {
             "summary",
             "plan",
             "export",
+            "update",
             "help",
         ] {
             assert!(

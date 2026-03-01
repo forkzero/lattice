@@ -147,23 +147,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
+      - name: Download release binary from CI
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Build release
-        run: cargo build --release
+          name: lattice-linux
+          path: bin
 
       - name: Generate documentation
-        run: ./target/release/lattice export --format pages --output _site
+        run: |
+          chmod +x bin/lattice
+          bin/lattice export --format pages --output _site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -233,7 +226,11 @@ jobs:
 
       - name: Install lattice via install script
         shell: pwsh
-        run: irm https://forkzero.ai/lattice/install.ps1 | iex
+        env:
+          INSTALL_URL: ${{ vars.INSTALL_URL }}
+        run: |
+          $url = $env:INSTALL_URL -replace 'install\.sh$','install.ps1'
+          irm $url | iex
 
       - name: Add lattice to PATH
         shell: pwsh

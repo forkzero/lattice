@@ -487,6 +487,18 @@ OUT=$(lattice export --audience investor)
 assert_contains "$OUT" "Lattice" "Investor export: has title"
 pass "Investor audience export succeeded"
 
+# === Update --check ===
+echo ""
+echo "--- Update --check ---"
+
+OUT=$(lattice update --check 2>&1) || true
+# Should mention a version (either "up to date" or "Current:")
+assert_contains "$OUT" "v\|version\|lattice" "update --check: produces version output"
+pass "lattice update --check completed"
+
+OUT=$(lattice update --check --format json 2>&1) || true
+assert_contains "$OUT" '"status"' "update --check --format json: returns JSON with status"
+
 # === Init --skill ===
 echo ""
 echo "--- Init --skill (Claude Code Skill Installation) ---"
