@@ -23,6 +23,18 @@ pub enum Priority {
     P2,
 }
 
+impl std::str::FromStr for Priority {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_uppercase().as_str() {
+            "P0" => Ok(Priority::P0),
+            "P1" => Ok(Priority::P1),
+            "P2" => Ok(Priority::P2),
+            _ => Err(format!("Invalid priority: {}. Must be P0, P1, or P2", s)),
+        }
+    }
+}
+
 /// Node status.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -31,6 +43,22 @@ pub enum Status {
     Active,
     Deprecated,
     Superseded,
+}
+
+impl std::str::FromStr for Status {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "draft" => Ok(Status::Draft),
+            "active" => Ok(Status::Active),
+            "deprecated" => Ok(Status::Deprecated),
+            "superseded" => Ok(Status::Superseded),
+            _ => Err(format!(
+                "Invalid status: {}. Must be draft, active, deprecated, or superseded",
+                s
+            )),
+        }
+    }
 }
 
 /// Resolution status for requirements.

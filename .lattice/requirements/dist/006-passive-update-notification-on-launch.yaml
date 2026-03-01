@@ -1,0 +1,23 @@
+id: REQ-DIST-006
+type: requirement
+title: Passive Update Notification on Launch
+body: 'On every CLI command launch, after command output completes, the CLI checks whether a newer version is available and prints a dimmed one-line notice to stderr. Uses a 24-hour file cache (~/.lattice/update-check.json) to avoid hitting GitHub API on every invocation. Network check uses a 5-second timeout. Silently skips when: the command is ''update'' or ''mcp'', stderr is not a TTY (piped output), running from a development build, or HOME is unset. On network failure, writes the current timestamp to suppress retries for 24 hours.'
+status: active
+version: 1.0.0
+created_at: 2026-03-01T20:26:24.833830+00:00
+created_by: agent:claude-2026-03-01
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: DIST
+tags:
+- update
+- notification
+- ux
+resolution:
+  status: verified
+  resolved_at: 2026-03-01T20:26:30.316717+00:00
+  resolved_by: agent:claude-2026-03-01
+edges:
+  depends_on:
+  - target: REQ-DIST-005
+    version: 1.0.0

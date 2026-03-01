@@ -6,12 +6,12 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
-    AddThesisOptions, Audience, DriftSeverity, ExportOptions, GapType, HtmlExportOptions,
-    LatticeData, LintSeverity, Plan, Priority, RefineOptions, Resolution, ResolveOptions, Status,
-    VerifyOptions, add_edge, add_implementation, add_requirement, add_source, add_thesis,
-    build_node_index, export_html, export_narrative, find_drift, find_lattice_root, fix_issues,
-    generate_plan, get_github_pages_url, init_lattice, lint_lattice, load_config,
-    load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
+    AddThesisOptions, Audience, DriftSeverity, EditNodeOptions, ExportOptions, GapType,
+    HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority, RefineOptions, Resolution,
+    ResolveOptions, Status, VerifyOptions, add_edge, add_implementation, add_requirement,
+    add_source, add_thesis, build_node_index, edit_node, export_html, export_narrative, find_drift,
+    find_lattice_root, fix_issues, generate_plan, get_github_pages_url, init_lattice, lint_lattice,
+    load_config, load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -103,6 +103,40 @@ enum Commands {
         /// Mark as wontfix with reason (will not implement)
         #[arg(long, conflicts_with_all = ["verified", "blocked", "deferred"])]
         wontfix: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Edit fields on an existing node (auto-bumps patch version)
+    Edit {
+        /// Node ID (e.g., REQ-CORE-001, IMP-DIST-001)
+        id: String,
+
+        /// New title
+        #[arg(long)]
+        title: Option<String>,
+
+        /// New body
+        #[arg(long)]
+        body: Option<String>,
+
+        /// New status (draft, active, deprecated, superseded)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// New priority (P0, P1, P2) — requirements only
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Comma-separated tags (replaces existing)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// New category
+        #[arg(long)]
+        category: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -1051,6 +1085,25 @@ fn build_command_catalog() -> serde_json::Value {
                 ]
             },
             {
+                "name": "edit",
+                "description": "Edit fields on an existing node (auto-bumps patch version)",
+                "parameters": [
+                    param("id", "string", true, "Node ID (e.g. REQ-CORE-001)"),
+                    param("--title", "string", false, "New title"),
+                    param("--body", "string", false, "New body"),
+                    param("--status", "string", false, "New status: draft, active, deprecated, superseded"),
+                    param("--priority", "string", false, "New priority: P0, P1, P2 (requirements only)"),
+                    param("--tags", "string", false, "Comma-separated tags (replaces existing)"),
+                    param("--category", "string", false, "New category"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice edit REQ-CORE-001 --title 'Updated title'",
+                    "lattice edit REQ-CORE-001 --tags 'core,storage' --priority P0",
+                    "lattice edit IMP-CLI-001 --status active --format json"
+                ]
+            },
+            {
                 "name": "verify",
                 "description": "Record that an implementation satisfies a requirement",
                 "parameters": [
@@ -1187,6 +1240,29 @@ fn build_command_catalog() -> serde_json::Value {
     })
 }
 
+fn command_to_name(cmd: &Commands) -> &'static str {
+    match cmd {
+        Commands::Init { .. } => "init",
+        Commands::Add { .. } => "add",
+        Commands::List { .. } => "list",
+        Commands::Resolve { .. } => "resolve",
+        Commands::Edit { .. } => "edit",
+        Commands::Plan { .. } => "plan",
+        Commands::Drift { .. } => "drift",
+        Commands::Get { .. } => "get",
+        Commands::Export { .. } => "export",
+        Commands::Summary { .. } => "summary",
+        Commands::Lint { .. } => "lint",
+        Commands::Verify { .. } => "verify",
+        Commands::Refine { .. } => "refine",
+        Commands::Search { .. } => "search",
+        Commands::Mcp => "mcp",
+        Commands::Update { .. } => "update",
+        Commands::Prompt { .. } => "prompt",
+        Commands::Help { .. } => "help",
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -1208,6 +1284,8 @@ fn main() {
             return;
         }
     };
+
+    let command_name = command_to_name(&command);
 
     match command {
         Commands::Init {
@@ -1610,6 +1688,52 @@ fn main() {
                     }
                 }
                 Err(e) => emit_error(&format, "resolve_error", &e.to_string()),
+            }
+        }
+
+        Commands::Edit {
+            id,
+            title,
+            body,
+            status,
+            priority,
+            tags,
+            category,
+            format,
+        } => {
+            let root = get_lattice_root();
+            let tags = split_csv(tags);
+            let status = status.map(|s| parse_status(&s));
+            let priority = priority.map(|p| parse_priority(&p));
+
+            let options = EditNodeOptions {
+                node_id: id.clone(),
+                title,
+                body,
+                status,
+                priority,
+                tags,
+                category,
+            };
+
+            match edit_node(&root, options) {
+                Ok(path) => {
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "success": true,
+                                "id": id,
+                                "file": path.display().to_string(),
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("{}", format!("Updated {}", id).green());
+                        println!("{}", format!("File: {}", path.display()).dimmed());
+                    }
+                }
+                Err(e) => emit_error(&format, "edit_error", &e.to_string()),
             }
         }
 
@@ -2805,6 +2929,9 @@ fn main() {
             }
         }
     }
+
+    // Passive update check after command output is complete
+    lattice::update::maybe_notify_update(Some(command_name));
 }
 
 #[cfg(test)]
@@ -2895,6 +3022,7 @@ mod tests {
             "add implementation",
             "add edge",
             "resolve",
+            "edit",
             "verify",
             "refine",
             "drift",

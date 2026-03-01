@@ -178,6 +178,8 @@ pub enum StorageError {
     InvalidNodeType(String),
     #[error("{0}")]
     AlreadyExists(String),
+    #[error("Invalid field value: {0}")]
+    InvalidField(String),
 }
 
 /// Find the lattice root by searching upward for .lattice directory.
@@ -618,6 +620,86 @@ pub fn resolve_node(root: &Path, options: ResolveOptions) -> Result<PathBuf, Sto
         resolved_by: options.resolved_by,
     });
 
+    save_node(&path, &node)?;
+    Ok(path)
+}
+
+/// Options for editing an existing node.
+pub struct EditNodeOptions {
+    pub node_id: String,
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub status: Option<Status>,
+    pub priority: Option<Priority>,
+    pub tags: Option<Vec<String>>,
+    pub category: Option<String>,
+}
+
+/// Bump the patch component of a semver version string.
+fn bump_patch_version(version: &str) -> String {
+    match semver::Version::parse(version) {
+        Ok(mut v) => {
+            v.patch += 1;
+            v.to_string()
+        }
+        Err(_) => "1.0.1".to_string(),
+    }
+}
+
+/// Edit fields on an existing node, auto-bumping the patch version.
+pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, StorageError> {
+    let path = find_node_path(root, &options.node_id)?;
+    let mut node = load_node(&path)?;
+
+    let mut changed = false;
+
+    if let Some(title) = options.title
+        && title != node.title
+    {
+        node.title = title;
+        changed = true;
+    }
+    if let Some(body) = options.body
+        && body != node.body
+    {
+        node.body = body;
+        changed = true;
+    }
+    if let Some(new_status) = options.status
+        && new_status != node.status
+    {
+        node.status = new_status;
+        changed = true;
+    }
+    if let Some(new_priority) = options.priority {
+        if node.node_type != NodeType::Requirement {
+            return Err(StorageError::InvalidField(
+                "Priority can only be set on requirement nodes".to_string(),
+            ));
+        }
+        if node.priority.as_ref() != Some(&new_priority) {
+            node.priority = Some(new_priority);
+            changed = true;
+        }
+    }
+    if let Some(tags) = options.tags
+        && node.tags.as_ref() != Some(&tags)
+    {
+        node.tags = Some(tags);
+        changed = true;
+    }
+    if let Some(category) = options.category
+        && node.category.as_ref() != Some(&category)
+    {
+        node.category = Some(category);
+        changed = true;
+    }
+
+    if !changed {
+        return Ok(path);
+    }
+
+    node.version = bump_patch_version(&node.version);
     save_node(&path, &node)?;
     Ok(path)
 }
@@ -1766,5 +1848,219 @@ mod tests {
             },
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_edit_node_title_and_body() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-EDIT-001".to_string(),
+                title: "Original".to_string(),
+                body: "Original body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let path = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-EDIT-001".to_string(),
+                title: Some("Updated".to_string()),
+                body: Some("New body".to_string()),
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(node.title, "Updated");
+        assert_eq!(node.body, "New body");
+        assert_eq!(node.version, "1.0.1");
+    }
+
+    #[test]
+    fn test_edit_node_tags_and_category() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-EDIT-002".to_string(),
+                title: "Tags test".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "OLD".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let path = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-EDIT-002".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: None,
+                tags: Some(vec!["alpha".to_string(), "beta".to_string()]),
+                category: Some("NEW".to_string()),
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(
+            node.tags,
+            Some(vec!["alpha".to_string(), "beta".to_string()])
+        );
+        assert_eq!(node.category, Some("NEW".to_string()));
+        assert_eq!(node.version, "1.0.1");
+    }
+
+    #[test]
+    fn test_edit_node_no_changes() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-EDIT-003".to_string(),
+                title: "Same".to_string(),
+                body: "Same body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let path = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-EDIT-003".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(node.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_edit_node_priority_change() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-EDIT-004".to_string(),
+                title: "Priority test".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let path = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-EDIT-004".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: Some(crate::types::Priority::P0),
+                tags: None,
+                category: None,
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(node.priority, Some(crate::types::Priority::P0));
+        assert_eq!(node.version, "1.0.1");
+    }
+
+    #[test]
+    fn test_edit_node_priority_on_non_requirement() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_source(
+            root,
+            AddSourceOptions {
+                id: "SRC-EDIT-001".to_string(),
+                title: "Source".to_string(),
+                body: "Body".to_string(),
+                url: None,
+                citations: None,
+                reliability: Reliability::Unverified,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let result = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "SRC-EDIT-001".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: Some(crate::types::Priority::P0),
+                tags: None,
+                category: None,
+            },
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Priority can only be set on requirement nodes")
+        );
     }
 }

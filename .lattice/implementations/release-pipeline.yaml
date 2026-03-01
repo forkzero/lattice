@@ -6,9 +6,11 @@ body: >
   (aarch64-apple-darwin, x86_64-apple-darwin, x86_64-unknown-linux-gnu,
   aarch64-unknown-linux-gnu). Packages as tar.gz with SHA256 checksums.
   Triggered by semantic version tags. Includes install.sh for curl-based
-  installation and platform instructions in README.
+  installation, platform instructions in README, self-update command
+  (lattice update), and passive update notification on launch with
+  24-hour cached version check.
 status: active
-version: 1.0.0
+version: 1.1.0
 created_at: 2026-02-04T21:00:00.000000+00:00
 created_by: agent:claude-opus-4.5-2026-02-04
 meta:
@@ -17,6 +19,7 @@ meta:
     - path: .github/workflows/release.yml
     - path: install.sh
     - path: README.md
+    - path: src/update.rs
 edges:
   satisfies:
     - target: REQ-DIST-001
@@ -31,3 +34,9 @@ edges:
     - target: REQ-DIST-004
       version: 1.0.0
       rationale: README includes platform install instructions
+    - target: REQ-DIST-005
+      version: 1.0.0
+      rationale: Self-update command in src/update.rs with checksum verification
+    - target: REQ-DIST-006
+      version: 1.0.0
+      rationale: Passive update notification with 24h cache after every command

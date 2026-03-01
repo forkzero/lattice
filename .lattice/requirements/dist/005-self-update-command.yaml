@@ -1,0 +1,24 @@
+id: REQ-DIST-005
+type: requirement
+title: Self-Update Command
+body: The CLI provides a 'lattice update' command that downloads and replaces the running binary with the latest release from GitHub. Fetches release metadata from GitHub API, downloads the platform-appropriate tar.gz archive and checksums.txt, verifies SHA-256 checksum, extracts the binary, and atomically replaces the running executable via self-replace. Supports --check (check-only), --force (downgrade/reinstall), --version (specific version), and --format text|json. Warns when running from a development build (target/debug or target/release paths). Reports rate limiting clearly.
+status: active
+version: 1.0.0
+created_at: 2026-03-01T20:26:15.103365+00:00
+created_by: agent:claude-2026-03-01
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: DIST
+tags:
+- update
+- self-update
+- binary
+- distribution
+resolution:
+  status: verified
+  resolved_at: 2026-03-01T20:26:29.353789+00:00
+  resolved_by: agent:claude-2026-03-01
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

@@ -5,6 +5,7 @@
 
 use std::path::Path;
 
+use colored::Colorize;
 use flate2::read::GzDecoder;
 use semver::Version;
 use sha2::{Digest, Sha256};
@@ -96,11 +97,15 @@ fn current_version() -> Version {
     Version::parse(env!("CARGO_PKG_VERSION")).expect("CARGO_PKG_VERSION is valid semver")
 }
 
-fn build_client() -> Result<reqwest::Client, UpdateError> {
+fn build_client_with_timeout(timeout: std::time::Duration) -> Result<reqwest::Client, UpdateError> {
     Ok(reqwest::Client::builder()
         .user_agent(format!("lattice/{}", env!("CARGO_PKG_VERSION")))
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(timeout)
         .build()?)
+}
+
+fn build_client() -> Result<reqwest::Client, UpdateError> {
+    build_client_with_timeout(std::time::Duration::from_secs(30))
 }
 
 /// Check response status, returning RateLimited for 403.
@@ -300,6 +305,135 @@ pub async fn run_update(options: UpdateOptions) -> Result<UpdateResult, UpdateEr
     })
 }
 
+// --- Auto-update check (passive notification) ---
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct UpdateCheckState {
+    last_checked: chrono::DateTime<chrono::Utc>,
+    latest_version: String,
+}
+
+fn update_check_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()?;
+    Some(
+        std::path::PathBuf::from(home)
+            .join(".lattice")
+            .join("update-check.json"),
+    )
+}
+
+fn read_check_state(path: &std::path::Path) -> Option<UpdateCheckState> {
+    let data = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+fn write_check_state(path: &std::path::Path, state: &UpdateCheckState) {
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = serde_json::to_string(state)
+        .ok()
+        .and_then(|json| std::fs::write(path, json).ok());
+}
+
+fn print_update_notice(latest: &Version) {
+    eprintln!(
+        "{}",
+        format!(
+            "A new version of lattice is available (v{}). Run 'lattice update' to install.",
+            latest
+        )
+        .dimmed()
+    );
+}
+
+/// Print a one-line update notice to stderr if a newer version is available.
+///
+/// Called after every command completes. Skips silently for `update`, `mcp`,
+/// non-TTY stderr, dev builds, and when HOME is unset. Caches the check
+/// result for 24 hours to avoid repeated network requests.
+pub fn maybe_notify_update(command_name: Option<&str>) {
+    use std::io::IsTerminal;
+
+    // Skip for commands that handle updates themselves or use stdio protocol
+    if let Some(name) = command_name
+        && (name == "update" || name == "mcp")
+    {
+        return;
+    }
+
+    // Skip if stderr is not a terminal (piped output)
+    if !std::io::stderr().is_terminal() {
+        return;
+    }
+
+    // Skip dev builds
+    if !is_installed_binary() {
+        return;
+    }
+
+    // Need a cache path
+    let cache_path = match update_check_path() {
+        Some(p) => p,
+        None => return,
+    };
+
+    let current = current_version();
+    let now = chrono::Utc::now();
+
+    // Check cache first
+    if let Some(state) = read_check_state(&cache_path) {
+        let age = now.signed_duration_since(state.last_checked);
+        if age < chrono::Duration::hours(24) {
+            // Cache is fresh — show notice if newer version exists
+            if let Ok(latest) = Version::parse(&state.latest_version)
+                && latest > current
+            {
+                print_update_notice(&latest);
+            }
+            return;
+        }
+    }
+
+    // Cache is stale or missing — do a network check
+    let client = match build_client_with_timeout(std::time::Duration::from_secs(5)) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(_) => return,
+    };
+
+    match rt.block_on(fetch_latest_version(&client)) {
+        Ok((_tag, latest)) => {
+            write_check_state(
+                &cache_path,
+                &UpdateCheckState {
+                    last_checked: now,
+                    latest_version: latest.to_string(),
+                },
+            );
+            if latest > current {
+                print_update_notice(&latest);
+            }
+        }
+        Err(_) => {
+            // Write timestamp anyway to suppress retries for 24h
+            write_check_state(
+                &cache_path,
+                &UpdateCheckState {
+                    last_checked: now,
+                    latest_version: current.to_string(),
+                },
+            );
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -393,5 +527,46 @@ abc123def456  lattice-0.1.7-aarch64-apple-darwin.tar.gz
         // so it should return false
         let result = is_installed_binary();
         assert!(!result, "test binary should not appear as installed");
+    }
+
+    #[test]
+    fn test_update_check_state_roundtrip() {
+        let state = UpdateCheckState {
+            last_checked: chrono::Utc::now(),
+            latest_version: "0.1.7".to_string(),
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let parsed: UpdateCheckState = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.latest_version, "0.1.7");
+        assert_eq!(parsed.last_checked, state.last_checked);
+    }
+
+    #[test]
+    fn test_update_check_path_returns_some() {
+        // HOME should be set in the test environment
+        let path = update_check_path();
+        assert!(path.is_some());
+        let p = path.unwrap();
+        assert!(p.ends_with("update-check.json"));
+        assert!(p.to_string_lossy().contains(".lattice"));
+    }
+
+    #[test]
+    fn test_read_check_state_missing_file() {
+        let path = std::path::Path::new("/tmp/nonexistent-lattice-test/update-check.json");
+        assert!(read_check_state(path).is_none());
+    }
+
+    #[test]
+    fn test_write_and_read_check_state() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("update-check.json");
+        let state = UpdateCheckState {
+            last_checked: chrono::Utc::now(),
+            latest_version: "0.2.0".to_string(),
+        };
+        write_check_state(&path, &state);
+        let loaded = read_check_state(&path).unwrap();
+        assert_eq!(loaded.latest_version, "0.2.0");
     }
 }

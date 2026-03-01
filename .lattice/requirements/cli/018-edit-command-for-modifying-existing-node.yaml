@@ -13,4 +13,9 @@ tags:
 - edit
 - nodes
 - version-bump
+resolution:
+  status: verified
+  reason: Implemented lattice edit command with title, body, status, priority, tags, category support
+  resolved_at: '2026-03-01T00:00:00+00:00'
+  resolved_by: agent:claude-2026-03-01
 edges: {}

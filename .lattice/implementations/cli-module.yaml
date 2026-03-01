@@ -16,6 +16,9 @@ edges:
   - target: REQ-CLI-008
     version: 1.0.0
     rationale: resolve subcommand with verified/blocked/deferred/wontfix
+  - target: REQ-CLI-018
+    version: 1.0.0
+    rationale: edit subcommand for modifying existing node fields with auto version bump
   reveals_gap_in:
   - target: REQ-AGENT-001
     version: 1.0.0
