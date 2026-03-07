@@ -20,7 +20,9 @@ pub use graph::{
 };
 pub use html_export::{HtmlExportOptions, export_html};
 pub use lint::{LintReport, LintSeverity, fix_issues, lint_lattice};
-pub use search::{SearchEngine, SearchParams, SearchResult, SearchResults, split_csv};
+pub use search::{
+    IndexStatus, SearchEngine, SearchIndex, SearchParams, SearchResult, SearchResults, split_csv,
+};
 pub use storage::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
     AddThesisOptions, EDGE_TYPES, EditNodeOptions, GapType, LATTICE_DIR, LatticeConfig,

@@ -8,9 +8,11 @@
 //! Linked requirement: REQ-API-008
 
 use crate::graph::build_node_index;
-use crate::storage::load_nodes_by_type;
+use crate::storage::{load_all_nodes, load_nodes_by_type};
 use crate::types::{Edges, LatticeNode, Resolution};
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
 /// Unified search parameters accepted by both CLI and MCP.
@@ -154,6 +156,161 @@ impl SearchEngine {
         }
 
         Ok(Some(related))
+    }
+}
+
+// --- Search Index Infrastructure ---
+
+/// Persistent index metadata stored at `~/.cache/lattice/<project-hash>/index.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchIndex {
+    /// Embedding model name (empty until Phase 2 adds vector search).
+    pub model: String,
+    /// Embedding dimension (0 until Phase 2).
+    pub dimension: usize,
+    /// Map of node_id → SHA-256 of content (title + "\n" + body).
+    pub content_hashes: BTreeMap<String, String>,
+}
+
+/// Summary of index health returned by `index_status()`.
+#[derive(Debug, Clone)]
+pub struct IndexStatus {
+    /// Whether an index file exists on disk.
+    pub exists: bool,
+    /// Number of nodes currently indexed.
+    pub indexed: usize,
+    /// Number of indexed nodes whose content hash no longer matches (stale).
+    pub stale: usize,
+    /// Number of nodes in the lattice that are not in the index.
+    pub missing: usize,
+    /// Total nodes in the lattice.
+    pub total: usize,
+    /// Cache directory path.
+    pub cache_dir: PathBuf,
+}
+
+impl SearchIndex {
+    fn new() -> Self {
+        Self {
+            model: String::new(),
+            dimension: 0,
+            content_hashes: BTreeMap::new(),
+        }
+    }
+
+    fn load(path: &std::path::Path) -> Result<Self, String> {
+        let data =
+            std::fs::read_to_string(path).map_err(|e| format!("Failed to read index: {}", e))?;
+        serde_json::from_str(&data).map_err(|e| format!("Failed to parse index: {}", e))
+    }
+
+    fn save(&self, path: &std::path::Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create cache dir: {}", e))?;
+        }
+        let data = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize index: {}", e))?;
+        std::fs::write(path, data).map_err(|e| format!("Failed to write index: {}", e))
+    }
+}
+
+/// Compute SHA-256 of a node's content for change detection.
+pub fn content_hash(title: &str, body: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(title.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(body.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+/// Compute the cache directory for a lattice project.
+/// Returns `~/.cache/lattice/<sha256-of-canonical-root-path>/`.
+pub fn cache_dir(root: &std::path::Path) -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+    let canonical =
+        std::fs::canonicalize(root).map_err(|e| format!("Failed to canonicalize root: {}", e))?;
+    let mut hasher = Sha256::new();
+    hasher.update(canonical.to_string_lossy().as_bytes());
+    let project_hash = format!("{:x}", hasher.finalize());
+    // Use first 16 hex chars (64 bits) — sufficient for per-machine uniqueness
+    Ok(PathBuf::from(home)
+        .join(".cache")
+        .join("lattice")
+        .join(&project_hash[..16]))
+}
+
+impl SearchEngine {
+    /// Build or rebuild the search index. Hashes all node content and writes
+    /// `index.json` to the cache directory. Returns the number of nodes
+    /// indexed and the number that were unchanged (cache hits).
+    pub fn index_build(&self) -> Result<(usize, usize), String> {
+        let nodes = load_all_nodes(&self.root).map_err(|e| e.to_string())?;
+        let cache = cache_dir(&self.root)?;
+        let index_path = cache.join("index.json");
+
+        // Load existing index for diff comparison
+        let old_index = SearchIndex::load(&index_path).ok();
+
+        let mut new_index = SearchIndex::new();
+        let mut unchanged = 0;
+
+        for node in &nodes {
+            let hash = content_hash(&node.title, &node.body);
+            if let Some(ref old) = old_index
+                && old.content_hashes.get(&node.id).map(|h| h.as_str()) == Some(&hash)
+            {
+                unchanged += 1;
+            }
+            new_index.content_hashes.insert(node.id.clone(), hash);
+        }
+
+        new_index.save(&index_path)?;
+
+        Ok((nodes.len(), unchanged))
+    }
+
+    /// Report index health: exists, indexed, stale, missing counts.
+    pub fn index_status(&self) -> Result<IndexStatus, String> {
+        let nodes = load_all_nodes(&self.root).map_err(|e| e.to_string())?;
+        let cache = cache_dir(&self.root)?;
+        let index_path = cache.join("index.json");
+
+        if !index_path.exists() {
+            return Ok(IndexStatus {
+                exists: false,
+                indexed: 0,
+                stale: 0,
+                missing: nodes.len(),
+                total: nodes.len(),
+                cache_dir: cache,
+            });
+        }
+
+        let index = SearchIndex::load(&index_path)?;
+        let mut stale = 0;
+        let mut missing = 0;
+
+        for node in &nodes {
+            match index.content_hashes.get(&node.id) {
+                Some(stored_hash) => {
+                    let current = content_hash(&node.title, &node.body);
+                    if *stored_hash != current {
+                        stale += 1;
+                    }
+                }
+                None => missing += 1,
+            }
+        }
+
+        Ok(IndexStatus {
+            exists: true,
+            indexed: index.content_hashes.len(),
+            stale,
+            missing,
+            total: nodes.len(),
+            cache_dir: cache,
+        })
     }
 }
 
@@ -513,5 +670,77 @@ mod tests {
         assert!(validate_node_type("theses").is_ok());
         assert!(validate_node_type("implementations").is_ok());
         assert!(validate_node_type("invalid").is_err());
+    }
+
+    #[test]
+    fn test_content_hash_deterministic() {
+        let h1 = content_hash("Title", "Body");
+        let h2 = content_hash("Title", "Body");
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64); // SHA-256 hex = 64 chars
+    }
+
+    #[test]
+    fn test_content_hash_differs_on_change() {
+        let h1 = content_hash("Title", "Body");
+        let h2 = content_hash("Title", "Body changed");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn test_content_hash_title_body_separator() {
+        // "A\nB" should differ from "A\n" + "B" assembled differently
+        let h1 = content_hash("A", "B");
+        let h2 = content_hash("A\nB", "");
+        assert_ne!(
+            h1, h2,
+            "title+newline+body should differ from title containing newline"
+        );
+    }
+
+    #[test]
+    fn test_search_index_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("index.json");
+
+        let mut index = SearchIndex::new();
+        index
+            .content_hashes
+            .insert("REQ-001".to_string(), "abc123".to_string());
+        index
+            .content_hashes
+            .insert("REQ-002".to_string(), "def456".to_string());
+
+        index.save(&path).unwrap();
+        let loaded = SearchIndex::load(&path).unwrap();
+
+        assert_eq!(loaded.content_hashes.len(), 2);
+        assert_eq!(loaded.content_hashes.get("REQ-001").unwrap(), "abc123");
+        assert_eq!(loaded.model, "");
+        assert_eq!(loaded.dimension, 0);
+    }
+
+    #[test]
+    fn test_search_index_load_missing_file() {
+        let result = SearchIndex::load(std::path::Path::new("/nonexistent/index.json"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_cache_dir_deterministic() {
+        // Use a real path that exists for canonicalize
+        let dir = tempfile::tempdir().unwrap();
+        let d1 = cache_dir(dir.path()).unwrap();
+        let d2 = cache_dir(dir.path()).unwrap();
+        assert_eq!(d1, d2);
+    }
+
+    #[test]
+    fn test_cache_dir_differs_by_project() {
+        let dir1 = tempfile::tempdir().unwrap();
+        let dir2 = tempfile::tempdir().unwrap();
+        let d1 = cache_dir(dir1.path()).unwrap();
+        let d2 = cache_dir(dir2.path()).unwrap();
+        assert_ne!(d1, d2);
     }
 }

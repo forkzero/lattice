@@ -317,6 +317,14 @@ enum Commands {
         #[arg(long)]
         related_to: Option<String>,
 
+        /// Build or rebuild the search index
+        #[arg(long)]
+        index: bool,
+
+        /// Show search index health (indexed, stale, missing counts)
+        #[arg(long)]
+        index_status: bool,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -970,13 +978,17 @@ fn build_command_catalog() -> serde_json::Value {
                     param_s("--category", "-c", "string", false, "Filter by category"),
                     param("--id-prefix", "string", false, "Filter by ID prefix"),
                     param("--related-to", "string", false, "Find nodes related to this node ID"),
+                    param("--index", "bool", false, "Build or rebuild the search index"),
+                    param("--index-status", "bool", false, "Show search index health"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice search requirements -q 'vibes'",
                     "lattice search -q 'product owner' --format json",
                     "lattice search --priority P0 --resolution unresolved",
-                    "lattice search --tag agent --category AGENT"
+                    "lattice search --tag agent --category AGENT",
+                    "lattice search --index",
+                    "lattice search --index-status"
                 ]
             },
             {
@@ -2475,10 +2487,88 @@ fn main() {
             category,
             id_prefix,
             related_to,
+            index,
+            index_status,
             format,
         } => {
             let root = get_lattice_root();
             let engine = SearchEngine::new(&root);
+
+            // Handle --index: build/rebuild the search index
+            if index {
+                match engine.index_build() {
+                    Ok((total, unchanged)) => {
+                        let changed = total - unchanged;
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "success": true,
+                                    "total": total,
+                                    "changed": changed,
+                                    "unchanged": unchanged,
+                                }))
+                                .unwrap()
+                            );
+                        } else {
+                            println!(
+                                "{}",
+                                format!(
+                                    "Indexed {} nodes ({} changed, {} unchanged)",
+                                    total, changed, unchanged
+                                )
+                                .green()
+                            );
+                        }
+                    }
+                    Err(e) => emit_error(&format, "index_error", &e),
+                }
+                return;
+            }
+
+            // Handle --index-status: show index health
+            if index_status {
+                match engine.index_status() {
+                    Ok(status) => {
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "exists": status.exists,
+                                    "indexed": status.indexed,
+                                    "stale": status.stale,
+                                    "missing": status.missing,
+                                    "total": status.total,
+                                    "cache_dir": status.cache_dir.display().to_string(),
+                                }))
+                                .unwrap()
+                            );
+                        } else if !status.exists {
+                            println!("{}", "No search index found.".yellow());
+                            println!(
+                                "Run {} to build the index ({} nodes).",
+                                "lattice search --index".bold(),
+                                status.total
+                            );
+                        } else {
+                            let healthy = status.stale == 0 && status.missing == 0;
+                            let health_str = if healthy {
+                                "healthy".green().to_string()
+                            } else {
+                                "needs rebuild".yellow().to_string()
+                            };
+                            println!("Index status: {}", health_str);
+                            println!("  Indexed: {}", status.indexed);
+                            println!("  Stale:   {}", status.stale);
+                            println!("  Missing: {}", status.missing);
+                            println!("  Total:   {}", status.total);
+                            println!("  Cache:   {}", status.cache_dir.display());
+                        }
+                    }
+                    Err(e) => emit_error(&format, "index_status_error", &e),
+                }
+                return;
+            }
 
             let params = SearchParams {
                 node_type: Some(
