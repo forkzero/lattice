@@ -9,6 +9,7 @@ pub mod graph;
 pub mod html_export;
 pub mod lint;
 pub mod mcp;
+pub mod search;
 pub mod storage;
 pub mod types;
 pub mod update;
@@ -19,6 +20,7 @@ pub use graph::{
 };
 pub use html_export::{HtmlExportOptions, export_html};
 pub use lint::{LintReport, LintSeverity, fix_issues, lint_lattice};
+pub use search::{SearchEngine, SearchParams, SearchResult, SearchResults, split_csv};
 pub use storage::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
     AddThesisOptions, EDGE_TYPES, EditNodeOptions, GapType, LATTICE_DIR, LatticeConfig,

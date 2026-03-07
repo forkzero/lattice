@@ -4,6 +4,7 @@
 //! Linked requirement: REQ-API-004
 
 use crate::graph::{build_node_index, find_drift};
+use crate::search::SearchEngine;
 use crate::storage::{
     AddImplementationOptions, AddRequirementOptions, GapType, RefineOptions, ResolveOptions,
     add_implementation, add_requirement, find_lattice_root, load_nodes_by_type, refine_requirement,
@@ -321,248 +322,43 @@ impl LatticeServer {
     }
 
     /// Search across nodes with multiple filter criteria
-    fn search(&self, params: SearchParams) -> Result<Value, String> {
-        let node_type = params.node_type.as_deref().unwrap_or("requirements");
-        let type_name = match node_type {
-            "sources" => "sources",
-            "theses" => "theses",
-            "requirements" => "requirements",
-            "implementations" => "implementations",
-            _ => return Err(format!("Unknown type: {}", node_type)),
+    fn search(&self, params: McpSearchParams) -> Result<Value, String> {
+        let engine = SearchEngine::new(&self.root);
+
+        let search_params = crate::search::SearchParams {
+            node_type: params.node_type,
+            query: params.query,
+            priority: params.priority,
+            resolution: params.resolution,
+            tag: params.tag,
+            tags: params.tags,
+            category: params.category,
+            id_prefix: params.id_prefix,
+            related_to: params.related_to,
         };
 
-        let nodes = load_nodes_by_type(&self.root, type_name).map_err(|e| e.to_string())?;
+        let results = engine.search(&search_params)?;
 
-        // For graph proximity, build a set of related node IDs
-        let related_ids: Option<HashSet<String>> = if let Some(ref related_to) = params.related_to {
-            let index = build_node_index(&self.root).map_err(|e| e.to_string())?;
-            if let Some(source_node) = index.get(related_to) {
-                let mut related = HashSet::new();
-
-                // Collect edge targets from the source node
-                let mut source_targets: HashSet<String> = HashSet::new();
-                if let Some(edges) = &source_node.edges {
-                    if let Some(derives_from) = &edges.derives_from {
-                        for edge in derives_from {
-                            source_targets.insert(edge.target.clone());
-                        }
-                    }
-                    if let Some(depends_on) = &edges.depends_on {
-                        for edge in depends_on {
-                            source_targets.insert(edge.target.clone());
-                        }
-                    }
-                    if let Some(satisfies) = &edges.satisfies {
-                        for edge in satisfies {
-                            source_targets.insert(edge.target.clone());
-                        }
-                    }
-                    if let Some(supported_by) = &edges.supported_by {
-                        for edge in supported_by {
-                            source_targets.insert(edge.target.clone());
-                        }
-                    }
-                }
-
-                // Find nodes sharing any of these edge targets
-                for node in index.values() {
-                    if node.id == *related_to {
-                        continue; // Skip the source node itself
-                    }
-                    if let Some(edges) = &node.edges {
-                        let mut node_targets: HashSet<String> = HashSet::new();
-                        if let Some(derives_from) = &edges.derives_from {
-                            for edge in derives_from {
-                                node_targets.insert(edge.target.clone());
-                            }
-                        }
-                        if let Some(depends_on) = &edges.depends_on {
-                            for edge in depends_on {
-                                node_targets.insert(edge.target.clone());
-                            }
-                        }
-                        if let Some(satisfies) = &edges.satisfies {
-                            for edge in satisfies {
-                                node_targets.insert(edge.target.clone());
-                            }
-                        }
-                        if let Some(supported_by) = &edges.supported_by {
-                            for edge in supported_by {
-                                node_targets.insert(edge.target.clone());
-                            }
-                        }
-
-                        // Check for intersection
-                        if !source_targets.is_disjoint(&node_targets) {
-                            related.insert(node.id.clone());
-                        }
-                    }
-                }
-
-                // Also include nodes that the source directly references or is referenced by
-                for target in &source_targets {
-                    related.insert(target.clone());
-                }
-
-                // Find nodes that reference the source node
-                for node in index.values() {
-                    if let Some(edges) = &node.edges {
-                        let targets_source = edges
-                            .derives_from
-                            .as_ref()
-                            .map(|v| v.iter().any(|e| e.target == *related_to))
-                            .unwrap_or(false)
-                            || edges
-                                .depends_on
-                                .as_ref()
-                                .map(|v| v.iter().any(|e| e.target == *related_to))
-                                .unwrap_or(false)
-                            || edges
-                                .satisfies
-                                .as_ref()
-                                .map(|v| v.iter().any(|e| e.target == *related_to))
-                                .unwrap_or(false)
-                            || edges
-                                .supported_by
-                                .as_ref()
-                                .map(|v: &Vec<_>| v.iter().any(|e| e.target == *related_to))
-                                .unwrap_or(false);
-                        if targets_source {
-                            related.insert(node.id.clone());
-                        }
-                    }
-                }
-
-                Some(related)
-            } else {
-                return Err(format!("Node not found: {}", related_to));
-            }
-        } else {
-            None
-        };
-
-        let results: Vec<Value> = nodes
+        let json_results: Vec<Value> = results
+            .results
             .iter()
-            .filter(|n| {
-                // ID prefix filter
-                if let Some(ref prefix) = params.id_prefix
-                    && !n.id.to_uppercase().starts_with(&prefix.to_uppercase())
-                {
-                    return false;
-                }
-
-                // Graph proximity filter
-                if let Some(ref related) = related_ids
-                    && !related.contains(&n.id)
-                {
-                    return false;
-                }
-
-                // Text search in title and body
-                if let Some(ref query) = params.query {
-                    let query_lower = query.to_lowercase();
-                    let title_match = n.title.to_lowercase().contains(&query_lower);
-                    let body_match = n.body.to_lowercase().contains(&query_lower);
-                    if !title_match && !body_match {
-                        return false;
-                    }
-                }
-
-                // Priority filter
-                if let Some(ref priority) = params.priority {
-                    let node_priority = n.priority.as_ref().map(|p| format!("{:?}", p));
-                    if node_priority.as_deref() != Some(priority.to_uppercase().as_str()) {
-                        return false;
-                    }
-                }
-
-                // Resolution status filter
-                if let Some(ref resolution) = params.resolution {
-                    let res_lower = resolution.to_lowercase();
-                    let matches = match res_lower.as_str() {
-                        "verified" => matches!(
-                            n.resolution.as_ref().map(|r| &r.status),
-                            Some(Resolution::Verified)
-                        ),
-                        "blocked" => matches!(
-                            n.resolution.as_ref().map(|r| &r.status),
-                            Some(Resolution::Blocked)
-                        ),
-                        "deferred" => matches!(
-                            n.resolution.as_ref().map(|r| &r.status),
-                            Some(Resolution::Deferred)
-                        ),
-                        "wontfix" => matches!(
-                            n.resolution.as_ref().map(|r| &r.status),
-                            Some(Resolution::Wontfix)
-                        ),
-                        "unresolved" | "open" => n.resolution.is_none(),
-                        _ => true,
-                    };
-                    if !matches {
-                        return false;
-                    }
-                }
-
-                // Single tag filter (backwards compatible)
-                if let Some(ref tag) = params.tag {
-                    let tag_lower = tag.to_lowercase();
-                    let has_tag = n
-                        .tags
-                        .as_ref()
-                        .map(|tags| tags.iter().any(|t| t.to_lowercase() == tag_lower))
-                        .unwrap_or(false);
-                    if !has_tag {
-                        return false;
-                    }
-                }
-
-                // Tags intersection filter (all specified tags must be present)
-                if let Some(ref search_tags) = params.tags {
-                    let node_tags: HashSet<String> = n
-                        .tags
-                        .as_ref()
-                        .map(|tags| tags.iter().map(|t| t.to_lowercase()).collect())
-                        .unwrap_or_default();
-                    for search_tag in search_tags {
-                        if !node_tags.contains(&search_tag.to_lowercase()) {
-                            return false;
-                        }
-                    }
-                }
-
-                // Category filter
-                if let Some(ref category) = params.category {
-                    let cat_lower = category.to_lowercase();
-                    let matches_cat = n
-                        .category
-                        .as_ref()
-                        .map(|c| c.to_lowercase() == cat_lower)
-                        .unwrap_or(false);
-                    if !matches_cat {
-                        return false;
-                    }
-                }
-
-                true
-            })
-            .map(|n| {
+            .map(|r| {
                 json!({
-                    "id": n.id,
-                    "title": n.title,
-                    "body": n.body,
-                    "version": n.version,
-                    "priority": n.priority.as_ref().map(|p| format!("{:?}", p)),
-                    "resolution": n.resolution.as_ref().map(|r| format!("{:?}", r.status).to_lowercase()),
-                    "category": n.category,
-                    "tags": n.tags
+                    "id": r.id,
+                    "title": r.title,
+                    "body": r.body,
+                    "version": r.version,
+                    "priority": r.priority,
+                    "resolution": r.resolution,
+                    "category": r.category,
+                    "tags": r.tags
                 })
             })
             .collect();
 
         Ok(json!({
-            "count": results.len(),
-            "results": results
+            "count": json_results.len(),
+            "results": json_results
         }))
     }
 
@@ -635,7 +431,7 @@ struct RefineParams {
 }
 
 #[derive(Debug, Deserialize)]
-struct SearchParams {
+struct McpSearchParams {
     #[serde(default)]
     node_type: Option<String>,
     #[serde(default)]
@@ -1043,7 +839,7 @@ impl ServerHandler for LatticeServer {
                     self.refine(params)
                 }
                 "lattice_search" => {
-                    let params: SearchParams = serde_json::from_value(
+                    let params: McpSearchParams = serde_json::from_value(
                         serde_json::to_value(&arguments).unwrap_or_default(),
                     )
                     .map_err(|e| rmcp::model::ErrorData::invalid_params(e.to_string(), None))?;
@@ -1240,7 +1036,7 @@ mod tests {
     #[test]
     fn test_search_empty_lattice() {
         let (_temp_dir, server) = setup_test_lattice();
-        let params = SearchParams {
+        let params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: None,
@@ -1276,7 +1072,7 @@ mod tests {
         server.add_req(add_params).unwrap();
 
         // Search by text
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: Some("searchable".to_string()),
             priority: None,
@@ -1291,7 +1087,7 @@ mod tests {
         assert_eq!(result.get("count").unwrap(), 1);
 
         // Search by priority
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: Some("P0".to_string()),
@@ -1306,7 +1102,7 @@ mod tests {
         assert_eq!(result.get("count").unwrap(), 1);
 
         // Search by tag
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: None,
@@ -1321,7 +1117,7 @@ mod tests {
         assert_eq!(result.get("count").unwrap(), 1);
 
         // Search with no matches
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: Some("nonexistent".to_string()),
             priority: None,
@@ -1367,7 +1163,7 @@ mod tests {
             .unwrap();
 
         // Search by ID prefix
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: None,
@@ -1382,7 +1178,7 @@ mod tests {
         assert_eq!(result.get("count").unwrap(), 1);
 
         // Search with broader prefix
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: None,
@@ -1428,7 +1224,7 @@ mod tests {
             .unwrap();
 
         // Search requiring both tags (intersection)
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: None,
@@ -1443,7 +1239,7 @@ mod tests {
         assert_eq!(result.get("count").unwrap(), 1);
 
         // Search with single tag in array
-        let search_params = SearchParams {
+        let search_params = McpSearchParams {
             node_type: Some("requirements".to_string()),
             query: None,
             priority: None,

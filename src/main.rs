@@ -8,13 +8,13 @@ use lattice::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
     AddThesisOptions, Audience, DriftSeverity, EditNodeOptions, ExportOptions, GapType,
     HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority, RefineOptions, Resolution,
-    ResolveOptions, Status, VerifyOptions, add_edge, add_implementation, add_requirement,
-    add_source, add_thesis, build_node_index, edit_node, export_html, export_narrative, find_drift,
-    find_lattice_root, fix_issues, generate_plan, get_github_pages_url, init_lattice, lint_lattice,
-    load_config, load_nodes_by_type, refine_requirement, resolve_node, verify_implementation,
+    ResolveOptions, SearchEngine, SearchParams, Status, VerifyOptions, add_edge,
+    add_implementation, add_requirement, add_source, add_thesis, build_node_index, edit_node,
+    export_html, export_narrative, find_drift, find_lattice_root, fix_issues, generate_plan,
+    get_github_pages_url, init_lattice, lint_lattice, load_config, load_nodes_by_type,
+    refine_requirement, resolve_node, split_csv, verify_implementation,
 };
 use serde_json::json;
-use std::collections::HashSet;
 use std::env;
 use std::process;
 
@@ -639,10 +639,6 @@ fn parse_thesis_category(s: &str) -> lattice::types::ThesisCategory {
             process::exit(1);
         }
     }
-}
-
-fn split_csv(s: Option<String>) -> Option<Vec<String>> {
-    s.map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
 }
 
 fn is_json(format: &str) -> bool {
@@ -2481,229 +2477,44 @@ fn main() {
             related_to,
             format,
         } => {
-            let effective_type = positional_type
-                .or(node_type)
-                .unwrap_or_else(|| "requirements".to_string());
-            let type_name = match effective_type.as_str() {
-                "sources" => "sources",
-                "theses" => "theses",
-                "requirements" => "requirements",
-                "implementations" => "implementations",
-                _ => {
-                    emit_error(
-                        &format,
-                        "invalid_type",
-                        &format!(
-                            "Unknown type: {}. Use: sources, theses, requirements, implementations",
-                            effective_type
-                        ),
-                    );
-                }
-            };
-
             let root = get_lattice_root();
+            let engine = SearchEngine::new(&root);
 
-            let nodes = match load_nodes_by_type(&root, type_name) {
-                Ok(n) => n,
-                Err(e) => emit_error(&format, "load_error", &e.to_string()),
+            let params = SearchParams {
+                node_type: Some(
+                    positional_type
+                        .or(node_type)
+                        .unwrap_or_else(|| "requirements".to_string()),
+                ),
+                query,
+                priority,
+                resolution,
+                tag,
+                tags: split_csv(tags),
+                category,
+                id_prefix,
+                related_to,
             };
 
-            // Build graph proximity set if related_to is specified
-            let related_ids: Option<HashSet<String>> = if let Some(ref related_to_id) = related_to {
-                match build_node_index(&root) {
-                    Ok(index) => {
-                        if let Some(source_node) = index.get(related_to_id) {
-                            let mut related = HashSet::new();
-                            let mut source_targets = HashSet::new();
-
-                            if let Some(edges) = &source_node.edges {
-                                for el in [
-                                    &edges.derives_from,
-                                    &edges.depends_on,
-                                    &edges.satisfies,
-                                    &edges.supported_by,
-                                ]
-                                .into_iter()
-                                .flatten()
-                                {
-                                    for edge in el {
-                                        source_targets.insert(edge.target.clone());
-                                    }
-                                }
-                            }
-
-                            // Find nodes sharing edge targets
-                            for node in index.values() {
-                                if node.id == *related_to_id {
-                                    continue;
-                                }
-                                if let Some(edges) = &node.edges {
-                                    let mut node_targets = HashSet::new();
-                                    for el in [
-                                        &edges.derives_from,
-                                        &edges.depends_on,
-                                        &edges.satisfies,
-                                        &edges.supported_by,
-                                    ]
-                                    .into_iter()
-                                    .flatten()
-                                    {
-                                        for edge in el {
-                                            node_targets.insert(edge.target.clone());
-                                        }
-                                    }
-                                    if !source_targets.is_disjoint(&node_targets) {
-                                        related.insert(node.id.clone());
-                                    }
-                                }
-                            }
-
-                            // Include direct references
-                            for target in &source_targets {
-                                related.insert(target.clone());
-                            }
-
-                            // Include nodes referencing the source
-                            for node in index.values() {
-                                if let Some(edges) = &node.edges {
-                                    let targets_source = [
-                                        &edges.derives_from,
-                                        &edges.depends_on,
-                                        &edges.satisfies,
-                                        &edges.supported_by,
-                                    ]
-                                    .iter()
-                                    .any(|edge_list| {
-                                        edge_list.as_ref().is_some_and(|v| {
-                                            v.iter().any(|e| e.target == *related_to_id)
-                                        })
-                                    });
-                                    if targets_source {
-                                        related.insert(node.id.clone());
-                                    }
-                                }
-                            }
-
-                            Some(related)
-                        } else {
-                            emit_error(
-                                &format,
-                                "node_not_found",
-                                &format!("Node not found: {}", related_to_id),
-                            );
-                        }
-                    }
-                    Err(e) => emit_error(&format, "index_error", &e.to_string()),
-                }
-            } else {
-                None
+            let results = match engine.search(&params) {
+                Ok(r) => r,
+                Err(e) => emit_error(&format, "search_error", &e),
             };
-
-            let tags_vec = split_csv(tags);
-
-            let results: Vec<_> = nodes
-                .iter()
-                .filter(|n| {
-                    if let Some(ref prefix) = id_prefix
-                        && !n.id.to_uppercase().starts_with(&prefix.to_uppercase())
-                    {
-                        return false;
-                    }
-                    if let Some(ref related) = related_ids
-                        && !related.contains(&n.id)
-                    {
-                        return false;
-                    }
-                    if let Some(ref q) = query {
-                        let q_lower = q.to_lowercase();
-                        if !n.title.to_lowercase().contains(&q_lower)
-                            && !n.body.to_lowercase().contains(&q_lower)
-                        {
-                            return false;
-                        }
-                    }
-                    if let Some(ref p) = priority {
-                        let node_priority = n.priority.as_ref().map(|p| format!("{:?}", p));
-                        if node_priority.as_deref() != Some(p.to_uppercase().as_str()) {
-                            return false;
-                        }
-                    }
-                    if let Some(ref res) = resolution {
-                        let res_lower = res.to_lowercase();
-                        let matches = match res_lower.as_str() {
-                            "verified" => matches!(
-                                n.resolution.as_ref().map(|r| &r.status),
-                                Some(Resolution::Verified)
-                            ),
-                            "blocked" => matches!(
-                                n.resolution.as_ref().map(|r| &r.status),
-                                Some(Resolution::Blocked)
-                            ),
-                            "deferred" => matches!(
-                                n.resolution.as_ref().map(|r| &r.status),
-                                Some(Resolution::Deferred)
-                            ),
-                            "wontfix" => matches!(
-                                n.resolution.as_ref().map(|r| &r.status),
-                                Some(Resolution::Wontfix)
-                            ),
-                            "unresolved" | "open" => n.resolution.is_none(),
-                            _ => true,
-                        };
-                        if !matches {
-                            return false;
-                        }
-                    }
-                    if let Some(ref t) = tag {
-                        let tag_lower = t.to_lowercase();
-                        let has_tag = n
-                            .tags
-                            .as_ref()
-                            .map(|tags| tags.iter().any(|t| t.to_lowercase() == tag_lower))
-                            .unwrap_or(false);
-                        if !has_tag {
-                            return false;
-                        }
-                    }
-                    if let Some(ref search_tags) = tags_vec {
-                        let node_tags: HashSet<String> = n
-                            .tags
-                            .as_ref()
-                            .map(|tags| tags.iter().map(|t| t.to_lowercase()).collect())
-                            .unwrap_or_default();
-                        for st in search_tags {
-                            if !node_tags.contains(&st.to_lowercase()) {
-                                return false;
-                            }
-                        }
-                    }
-                    if let Some(ref cat) = category {
-                        let matches_cat = n
-                            .category
-                            .as_ref()
-                            .map(|c| c.to_lowercase() == cat.to_lowercase())
-                            .unwrap_or(false);
-                        if !matches_cat {
-                            return false;
-                        }
-                    }
-                    true
-                })
-                .collect();
 
             if is_json(&format) {
                 let json_results: Vec<_> = results
+                    .results
                     .iter()
-                    .map(|n| {
+                    .map(|r| {
                         json!({
-                            "id": n.id,
-                            "title": n.title,
-                            "body": n.body,
-                            "version": n.version,
-                            "priority": n.priority.as_ref().map(|p| format!("{:?}", p)),
-                            "resolution": n.resolution.as_ref().map(|r| format!("{:?}", r.status).to_lowercase()),
-                            "category": n.category,
-                            "tags": n.tags
+                            "id": r.id,
+                            "title": r.title,
+                            "body": r.body,
+                            "version": r.version,
+                            "priority": r.priority,
+                            "resolution": r.resolution,
+                            "category": r.category,
+                            "tags": r.tags
                         })
                     })
                     .collect();
@@ -2716,23 +2527,23 @@ fn main() {
                     .unwrap()
                 );
             } else {
-                println!("{}", format!("Found {} results:", results.len()).bold());
-                for n in &results {
-                    let priority_str = n
+                println!("{}", format!("Found {} results:", results.count).bold());
+                for r in &results.results {
+                    let priority_str = r
                         .priority
                         .as_ref()
-                        .map(|p| format!("[{:?}]", p))
+                        .map(|p| format!("[{}]", p))
                         .unwrap_or_default();
-                    let resolution_str = n
+                    let resolution_str = r
                         .resolution
                         .as_ref()
-                        .map(|r| format!(" ({})", format!("{:?}", r.status).to_lowercase()))
+                        .map(|s| format!(" ({})", s))
                         .unwrap_or_default();
                     println!(
                         "  {} {} {}{}",
-                        n.id.cyan(),
+                        r.id.cyan(),
                         priority_str.yellow(),
-                        n.title,
+                        r.title,
                         resolution_str.dimmed()
                     );
                 }
