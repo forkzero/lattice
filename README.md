@@ -144,6 +144,13 @@ lattice summary              # Overview
 lattice list requirements    # All requirements
 lattice get REQ-AUTH-001     # Full details
 
+# Search with filters
+lattice search -q "auth"                        # Keyword search (ranked by relevance)
+lattice search -q "auth" --priority P0           # Filter by priority
+lattice search -q "token" --min-score 2.0        # Only title+body matches
+lattice search --tag mvp --resolution unresolved # Unresolved MVP items
+lattice search --semantic -q "authentication"    # Hybrid keyword+semantic search
+
 # Export
 lattice export --format json > lattice-data.json
 lattice export --format pages --output _site
