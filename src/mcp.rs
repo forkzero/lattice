@@ -325,17 +325,36 @@ impl LatticeServer {
     fn search(&self, params: McpSearchParams) -> Result<Value, String> {
         let engine = SearchEngine::new(&self.root);
 
-        // Handle semantic search if requested and feature is available
+        // Handle hybrid search (semantic + keyword fused via RRF) if requested
         #[cfg(feature = "vector-search")]
         if params.semantic.unwrap_or(false) {
-            let query = params
-                .query
-                .as_deref()
-                .ok_or("semantic search requires a 'query' parameter")?;
+            let search_params = crate::search::SearchParams {
+                node_type: params.node_type,
+                query: params.query,
+                priority: params.priority,
+                resolution: params.resolution,
+                tag: params.tag,
+                tags: params.tags,
+                category: params.category,
+                id_prefix: params.id_prefix,
+                related_to: params.related_to,
+            };
             let provider = crate::search::FastEmbedProvider::new()?;
-            let top_k = params.limit.unwrap_or(20);
-            let results = engine.semantic_search(query, top_k, &provider)?;
+            let mut results = engine.hybrid_search(&search_params, &provider)?;
+            // Apply min_score
+            if let Some(threshold) = params.min_score {
+                results
+                    .results
+                    .retain(|r| r.score.unwrap_or(0.0) >= threshold);
+                results.count = results.results.len();
+            }
+            // Apply limit
+            if let Some(max) = params.limit {
+                results.results.truncate(max);
+                results.count = results.results.len();
+            }
             let json_results: Vec<Value> = results
+                .results
                 .iter()
                 .map(|r| {
                     json!({
@@ -353,7 +372,7 @@ impl LatticeServer {
                 .collect();
             return Ok(json!({
                 "count": json_results.len(),
-                "semantic": true,
+                "hybrid": true,
                 "results": json_results
             }));
         }
@@ -379,6 +398,14 @@ impl LatticeServer {
 
         let mut results = engine.search(&search_params)?;
 
+        // Apply min_score if specified
+        if let Some(threshold) = params.min_score {
+            results
+                .results
+                .retain(|r| r.score.unwrap_or(0.0) >= threshold);
+            results.count = results.results.len();
+        }
+
         // Apply limit if specified
         if let Some(max) = params.limit {
             results.results.truncate(max);
@@ -389,7 +416,7 @@ impl LatticeServer {
             .results
             .iter()
             .map(|r| {
-                json!({
+                let mut obj = json!({
                     "id": r.id,
                     "title": r.title,
                     "body": r.body,
@@ -398,7 +425,11 @@ impl LatticeServer {
                     "resolution": r.resolution,
                     "category": r.category,
                     "tags": r.tags
-                })
+                });
+                if let Some(score) = r.score {
+                    obj["score"] = json!(score);
+                }
+                obj
             })
             .collect();
 
@@ -498,6 +529,8 @@ struct McpSearchParams {
     related_to: Option<String>,
     #[serde(default)]
     semantic: Option<bool>,
+    #[serde(default)]
+    min_score: Option<f32>,
     #[serde(default)]
     limit: Option<usize>,
 }
@@ -762,11 +795,15 @@ fn get_tools() -> Vec<Tool> {
                     },
                     "semantic": {
                         "type": "boolean",
-                        "description": "Use vector-based semantic search instead of keyword matching (requires index built with `lattice search --index`)"
+                        "description": "Use hybrid search (keyword + semantic fused via RRF) instead of keyword-only (requires index built with `lattice search --index`)"
+                    },
+                    "min_score": {
+                        "type": "number",
+                        "description": "Minimum score threshold — filter out results below this score"
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum number of results to return (default: 20 for semantic search)"
+                        "description": "Maximum number of results to return (default: 20 for semantic/hybrid search)"
                     }
                 }),
                 vec![],
@@ -1105,6 +1142,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(params);
@@ -1143,6 +1181,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1160,6 +1199,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1177,6 +1217,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1194,6 +1235,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1242,6 +1284,7 @@ mod tests {
             id_prefix: Some("REQ-API".to_string()),
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1259,6 +1302,7 @@ mod tests {
             id_prefix: Some("REQ".to_string()),
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1307,6 +1351,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();
@@ -1324,6 +1369,7 @@ mod tests {
             id_prefix: None,
             related_to: None,
             semantic: None,
+            min_score: None,
             limit: None,
         };
         let result = server.search(search_params).unwrap();

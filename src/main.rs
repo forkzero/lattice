@@ -330,6 +330,10 @@ enum Commands {
         #[arg(long)]
         semantic: bool,
 
+        /// Minimum score threshold (filters results below this score)
+        #[arg(long)]
+        min_score: Option<f32>,
+
         /// Maximum number of results to return
         #[arg(long)]
         limit: Option<usize>,
@@ -2503,6 +2507,7 @@ fn main() {
             index_status,
             #[cfg(feature = "vector-search")]
             semantic,
+            min_score,
             limit,
             format,
         } => {
@@ -2585,28 +2590,52 @@ fn main() {
                 return;
             }
 
-            // Handle --semantic: vector-based search (feature-gated)
+            // Handle --semantic: hybrid search (keyword + semantic fused via RRF)
             #[cfg(feature = "vector-search")]
             if semantic {
-                let query_text = match &query {
-                    Some(q) => q.clone(),
-                    None => {
-                        emit_error(
-                            &format,
-                            "semantic_error",
-                            "--semantic requires -q/--query to specify what to search for",
-                        );
-                    }
-                };
+                if query.is_none() {
+                    emit_error(
+                        &format,
+                        "semantic_error",
+                        "--semantic requires -q/--query to specify what to search for",
+                    );
+                }
                 let provider = match lattice::search::FastEmbedProvider::new() {
                     Ok(p) => p,
                     Err(e) => emit_error(&format, "semantic_error", &e),
                 };
-                let top_k = limit.unwrap_or(20);
-                match engine.semantic_search(&query_text, top_k, &provider) {
-                    Ok(results) => {
+                let hybrid_params = SearchParams {
+                    node_type: Some(
+                        positional_type
+                            .or(node_type)
+                            .unwrap_or_else(|| "requirements".to_string()),
+                    ),
+                    query,
+                    priority,
+                    resolution,
+                    tag,
+                    tags: split_csv(tags),
+                    category,
+                    id_prefix,
+                    related_to,
+                };
+                match engine.hybrid_search(&hybrid_params, &provider) {
+                    Ok(mut results) => {
+                        // Apply --min-score
+                        if let Some(threshold) = min_score {
+                            results
+                                .results
+                                .retain(|r| r.score.unwrap_or(0.0) >= threshold);
+                            results.count = results.results.len();
+                        }
+                        // Apply --limit
+                        if let Some(max) = limit {
+                            results.results.truncate(max);
+                            results.count = results.results.len();
+                        }
                         if is_json(&format) {
                             let json_results: Vec<_> = results
+                                .results
                                 .iter()
                                 .map(|r| {
                                     json!({
@@ -2626,7 +2655,7 @@ fn main() {
                                 "{}",
                                 serde_json::to_string_pretty(&json!({
                                     "count": json_results.len(),
-                                    "semantic": true,
+                                    "hybrid": true,
                                     "results": json_results
                                 }))
                                 .unwrap()
@@ -2634,9 +2663,9 @@ fn main() {
                         } else {
                             println!(
                                 "{}",
-                                format!("Found {} semantic results:", results.len()).bold()
+                                format!("Found {} hybrid results:", results.count).bold()
                             );
-                            for r in &results {
+                            for r in &results.results {
                                 let priority_str = r
                                     .priority
                                     .as_ref()
@@ -2648,7 +2677,7 @@ fn main() {
                                     .map(|s| format!(" ({})", s))
                                     .unwrap_or_default();
                                 println!(
-                                    "  {} {:.3} {} {}{}",
+                                    "  {} {:.4} {} {}{}",
                                     r.id.cyan(),
                                     r.score.unwrap_or(0.0),
                                     priority_str.yellow(),
@@ -2684,6 +2713,14 @@ fn main() {
                 Err(e) => emit_error(&format, "search_error", &e),
             };
 
+            // Apply --min-score if specified
+            if let Some(threshold) = min_score {
+                results
+                    .results
+                    .retain(|r| r.score.unwrap_or(0.0) >= threshold);
+                results.count = results.results.len();
+            }
+
             // Apply --limit if specified
             if let Some(max) = limit {
                 results.results.truncate(max);
@@ -2695,7 +2732,7 @@ fn main() {
                     .results
                     .iter()
                     .map(|r| {
-                        json!({
+                        let mut obj = json!({
                             "id": r.id,
                             "title": r.title,
                             "body": r.body,
@@ -2704,7 +2741,11 @@ fn main() {
                             "resolution": r.resolution,
                             "category": r.category,
                             "tags": r.tags
-                        })
+                        });
+                        if let Some(score) = r.score {
+                            obj["score"] = json!(score);
+                        }
+                        obj
                     })
                     .collect();
                 println!(
@@ -2728,9 +2769,11 @@ fn main() {
                         .as_ref()
                         .map(|s| format!(" ({})", s))
                         .unwrap_or_default();
+                    let score_str = r.score.map(|s| format!("{:.1} ", s)).unwrap_or_default();
                     println!(
-                        "  {} {} {}{}",
+                        "  {} {}{} {}{}",
                         r.id.cyan(),
+                        score_str,
                         priority_str.yellow(),
                         r.title,
                         resolution_str.dimmed()

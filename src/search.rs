@@ -100,11 +100,28 @@ impl SearchEngine {
 
         let related_ids = self.build_related_ids(params.related_to.as_deref())?;
 
-        let results: Vec<SearchResult> = nodes
+        let mut results: Vec<SearchResult> = nodes
             .iter()
             .filter(|n| matches_filters(n, params, related_ids.as_ref()))
-            .map(SearchResult::from)
+            .map(|n| {
+                let mut r = SearchResult::from(n);
+                if let Some(ref q) = params.query {
+                    let score = keyword_score(n, q);
+                    r.score = Some(score);
+                }
+                r
+            })
             .collect();
+
+        // Sort by keyword score descending when a query is present
+        if params.query.is_some() {
+            results.sort_by(|a, b| {
+                b.score
+                    .unwrap_or(0.0)
+                    .partial_cmp(&a.score.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
 
         Ok(SearchResults {
             count: results.len(),
@@ -477,9 +494,45 @@ fn edge_targets_id(edges: &Edges, target_id: &str) -> bool {
     })
 }
 
+/// Score a keyword match: title match = 2.0, body match = 1.0, additive.
+fn keyword_score(node: &LatticeNode, query: &str) -> f32 {
+    let q = query.to_lowercase();
+    let mut score = 0.0;
+    if node.title.to_lowercase().contains(&q) {
+        score += 2.0;
+    }
+    if node.body.to_lowercase().contains(&q) {
+        score += 1.0;
+    }
+    score
+}
+
 /// Parse a comma-separated string into a Vec of trimmed strings.
 pub fn split_csv(s: Option<String>) -> Option<Vec<String>> {
     s.map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
+}
+
+/// Reciprocal Rank Fusion: merge two ranked lists into a single fused ranking.
+/// `score(node) = Σ 1/(k + rank)` across both lists (1-indexed ranks).
+#[cfg_attr(not(feature = "vector-search"), allow(dead_code))]
+fn reciprocal_rank_fusion(
+    keyword_ranked: &[(String, f32)],
+    semantic_ranked: &[(String, f32)],
+    k: usize,
+) -> Vec<(String, f32)> {
+    use std::collections::HashMap;
+    let mut scores: HashMap<String, f32> = HashMap::new();
+
+    for (rank, (id, _)) in keyword_ranked.iter().enumerate() {
+        *scores.entry(id.clone()).or_default() += 1.0 / (k + rank + 1) as f32;
+    }
+    for (rank, (id, _)) in semantic_ranked.iter().enumerate() {
+        *scores.entry(id.clone()).or_default() += 1.0 / (k + rank + 1) as f32;
+    }
+
+    let mut fused: Vec<(String, f32)> = scores.into_iter().collect();
+    fused.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    fused
 }
 
 // --- Embedding Infrastructure ---
@@ -767,6 +820,91 @@ impl SearchEngine {
             .collect();
 
         Ok(results)
+    }
+
+    /// Hybrid search: fuses keyword and semantic rankings via RRF.
+    /// Structured filters are applied before both rankings.
+    #[cfg(feature = "vector-search")]
+    pub fn hybrid_search(
+        &self,
+        params: &SearchParams,
+        provider: &dyn EmbeddingProvider,
+    ) -> Result<SearchResults, String> {
+        let query = params
+            .query
+            .as_deref()
+            .ok_or("hybrid search requires a query")?;
+
+        let node_type = params.node_type.as_deref().unwrap_or("requirements");
+        let type_name = validate_node_type(node_type)?;
+        let nodes = load_nodes_by_type(&self.root, type_name).map_err(|e| e.to_string())?;
+        let related_ids = self.build_related_ids(params.related_to.as_deref())?;
+
+        // Apply structured filters first
+        let filtered: Vec<&LatticeNode> = nodes
+            .iter()
+            .filter(|n| matches_filters(n, params, related_ids.as_ref()))
+            .collect();
+
+        // Keyword ranking on filtered set
+        let mut keyword_ranked: Vec<(String, f32)> = filtered
+            .iter()
+            .map(|n| (n.id.clone(), keyword_score(n, query)))
+            .filter(|(_, s)| *s > 0.0)
+            .collect();
+        keyword_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Semantic ranking on filtered set
+        let cache = cache_dir(&self.root)?;
+        let index_path = cache.join("index.json");
+        let embeddings_path = cache.join("embeddings.bin");
+
+        let index = SearchIndex::load(&index_path).map_err(|_| {
+            "No search index found. Run 'lattice search --index' to build it.".to_string()
+        })?;
+
+        if index.dimension == 0 {
+            return Err(
+                "Index has no embeddings. Rebuild with 'lattice search --index'.".to_string(),
+            );
+        }
+
+        let embeddings = load_embeddings(&embeddings_path, index.dimension)?;
+        let query_embeddings = provider.embed(&[query.to_string()])?;
+        let query_vec = query_embeddings
+            .into_iter()
+            .next()
+            .ok_or("Failed to embed query")?;
+
+        let filtered_ids: HashSet<&str> = filtered.iter().map(|n| n.id.as_str()).collect();
+        let mut semantic_ranked: Vec<(String, f32)> = embeddings
+            .iter()
+            .filter(|(id, _)| filtered_ids.contains(id.as_str()))
+            .map(|(id, emb)| (id.clone(), cosine_similarity(&query_vec, emb)))
+            .collect();
+        semantic_ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Fuse via RRF
+        let fused = reciprocal_rank_fusion(&keyword_ranked, &semantic_ranked, 60);
+
+        // Build node map for metadata
+        let node_map: BTreeMap<&str, &LatticeNode> =
+            filtered.iter().map(|n| (n.id.as_str(), *n)).collect();
+
+        let results: Vec<SearchResult> = fused
+            .into_iter()
+            .filter_map(|(id, score)| {
+                let node = node_map.get(id.as_str())?;
+                let mut result = SearchResult::from(*node);
+                result.score = Some(score);
+                Some(result)
+            })
+            .collect();
+
+        Ok(SearchResults {
+            count: results.len(),
+            results,
+        })
     }
 }
 
@@ -1461,5 +1599,194 @@ mod tests {
         assert_eq!(dr.category.as_deref(), Some("CORE"));
         assert_eq!(dr.priority.as_deref(), Some("P0"));
         assert!(dr.score.unwrap() > 0.0, "Score should be positive");
+    }
+
+    // --- Phase 3: Score Fusion Tests ---
+
+    #[test]
+    fn test_keyword_score_title_only() {
+        let node = make_node("REQ-001", "Version drift detection", "Some other text");
+        assert_eq!(keyword_score(&node, "drift"), 2.0);
+    }
+
+    #[test]
+    fn test_keyword_score_body_only() {
+        let node = make_node("REQ-001", "Some title", "Detect version drift");
+        assert_eq!(keyword_score(&node, "drift"), 1.0);
+    }
+
+    #[test]
+    fn test_keyword_score_both() {
+        let node = make_node("REQ-001", "Drift detection", "Detect drift in edges");
+        assert_eq!(keyword_score(&node, "drift"), 3.0);
+    }
+
+    #[test]
+    fn test_keyword_score_neither() {
+        let node = make_node("REQ-001", "Some title", "Some body");
+        assert_eq!(keyword_score(&node, "drift"), 0.0);
+    }
+
+    #[test]
+    fn test_keyword_score_case_insensitive() {
+        let node = make_node("REQ-001", "DRIFT Detection", "body");
+        assert_eq!(keyword_score(&node, "drift"), 2.0);
+        assert_eq!(keyword_score(&node, "DRIFT"), 2.0);
+    }
+
+    #[test]
+    fn test_keyword_search_ranked() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: Some("search".to_string()),
+            ..Default::default()
+        };
+
+        let results = engine.search(&params).unwrap();
+        // REQ-TEST-003 has "Search" in title + "search" in body = 3.0
+        // Other nodes should not match
+        assert!(!results.results.is_empty());
+        assert!(results.results[0].score.unwrap() > 0.0);
+
+        // Verify descending score order
+        for w in results.results.windows(2) {
+            assert!(w[0].score.unwrap() >= w[1].score.unwrap());
+        }
+    }
+
+    #[test]
+    fn test_reciprocal_rank_fusion_basic() {
+        let keyword = vec![
+            ("A".to_string(), 3.0),
+            ("B".to_string(), 2.0),
+            ("C".to_string(), 1.0),
+        ];
+        let semantic = vec![
+            ("B".to_string(), 0.9),
+            ("C".to_string(), 0.8),
+            ("A".to_string(), 0.7),
+        ];
+
+        let fused = reciprocal_rank_fusion(&keyword, &semantic, 60);
+        assert_eq!(fused.len(), 3);
+        // All three should be present
+        let ids: Vec<&str> = fused.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(ids.contains(&"A"));
+        assert!(ids.contains(&"B"));
+        assert!(ids.contains(&"C"));
+
+        // B is rank 2 in keyword (1/(60+2)) and rank 1 in semantic (1/(60+1))
+        // A is rank 1 in keyword (1/(60+1)) and rank 3 in semantic (1/(60+3))
+        // B should score higher than A since it has better average rank
+        let b_score = fused.iter().find(|(id, _)| id == "B").unwrap().1;
+        let a_score = fused.iter().find(|(id, _)| id == "A").unwrap().1;
+        assert!(
+            b_score > a_score,
+            "B (rank 2+1) should score higher than A (rank 1+3)"
+        );
+    }
+
+    #[test]
+    fn test_reciprocal_rank_fusion_disjoint() {
+        let keyword = vec![("A".to_string(), 3.0)];
+        let semantic = vec![("B".to_string(), 0.9)];
+
+        let fused = reciprocal_rank_fusion(&keyword, &semantic, 60);
+        assert_eq!(fused.len(), 2);
+        // Both should appear with equal RRF scores (each appears once at rank 1)
+        assert!((fused[0].1 - fused[1].1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_reciprocal_rank_fusion_single_list() {
+        let keyword = vec![("A".to_string(), 3.0), ("B".to_string(), 2.0)];
+        let semantic: Vec<(String, f32)> = vec![];
+
+        let fused = reciprocal_rank_fusion(&keyword, &semantic, 60);
+        assert_eq!(fused.len(), 2);
+        // A at rank 1 should score higher than B at rank 2
+        assert!(fused[0].1 > fused[1].1);
+        assert_eq!(fused[0].0, "A");
+    }
+
+    #[test]
+    fn test_reciprocal_rank_fusion_empty() {
+        let keyword: Vec<(String, f32)> = vec![];
+        let semantic: Vec<(String, f32)> = vec![];
+
+        let fused = reciprocal_rank_fusion(&keyword, &semantic, 60);
+        assert!(fused.is_empty());
+    }
+
+    #[test]
+    #[cfg(feature = "vector-search")]
+    fn test_hybrid_search() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        // Build index first
+        engine.index_build_with_embeddings(&provider).unwrap();
+
+        let params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: Some("drift".to_string()),
+            ..Default::default()
+        };
+
+        let results = engine.hybrid_search(&params, &provider).unwrap();
+        assert!(!results.results.is_empty());
+
+        // All results should have fused scores
+        for r in &results.results {
+            assert!(r.score.is_some());
+            assert!(r.score.unwrap() > 0.0);
+        }
+
+        // Results should be sorted by score descending
+        for w in results.results.windows(2) {
+            assert!(w[0].score.unwrap() >= w[1].score.unwrap());
+        }
+    }
+
+    #[test]
+    fn test_min_score_filtering() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let params = SearchParams {
+            node_type: Some("requirements".to_string()),
+            query: Some("drift".to_string()),
+            ..Default::default()
+        };
+
+        let results = engine.search(&params).unwrap();
+        // Should have some results with scores
+        assert!(!results.results.is_empty());
+
+        // Filter with a high threshold — should exclude low-scoring results
+        let high_threshold = 2.5;
+        let filtered: Vec<_> = results
+            .results
+            .iter()
+            .filter(|r| r.score.unwrap_or(0.0) >= high_threshold)
+            .collect();
+
+        // REQ-TEST-001 has "drift" in title (2.0) + body (1.0) = 3.0, should pass
+        // Others without "drift" shouldn't be in the result set at all
+        assert!(
+            filtered.len() <= results.results.len(),
+            "Filtering should not increase result count"
+        );
+        for r in &filtered {
+            assert!(r.score.unwrap() >= high_threshold);
+        }
     }
 }
