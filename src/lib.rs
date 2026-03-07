@@ -20,8 +20,11 @@ pub use graph::{
 };
 pub use html_export::{HtmlExportOptions, export_html};
 pub use lint::{LintReport, LintSeverity, fix_issues, lint_lattice};
+#[cfg(feature = "vector-search")]
+pub use search::FastEmbedProvider;
 pub use search::{
-    IndexStatus, SearchEngine, SearchIndex, SearchParams, SearchResult, SearchResults, split_csv,
+    EmbeddingProvider, IndexStatus, SearchEngine, SearchIndex, SearchParams, SearchResult,
+    SearchResults, split_csv,
 };
 pub use storage::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,

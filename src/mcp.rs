@@ -325,6 +325,46 @@ impl LatticeServer {
     fn search(&self, params: McpSearchParams) -> Result<Value, String> {
         let engine = SearchEngine::new(&self.root);
 
+        // Handle semantic search if requested and feature is available
+        #[cfg(feature = "vector-search")]
+        if params.semantic.unwrap_or(false) {
+            let query = params
+                .query
+                .as_deref()
+                .ok_or("semantic search requires a 'query' parameter")?;
+            let provider = crate::search::FastEmbedProvider::new()?;
+            let top_k = params.limit.unwrap_or(20);
+            let results = engine.semantic_search(query, top_k, &provider)?;
+            let json_results: Vec<Value> = results
+                .iter()
+                .map(|r| {
+                    json!({
+                        "id": r.id,
+                        "title": r.title,
+                        "score": r.score,
+                        "body": r.body,
+                        "version": r.version,
+                        "priority": r.priority,
+                        "resolution": r.resolution,
+                        "category": r.category,
+                        "tags": r.tags
+                    })
+                })
+                .collect();
+            return Ok(json!({
+                "count": json_results.len(),
+                "semantic": true,
+                "results": json_results
+            }));
+        }
+
+        #[cfg(not(feature = "vector-search"))]
+        if params.semantic.unwrap_or(false) {
+            return Err("Semantic search requires the 'vector-search' feature. \
+                 Rebuild with: cargo build --features vector-search"
+                .to_string());
+        }
+
         let search_params = crate::search::SearchParams {
             node_type: params.node_type,
             query: params.query,
@@ -337,7 +377,13 @@ impl LatticeServer {
             related_to: params.related_to,
         };
 
-        let results = engine.search(&search_params)?;
+        let mut results = engine.search(&search_params)?;
+
+        // Apply limit if specified
+        if let Some(max) = params.limit {
+            results.results.truncate(max);
+            results.count = results.results.len();
+        }
 
         let json_results: Vec<Value> = results
             .results
@@ -450,6 +496,10 @@ struct McpSearchParams {
     id_prefix: Option<String>,
     #[serde(default)]
     related_to: Option<String>,
+    #[serde(default)]
+    semantic: Option<bool>,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 fn make_schema(properties: Value, required: Vec<&str>) -> Arc<Map<String, Value>> {
@@ -709,6 +759,14 @@ fn get_tools() -> Vec<Tool> {
                     "related_to": {
                         "type": "string",
                         "description": "Find nodes related to this ID via graph proximity (shared edges, dependencies)"
+                    },
+                    "semantic": {
+                        "type": "boolean",
+                        "description": "Use vector-based semantic search instead of keyword matching (requires index built with `lattice search --index`)"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default: 20 for semantic search)"
                     }
                 }),
                 vec![],
@@ -1046,6 +1104,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(params);
         assert!(result.is_ok());
@@ -1082,6 +1142,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1097,6 +1159,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1112,6 +1176,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1127,6 +1193,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 0);
@@ -1173,6 +1241,8 @@ mod tests {
             category: None,
             id_prefix: Some("REQ-API".to_string()),
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1188,6 +1258,8 @@ mod tests {
             category: None,
             id_prefix: Some("REQ".to_string()),
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 2);
@@ -1234,6 +1306,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 1);
@@ -1249,6 +1323,8 @@ mod tests {
             category: None,
             id_prefix: None,
             related_to: None,
+            semantic: None,
+            limit: None,
         };
         let result = server.search(search_params).unwrap();
         assert_eq!(result.get("count").unwrap(), 2);

@@ -13,6 +13,7 @@ use crate::types::{Edges, LatticeNode, Resolution};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
+use std::io::{Read as _, Write as _};
 use std::path::PathBuf;
 
 /// Unified search parameters accepted by both CLI and MCP.
@@ -50,6 +51,8 @@ pub struct SearchResult {
     pub resolution: Option<String>,
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,
+    /// Similarity score from semantic search. `None` for keyword search results.
+    pub score: Option<f32>,
 }
 
 impl From<&LatticeNode> for SearchResult {
@@ -66,6 +69,7 @@ impl From<&LatticeNode> for SearchResult {
                 .map(|r| format!("{:?}", r.status).to_lowercase()),
             category: n.category.clone(),
             tags: n.tags.clone(),
+            score: None,
         }
     }
 }
@@ -478,6 +482,294 @@ pub fn split_csv(s: Option<String>) -> Option<Vec<String>> {
     s.map(|v| v.split(',').map(|s| s.trim().to_string()).collect())
 }
 
+// --- Embedding Infrastructure ---
+
+/// Trait for embedding providers. Allows swapping models in the future.
+pub trait EmbeddingProvider {
+    /// Model name for index metadata.
+    fn model_name(&self) -> &str;
+    /// Embedding dimension.
+    fn dimension(&self) -> usize;
+    /// Generate embeddings for a batch of texts.
+    fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, String>;
+}
+
+/// fastembed-based embedding provider (feature-gated).
+#[cfg(feature = "vector-search")]
+pub struct FastEmbedProvider {
+    model: fastembed::TextEmbedding,
+    model_name: String,
+    dimension: usize,
+}
+
+#[cfg(feature = "vector-search")]
+impl FastEmbedProvider {
+    pub fn new() -> Result<Self, String> {
+        use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+
+        let mut init =
+            InitOptions::new(EmbeddingModel::AllMiniLML6V2).with_show_download_progress(true);
+
+        // Support air-gapped environments via LATTICE_EMBED_CACHE_DIR
+        if let Ok(cache_dir) = std::env::var("LATTICE_EMBED_CACHE_DIR") {
+            init = init.with_cache_dir(std::path::PathBuf::from(cache_dir));
+        }
+
+        let model = TextEmbedding::try_new(init)
+            .map_err(|e| format!("Failed to load embedding model: {}", e))?;
+
+        Ok(Self {
+            model,
+            model_name: "all-MiniLM-L6-v2".to_string(),
+            dimension: 384,
+        })
+    }
+}
+
+#[cfg(feature = "vector-search")]
+impl EmbeddingProvider for FastEmbedProvider {
+    fn model_name(&self) -> &str {
+        &self.model_name
+    }
+
+    fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+        self.model
+            .embed(texts.to_vec(), None)
+            .map_err(|e| format!("Embedding failed: {}", e))
+    }
+}
+
+/// Read embeddings from binary file.
+/// Format: repeated `[node_id_len: u16, node_id: [u8], embedding: [f32; dim]]`
+pub fn load_embeddings(
+    path: &std::path::Path,
+    dimension: usize,
+) -> Result<BTreeMap<String, Vec<f32>>, String> {
+    let data = std::fs::read(path).map_err(|e| format!("Failed to read embeddings: {}", e))?;
+    let mut cursor = std::io::Cursor::new(data);
+    let mut result = BTreeMap::new();
+
+    loop {
+        let mut len_buf = [0u8; 2];
+        if cursor.read_exact(&mut len_buf).is_err() {
+            break; // EOF
+        }
+        let id_len = u16::from_le_bytes(len_buf) as usize;
+
+        let mut id_buf = vec![0u8; id_len];
+        cursor
+            .read_exact(&mut id_buf)
+            .map_err(|e| format!("Truncated embedding file: {}", e))?;
+        let node_id = String::from_utf8(id_buf)
+            .map_err(|e| format!("Invalid node ID in embedding: {}", e))?;
+
+        let mut emb = Vec::with_capacity(dimension);
+        for _ in 0..dimension {
+            let mut buf = [0u8; 4];
+            cursor
+                .read_exact(&mut buf)
+                .map_err(|e| format!("Truncated embedding data: {}", e))?;
+            emb.push(f32::from_le_bytes(buf));
+        }
+
+        result.insert(node_id, emb);
+    }
+
+    Ok(result)
+}
+
+/// Write embeddings to binary file.
+pub fn save_embeddings(
+    path: &std::path::Path,
+    embeddings: &BTreeMap<String, Vec<f32>>,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create cache dir: {}", e))?;
+    }
+    let mut file =
+        std::fs::File::create(path).map_err(|e| format!("Failed to create embeddings: {}", e))?;
+
+    for (node_id, embedding) in embeddings {
+        let id_bytes = node_id.as_bytes();
+        file.write_all(&(id_bytes.len() as u16).to_le_bytes())
+            .map_err(|e| format!("Write error: {}", e))?;
+        file.write_all(id_bytes)
+            .map_err(|e| format!("Write error: {}", e))?;
+        for &val in embedding {
+            file.write_all(&val.to_le_bytes())
+                .map_err(|e| format!("Write error: {}", e))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Compute cosine similarity between two vectors.
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    let mut dot = 0.0f32;
+    let mut norm_a = 0.0f32;
+    let mut norm_b = 0.0f32;
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        norm_a += x * x;
+        norm_b += y * y;
+    }
+    let denom = norm_a.sqrt() * norm_b.sqrt();
+    if denom == 0.0 { 0.0 } else { dot / denom }
+}
+
+impl SearchEngine {
+    /// Build or rebuild the search index with embeddings.
+    /// When an EmbeddingProvider is given, generates embeddings for changed nodes.
+    pub fn index_build_with_embeddings(
+        &self,
+        provider: &dyn EmbeddingProvider,
+    ) -> Result<(usize, usize), String> {
+        let nodes = load_all_nodes(&self.root).map_err(|e| e.to_string())?;
+        let cache = cache_dir(&self.root)?;
+        let index_path = cache.join("index.json");
+        let embeddings_path = cache.join("embeddings.bin");
+
+        // Load existing index and embeddings for diff comparison
+        let old_index = SearchIndex::load(&index_path).ok();
+        let mut old_embeddings = if embeddings_path.exists() {
+            load_embeddings(&embeddings_path, provider.dimension()).ok()
+        } else {
+            None
+        };
+
+        let mut new_index = SearchIndex::new();
+        new_index.model = provider.model_name().to_string();
+        new_index.dimension = provider.dimension();
+
+        let mut unchanged = 0;
+        let mut to_embed: Vec<(String, String)> = Vec::new(); // (node_id, text)
+        let mut new_embeddings: BTreeMap<String, Vec<f32>> = BTreeMap::new();
+
+        for node in &nodes {
+            let hash = content_hash(&node.title, &node.body);
+            let text = format!("{}\n{}", node.title, node.body);
+
+            let is_unchanged = old_index
+                .as_ref()
+                .and_then(|idx| idx.content_hashes.get(&node.id))
+                .map(|h| h.as_str())
+                == Some(&hash);
+
+            if is_unchanged {
+                // Move existing embedding if available (avoids clone)
+                if let Some(ref mut old_embs) = old_embeddings
+                    && let Some(emb) = old_embs.remove(&node.id)
+                {
+                    new_embeddings.insert(node.id.clone(), emb);
+                    unchanged += 1;
+                    new_index.content_hashes.insert(node.id.clone(), hash);
+                    continue;
+                }
+            }
+
+            // Need to (re-)embed this node
+            to_embed.push((node.id.clone(), text));
+            new_index.content_hashes.insert(node.id.clone(), hash);
+        }
+
+        // Batch embed changed nodes
+        if !to_embed.is_empty() {
+            let texts: Vec<String> = to_embed.iter().map(|(_, t)| t.clone()).collect();
+            let embeddings = provider.embed(&texts)?;
+            for ((node_id, _), embedding) in to_embed.iter().zip(embeddings.into_iter()) {
+                new_embeddings.insert(node_id.clone(), embedding);
+            }
+        }
+
+        new_index.save(&index_path)?;
+        save_embeddings(&embeddings_path, &new_embeddings)?;
+
+        Ok((nodes.len(), unchanged))
+    }
+
+    /// Perform semantic search using pre-built embeddings.
+    /// Embeds the query, computes cosine similarity against all indexed nodes,
+    /// and returns the top_k results sorted by score.
+    pub fn semantic_search(
+        &self,
+        query: &str,
+        top_k: usize,
+        provider: &dyn EmbeddingProvider,
+    ) -> Result<Vec<SearchResult>, String> {
+        let cache = cache_dir(&self.root)?;
+        let index_path = cache.join("index.json");
+        let embeddings_path = cache.join("embeddings.bin");
+
+        let index = SearchIndex::load(&index_path).map_err(|_| {
+            "No search index found. Run 'lattice search --index' to build it.".to_string()
+        })?;
+
+        if index.dimension == 0 {
+            return Err(
+                "Index has no embeddings. Rebuild with 'lattice search --index'.".to_string(),
+            );
+        }
+
+        // Validate model/dimension match the current provider
+        if index.dimension != provider.dimension() {
+            return Err(format!(
+                "Index dimension ({}) does not match provider dimension ({}). Rebuild with 'lattice search --index'.",
+                index.dimension,
+                provider.dimension()
+            ));
+        }
+        if index.model != provider.model_name() {
+            return Err(format!(
+                "Index model '{}' does not match provider model '{}'. Rebuild with 'lattice search --index'.",
+                index.model,
+                provider.model_name()
+            ));
+        }
+
+        let embeddings = load_embeddings(&embeddings_path, index.dimension)?;
+
+        // Embed the query
+        let query_embeddings = provider.embed(&[query.to_string()])?;
+        let query_vec = query_embeddings
+            .into_iter()
+            .next()
+            .ok_or("Failed to embed query")?;
+
+        // Load all nodes for result metadata
+        let all_nodes = load_all_nodes(&self.root).map_err(|e| e.to_string())?;
+        let node_map: BTreeMap<&str, &LatticeNode> =
+            all_nodes.iter().map(|n| (n.id.as_str(), n)).collect();
+
+        // Score all indexed nodes
+        let mut scored: Vec<(String, f32)> = embeddings
+            .iter()
+            .map(|(id, emb)| (id.clone(), cosine_similarity(&query_vec, emb)))
+            .collect();
+
+        // Sort by score descending
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(top_k);
+
+        let results = scored
+            .into_iter()
+            .filter_map(|(id, score)| {
+                let node = node_map.get(id.as_str())?;
+                let mut result = SearchResult::from(*node);
+                result.score = Some(score);
+                Some(result)
+            })
+            .collect();
+
+        Ok(results)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -742,5 +1034,432 @@ mod tests {
         let d1 = cache_dir(dir1.path()).unwrap();
         let d2 = cache_dir(dir2.path()).unwrap();
         assert_ne!(d1, d2);
+    }
+
+    // --- Phase 2: Embedding & Semantic Search Tests ---
+
+    /// Mock embedding provider that returns deterministic embeddings
+    /// based on simple text hashing (no ML model required).
+    struct MockEmbedProvider;
+
+    impl EmbeddingProvider for MockEmbedProvider {
+        fn model_name(&self) -> &str {
+            "mock-model"
+        }
+
+        fn dimension(&self) -> usize {
+            4
+        }
+
+        fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+            Ok(texts
+                .iter()
+                .map(|t| {
+                    // Simple deterministic "embedding" from text bytes
+                    let bytes: Vec<u8> = t.bytes().collect();
+                    let sum: f32 = bytes.iter().map(|&b| b as f32).sum();
+                    let len = bytes.len().max(1) as f32;
+                    vec![
+                        sum / len,                                  // mean byte value
+                        (bytes.len() as f32),                       // length
+                        bytes.first().copied().unwrap_or(0) as f32, // first byte
+                        bytes.last().copied().unwrap_or(0) as f32,  // last byte
+                    ]
+                })
+                .collect())
+        }
+    }
+
+    /// Provider that always fails, for error-path testing.
+    struct FailingEmbedProvider;
+
+    impl EmbeddingProvider for FailingEmbedProvider {
+        fn model_name(&self) -> &str {
+            "failing-model"
+        }
+
+        fn dimension(&self) -> usize {
+            4
+        }
+
+        fn embed(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+            Err("embedding failed on purpose".to_string())
+        }
+    }
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let a = vec![1.0, 2.0, 3.0];
+        let sim = cosine_similarity(&a, &a);
+        assert!(
+            (sim - 1.0).abs() < 1e-6,
+            "Identical vectors should have similarity 1.0"
+        );
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![0.0, 1.0, 0.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(
+            sim.abs() < 1e-6,
+            "Orthogonal vectors should have similarity 0.0"
+        );
+    }
+
+    #[test]
+    fn test_cosine_similarity_opposite() {
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![-1.0, -2.0, -3.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(
+            (sim + 1.0).abs() < 1e-6,
+            "Opposite vectors should have similarity -1.0"
+        );
+    }
+
+    #[test]
+    fn test_cosine_similarity_zero_vector() {
+        let a = vec![1.0, 2.0, 3.0];
+        let zero = vec![0.0, 0.0, 0.0];
+        let sim = cosine_similarity(&a, &zero);
+        assert_eq!(sim, 0.0, "Zero vector should produce similarity 0.0");
+    }
+
+    #[test]
+    fn test_cosine_similarity_scaled() {
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![2.0, 4.0, 6.0];
+        let sim = cosine_similarity(&a, &b);
+        assert!(
+            (sim - 1.0).abs() < 1e-6,
+            "Scaled vectors should have similarity 1.0"
+        );
+    }
+
+    #[test]
+    fn test_embeddings_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("embeddings.bin");
+
+        let mut embeddings = BTreeMap::new();
+        embeddings.insert("NODE-001".to_string(), vec![1.0f32, 2.0, 3.0, 4.0]);
+        embeddings.insert("NODE-002".to_string(), vec![5.0f32, 6.0, 7.0, 8.0]);
+
+        save_embeddings(&path, &embeddings).unwrap();
+        let loaded = load_embeddings(&path, 4).unwrap();
+
+        assert_eq!(loaded.len(), 2);
+        assert_eq!(loaded["NODE-001"], vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(loaded["NODE-002"], vec![5.0, 6.0, 7.0, 8.0]);
+    }
+
+    #[test]
+    fn test_embeddings_roundtrip_single() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("emb.bin");
+
+        let mut embeddings = BTreeMap::new();
+        embeddings.insert("X".to_string(), vec![0.5f32, -0.5]);
+
+        save_embeddings(&path, &embeddings).unwrap();
+        let loaded = load_embeddings(&path, 2).unwrap();
+
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(loaded["X"], vec![0.5, -0.5]);
+    }
+
+    #[test]
+    fn test_embeddings_roundtrip_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.bin");
+
+        let embeddings = BTreeMap::new();
+        save_embeddings(&path, &embeddings).unwrap();
+        let loaded = load_embeddings(&path, 4).unwrap();
+
+        assert!(loaded.is_empty());
+    }
+
+    #[test]
+    fn test_load_embeddings_missing_file() {
+        let result = load_embeddings(std::path::Path::new("/nonexistent/emb.bin"), 4);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_embeddings_truncated_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.bin");
+        // Write a valid id length header but no id bytes
+        std::fs::write(&path, [5u8, 0]).unwrap();
+        let result = load_embeddings(&path, 4);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Truncated"));
+    }
+
+    #[test]
+    fn test_mock_embed_provider() {
+        let provider = MockEmbedProvider;
+        assert_eq!(provider.model_name(), "mock-model");
+        assert_eq!(provider.dimension(), 4);
+
+        let results = provider
+            .embed(&["hello".to_string(), "world".to_string()])
+            .unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].len(), 4);
+        assert_eq!(results[1].len(), 4);
+        // Different inputs produce different embeddings
+        assert_ne!(results[0], results[1]);
+    }
+
+    /// Helper: create a minimal lattice directory with a few nodes.
+    fn setup_lattice_with_nodes(dir: &std::path::Path) {
+        use crate::storage::init_lattice;
+
+        init_lattice(dir, false).unwrap();
+
+        let req1 = LatticeNode {
+            id: "REQ-TEST-001".to_string(),
+            node_type: NodeType::Requirement,
+            title: "Drift detection for version changes".to_string(),
+            body: "The system must detect when node versions drift from edge bindings.".to_string(),
+            status: Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2024-01-01".to_string(),
+            created_by: "test".to_string(),
+            priority: Some(Priority::P0),
+            category: Some("CORE".to_string()),
+            tags: Some(vec!["drift".to_string()]),
+            requested_by: None,
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges: None,
+        };
+        let req2 = LatticeNode {
+            id: "REQ-TEST-002".to_string(),
+            node_type: NodeType::Requirement,
+            title: "Export narrative for stakeholders".to_string(),
+            body: "Support exporting the lattice as a readable narrative document.".to_string(),
+            status: Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2024-01-01".to_string(),
+            created_by: "test".to_string(),
+            priority: Some(Priority::P1),
+            category: Some("EXPORT".to_string()),
+            tags: Some(vec!["export".to_string()]),
+            requested_by: None,
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges: None,
+        };
+        let req3 = LatticeNode {
+            id: "REQ-TEST-003".to_string(),
+            node_type: NodeType::Requirement,
+            title: "Search and filter nodes".to_string(),
+            body: "Provide search capabilities with keyword and tag filtering.".to_string(),
+            status: Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2024-01-01".to_string(),
+            created_by: "test".to_string(),
+            priority: Some(Priority::P1),
+            category: Some("API".to_string()),
+            tags: Some(vec!["search".to_string()]),
+            requested_by: None,
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges: None,
+        };
+
+        for node in [&req1, &req2, &req3] {
+            let type_dir = dir.join(".lattice/requirements");
+            let file_path = type_dir.join(format!("{}.yaml", node.id));
+            let yaml = serde_yaml::to_string(node).unwrap();
+            std::fs::write(file_path, yaml).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_index_build_with_embeddings() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        let (total, unchanged) = engine.index_build_with_embeddings(&provider).unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(unchanged, 0, "First build should have 0 unchanged");
+
+        // Verify index and embeddings were written
+        let cache = cache_dir(&engine.root).unwrap();
+        let index = SearchIndex::load(&cache.join("index.json")).unwrap();
+        assert_eq!(index.model, "mock-model");
+        assert_eq!(index.dimension, 4);
+        assert_eq!(index.content_hashes.len(), 3);
+
+        let embeddings = load_embeddings(&cache.join("embeddings.bin"), 4).unwrap();
+        assert_eq!(embeddings.len(), 3);
+    }
+
+    #[test]
+    fn test_index_build_with_embeddings_caches_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        // First build
+        let (total, unchanged) = engine.index_build_with_embeddings(&provider).unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(unchanged, 0);
+
+        // Second build with no changes — all should be unchanged
+        let (total, unchanged) = engine.index_build_with_embeddings(&provider).unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(
+            unchanged, 3,
+            "Rebuild with no changes should reuse all embeddings"
+        );
+    }
+
+    #[test]
+    fn test_index_build_with_embeddings_detects_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        // First build
+        engine.index_build_with_embeddings(&provider).unwrap();
+
+        // Modify one node
+        let mut node: LatticeNode = {
+            let yaml =
+                std::fs::read_to_string(dir.path().join(".lattice/requirements/REQ-TEST-001.yaml"))
+                    .unwrap();
+            serde_yaml::from_str(&yaml).unwrap()
+        };
+        node.body = "Updated body text for drift detection requirement.".to_string();
+        let yaml = serde_yaml::to_string(&node).unwrap();
+        std::fs::write(
+            dir.path().join(".lattice/requirements/REQ-TEST-001.yaml"),
+            yaml,
+        )
+        .unwrap();
+
+        // Rebuild — 1 changed, 2 unchanged
+        let (total, unchanged) = engine.index_build_with_embeddings(&provider).unwrap();
+        assert_eq!(total, 3);
+        assert_eq!(unchanged, 2, "Only modified node should be re-embedded");
+    }
+
+    #[test]
+    fn test_index_build_with_embeddings_failing_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = FailingEmbedProvider;
+
+        let result = engine.index_build_with_embeddings(&provider);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("embedding failed on purpose"));
+    }
+
+    #[test]
+    fn test_semantic_search_returns_ranked_results() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        // Build index first
+        engine.index_build_with_embeddings(&provider).unwrap();
+
+        // Search — should return results sorted by score descending
+        let results = engine
+            .semantic_search("drift detection", 10, &provider)
+            .unwrap();
+        assert!(!results.is_empty(), "Should return at least one result");
+        assert!(results.len() <= 3, "Should not exceed total nodes");
+
+        // Verify scores are in descending order
+        for w in results.windows(2) {
+            assert!(
+                w[0].score.unwrap() >= w[1].score.unwrap(),
+                "Results should be sorted by score descending: {:?} >= {:?}",
+                w[0].score,
+                w[1].score
+            );
+        }
+
+        // Verify result fields are populated
+        let first = &results[0];
+        assert!(!first.id.is_empty());
+        assert!(!first.title.is_empty());
+        assert!(!first.version.is_empty());
+    }
+
+    #[test]
+    fn test_semantic_search_respects_top_k() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        engine.index_build_with_embeddings(&provider).unwrap();
+
+        let results = engine.semantic_search("test query", 1, &provider).unwrap();
+        assert_eq!(results.len(), 1, "top_k=1 should return exactly 1 result");
+    }
+
+    #[test]
+    fn test_semantic_search_without_index_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        // Don't build index — search should fail gracefully
+        let result = engine.semantic_search("test", 10, &provider);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("No search index found"));
+    }
+
+    #[test]
+    fn test_semantic_search_result_has_metadata() {
+        let dir = tempfile::tempdir().unwrap();
+        setup_lattice_with_nodes(dir.path());
+
+        let engine = SearchEngine::new(dir.path());
+        let provider = MockEmbedProvider;
+
+        engine.index_build_with_embeddings(&provider).unwrap();
+
+        let results = engine.semantic_search("drift", 10, &provider).unwrap();
+
+        // Find the drift detection requirement
+        let drift_result = results.iter().find(|r| r.id == "REQ-TEST-001");
+        assert!(drift_result.is_some(), "Should find REQ-TEST-001");
+
+        let dr = drift_result.unwrap();
+        assert_eq!(dr.title, "Drift detection for version changes");
+        assert_eq!(dr.category.as_deref(), Some("CORE"));
+        assert_eq!(dr.priority.as_deref(), Some("P0"));
+        assert!(dr.score.unwrap() > 0.0, "Score should be positive");
     }
 }

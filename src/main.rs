@@ -325,6 +325,15 @@ enum Commands {
         #[arg(long)]
         index_status: bool,
 
+        /// Use semantic (vector) search instead of keyword matching (requires vector-search feature and index)
+        #[cfg(feature = "vector-search")]
+        #[arg(long)]
+        semantic: bool,
+
+        /// Maximum number of results to return
+        #[arg(long)]
+        limit: Option<usize>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -980,6 +989,8 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--related-to", "string", false, "Find nodes related to this node ID"),
                     param("--index", "bool", false, "Build or rebuild the search index"),
                     param("--index-status", "bool", false, "Show search index health"),
+                    param("--semantic", "bool", false, "Use vector search (requires vector-search feature + index)"),
+                    param("--limit", "integer", false, "Max results to return (default: 20 for semantic)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
@@ -988,7 +999,8 @@ fn build_command_catalog() -> serde_json::Value {
                     "lattice search --priority P0 --resolution unresolved",
                     "lattice search --tag agent --category AGENT",
                     "lattice search --index",
-                    "lattice search --index-status"
+                    "lattice search --index-status",
+                    "lattice search --semantic -q 'version drift detection'"
                 ]
             },
             {
@@ -2489,6 +2501,9 @@ fn main() {
             related_to,
             index,
             index_status,
+            #[cfg(feature = "vector-search")]
+            semantic,
+            limit,
             format,
         } => {
             let root = get_lattice_root();
@@ -2570,6 +2585,84 @@ fn main() {
                 return;
             }
 
+            // Handle --semantic: vector-based search (feature-gated)
+            #[cfg(feature = "vector-search")]
+            if semantic {
+                let query_text = match &query {
+                    Some(q) => q.clone(),
+                    None => {
+                        emit_error(
+                            &format,
+                            "semantic_error",
+                            "--semantic requires -q/--query to specify what to search for",
+                        );
+                    }
+                };
+                let provider = match lattice::search::FastEmbedProvider::new() {
+                    Ok(p) => p,
+                    Err(e) => emit_error(&format, "semantic_error", &e),
+                };
+                let top_k = limit.unwrap_or(20);
+                match engine.semantic_search(&query_text, top_k, &provider) {
+                    Ok(results) => {
+                        if is_json(&format) {
+                            let json_results: Vec<_> = results
+                                .iter()
+                                .map(|r| {
+                                    json!({
+                                        "id": r.id,
+                                        "title": r.title,
+                                        "score": r.score,
+                                        "body": r.body,
+                                        "version": r.version,
+                                        "priority": r.priority,
+                                        "resolution": r.resolution,
+                                        "category": r.category,
+                                        "tags": r.tags
+                                    })
+                                })
+                                .collect();
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "count": json_results.len(),
+                                    "semantic": true,
+                                    "results": json_results
+                                }))
+                                .unwrap()
+                            );
+                        } else {
+                            println!(
+                                "{}",
+                                format!("Found {} semantic results:", results.len()).bold()
+                            );
+                            for r in &results {
+                                let priority_str = r
+                                    .priority
+                                    .as_ref()
+                                    .map(|p| format!("[{}]", p))
+                                    .unwrap_or_default();
+                                let resolution_str = r
+                                    .resolution
+                                    .as_ref()
+                                    .map(|s| format!(" ({})", s))
+                                    .unwrap_or_default();
+                                println!(
+                                    "  {} {:.3} {} {}{}",
+                                    r.id.cyan(),
+                                    r.score.unwrap_or(0.0),
+                                    priority_str.yellow(),
+                                    r.title,
+                                    resolution_str.dimmed()
+                                );
+                            }
+                        }
+                    }
+                    Err(e) => emit_error(&format, "semantic_error", &e),
+                }
+                return;
+            }
+
             let params = SearchParams {
                 node_type: Some(
                     positional_type
@@ -2586,10 +2679,16 @@ fn main() {
                 related_to,
             };
 
-            let results = match engine.search(&params) {
+            let mut results = match engine.search(&params) {
                 Ok(r) => r,
                 Err(e) => emit_error(&format, "search_error", &e),
             };
+
+            // Apply --limit if specified
+            if let Some(max) = limit {
+                results.results.truncate(max);
+                results.count = results.results.len();
+            }
 
             if is_json(&format) {
                 let json_results: Vec<_> = results
