@@ -1338,6 +1338,7 @@ fn main() {
         None => {
             // Re-parse with --help to show usage
             Cli::parse_from(["lattice", "--help"]);
+            lattice::update::maybe_notify_update(None);
             return;
         }
     };
@@ -2920,26 +2921,33 @@ fn main() {
                     }
                 }
                 Err(e) => {
-                    let detail = e.to_string();
-                    let hint = match &e {
-                        lattice::update::UpdateError::Replace(_) => {
-                            if cfg!(unix) {
-                                Some("Try: sudo lattice update")
-                            } else {
-                                None
-                            }
+                    let (message, hint) = match &e {
+                        lattice::update::UpdateError::Replace(inner)
+                            if inner.contains("Permission denied") =>
+                        {
+                            let exe = std::env::current_exe()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .unwrap_or_else(|_| "lattice".to_string());
+                            (
+                                format!("Permission denied — cannot write to {}", exe),
+                                if cfg!(unix) {
+                                    Some("Run with sudo: sudo lattice update")
+                                } else {
+                                    None
+                                },
+                            )
                         }
-                        _ => None,
+                        _ => (e.to_string(), None),
                     };
 
                     if is_json(&format) {
-                        let mut err = json!({"error": "update_failed", "detail": detail});
+                        let mut err = json!({"error": "update_failed", "detail": message});
                         if let Some(h) = hint {
                             err["hint"] = json!(h);
                         }
                         eprintln!("{}", err);
                     } else {
-                        eprintln!("{}", format!("Error: {}", detail).red());
+                        eprintln!("{}", format!("Error: {}", message).red());
                         if let Some(h) = hint {
                             eprintln!("{}", h.dimmed());
                         }
@@ -2958,7 +2966,7 @@ fn main() {
             eprintln!();
             eprintln!(
                 "{}",
-                "Tip: If using Claude Code, run `lattice init --skill` to install as a skill instead."
+                "Tip: Run `lattice init --skill` to auto-install as a Claude Code skill (recommended)."
                     .dimmed()
             );
         }

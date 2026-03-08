@@ -131,12 +131,70 @@ When told **"checkpoint"** or **"commit and push"**:
 3. Commit with descriptive message + `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 4. Push to `origin/main`
 
-## Requirements Traceability
+## Lattice Integration (Mandatory)
+
+This project uses Lattice to describe itself. The `.lattice/` directory contains the knowledge graph.
+
+**NEVER read or write `.lattice/` files directly. ALL lattice operations MUST use the `lattice` CLI.**
+
+### Requirements Traceability
 
 Every feature links back to requirements in `.lattice/requirements/`:
 - Reference requirement IDs in commit messages: `Implements REQ-CORE-001`
 - Reference requirement IDs in source file doc comments
 - Update implementation nodes when code changes
+
+### Working Tickets
+
+When asked to work on a ticket (GitHub issue, etc.), follow this workflow:
+
+**1. Assess** — Before any code, evaluate the ticket against the lattice:
+   - Run `lattice summary` and `lattice plan` to understand current state
+   - Determine if the ticket requires new or modified **requirements**, **theses**, or **sources**
+   - Identify if additional research is needed (new sources)
+   - Flag any existing requirements that will be affected
+
+**2. Comment on the ticket** — Add a comment to the ticket listing:
+   - Planned new requirements, theses, and sources
+   - Existing lattice nodes that will be affected
+   - Any research gaps that need to be filled
+
+**3. Execute (strict order)**:
+   1. **Lattice first** — Use the lattice CLI to create/update requirements, theses, and sources BEFORE writing any code
+   2. **Code second** — Implement the feature or fix
+   3. **Record & verify last** — Record implementations and run drift detection
+
+**4. Close the ticket** — Include a lattice summary in the closing comment:
+   - List all added/modified/resolved lattice nodes
+   - Confirm `lattice drift` reports no unresolved drift
+
+### Plan Mode Workflow
+
+When entering plan mode, every plan MUST include a **Lattice Impact** section:
+
+1. Run `lattice summary` and `lattice plan` to understand current state
+2. Evaluate whether the planned work requires new or modified requirements, theses, or sources
+3. Identify if additional research is needed
+4. Flag any existing requirements that will be affected
+5. List all lattice changes as part of the plan output for user review
+
+### Recording Implementations
+
+After completing coding tasks:
+
+```bash
+# Record what was implemented
+lattice add implementation --id IMP-XXX-NNN --requires REQ-XXX-NNN \
+  --bind "file:function" --status pass
+
+# Resolve the requirement
+lattice resolve REQ-XXX-NNN verified
+
+# Confirm no drift
+lattice drift
+```
+
+A task is NOT complete until `lattice drift` reports no unresolved drift for affected requirements. Reference requirements in commits: `Implements REQ-XXX-001`.
 
 ## Agent Workflows
 
