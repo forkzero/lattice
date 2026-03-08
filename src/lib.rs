@@ -4,6 +4,7 @@
 //! interconnected knowledge nodes (sources, theses, requirements, implementations)
 //! with version-bound edges and drift detection.
 
+pub mod diff;
 pub mod export;
 pub mod graph;
 pub mod html_export;
@@ -14,6 +15,10 @@ pub mod storage;
 pub mod types;
 pub mod update;
 
+pub use diff::{
+    ChangeType, DiffEntry, DiffError, DiffResult, format_diff_markdown, format_entry_text,
+    lattice_diff,
+};
 pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
 pub use graph::{
     DriftReport, DriftSeverity, Plan, PlannedItem, build_node_index, find_drift, generate_plan,

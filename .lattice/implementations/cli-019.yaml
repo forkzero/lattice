@@ -1,0 +1,19 @@
+id: IMP-CLI-019
+type: implementation
+title: lattice diff command implementation
+body: Implements branch-scoped diff via git diff --name-status. Core logic in src/diff.rs, CLI wiring in src/main.rs. Supports text, JSON, and markdown output modes.
+status: active
+version: 1.0.0
+created_at: 2026-03-08T18:15:58.019437+00:00
+created_by: agent:claude-2026-03-08
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  files:
+  - path: src/diff.rs
+  - path: src/main.rs
+  - path: src/lib.rs
+  - path: tests/diff_test.rs
+edges:
+  satisfies:
+  - target: REQ-CLI-019
+    version: 1.0.0
