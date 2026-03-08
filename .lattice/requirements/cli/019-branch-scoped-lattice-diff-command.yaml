@@ -1,0 +1,20 @@
+id: REQ-CLI-019
+type: requirement
+title: Branch-scoped lattice diff command
+body: 'The CLI provides a ''lattice diff'' command that shows lattice nodes added, modified, or resolved since a given git ref. Defaults to merge-base with main. Supports --since for explicit ref, --md for markdown output suitable for GitHub comments, and --format json for structured output. Groups changes by type: added, modified, resolved, deleted.'
+status: active
+version: 1.0.0
+created_at: 2026-03-08T18:15:47.317389+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+tags:
+- cli
+- diff
+- agent-workflow
+resolution:
+  status: verified
+  resolved_at: 2026-03-08T18:16:01.109674+00:00
+  resolved_by: agent:claude-2026-03-08
+edges: {}

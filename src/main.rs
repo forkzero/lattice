@@ -6,13 +6,14 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
-    AddThesisOptions, Audience, DriftSeverity, EditNodeOptions, ExportOptions, GapType,
+    AddThesisOptions, Audience, DiffEntry, DriftSeverity, EditNodeOptions, ExportOptions, GapType,
     HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority, RefineOptions, Resolution,
     ResolveOptions, SearchEngine, SearchParams, Status, VerifyOptions, add_edge,
     add_implementation, add_requirement, add_source, add_thesis, build_node_index, edit_node,
-    export_html, export_narrative, find_drift, find_lattice_root, fix_issues, generate_plan,
-    get_github_pages_url, init_lattice, lint_lattice, load_config, load_nodes_by_type,
-    refine_requirement, resolve_node, split_csv, verify_implementation,
+    export_html, export_narrative, find_drift, find_lattice_root, fix_issues, format_diff_markdown,
+    format_entry_text, generate_plan, get_github_pages_url, init_lattice, lattice_diff,
+    lint_lattice, load_config, load_nodes_by_type, refine_requirement, resolve_node, split_csv,
+    verify_implementation,
 };
 use serde_json::json;
 use std::env;
@@ -370,6 +371,21 @@ enum Commands {
         /// Output MCP version instead of CLI version
         #[arg(long)]
         mcp: bool,
+    },
+
+    /// Show lattice nodes added, modified, or resolved since a git ref
+    Diff {
+        /// Git ref to compare against (default: merge-base with main)
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Output as markdown (for GitHub comments)
+        #[arg(long)]
+        md: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Show available commands (use --json for machine-readable catalog)
@@ -1197,6 +1213,22 @@ fn build_command_catalog() -> serde_json::Value {
                 ]
             },
             {
+                "name": "diff",
+                "description": "Show lattice nodes added, modified, or resolved since a git ref",
+                "parameters": [
+                    param("--since", "string", false, "Git ref to compare against (default: merge-base with main)"),
+                    param("--md", "bool", false, "Output as markdown for GitHub comments"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice diff",
+                    "lattice diff --since main",
+                    "lattice diff --since abc123f",
+                    "lattice diff --since main --md",
+                    "lattice diff --format json"
+                ]
+            },
+            {
                 "name": "plan",
                 "description": "Plan implementation order for requirements based on dependency graph",
                 "parameters": [
@@ -1283,6 +1315,7 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Mcp => "mcp",
         Commands::Update { .. } => "update",
         Commands::Prompt { .. } => "prompt",
+        Commands::Diff { .. } => "diff",
         Commands::Help { .. } => "help",
     }
 }
@@ -2930,6 +2963,101 @@ fn main() {
             );
         }
 
+        Commands::Diff { since, md, format } => {
+            let root = get_lattice_root();
+
+            match lattice_diff(&root, since.as_deref()) {
+                Ok(result) => {
+                    if md {
+                        println!("{}", format_diff_markdown(&result));
+                    } else if is_json(&format) {
+                        let to_json_entries = |entries: &[DiffEntry]| -> Vec<serde_json::Value> {
+                            entries
+                                .iter()
+                                .map(|e| {
+                                    let mut obj = json!({
+                                        "id": e.id,
+                                        "title": e.title,
+                                        "node_type": format!("{:?}", e.node_type).to_lowercase(),
+                                    });
+                                    if let Some(ref p) = e.priority {
+                                        obj["priority"] = json!(p);
+                                    }
+                                    if let Some(ref r) = e.resolution {
+                                        obj["resolution"] = json!(r);
+                                    }
+                                    obj
+                                })
+                                .collect()
+                        };
+
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "base_ref": result.base_ref,
+                                "has_changes": !result.is_empty(),
+                                "total_changes": result.total_count(),
+                                "added": to_json_entries(&result.added),
+                                "modified": to_json_entries(&result.modified),
+                                "resolved": to_json_entries(&result.resolved),
+                                "deleted": to_json_entries(&result.deleted),
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        // Text output
+                        if result.is_empty() {
+                            println!("{}", "No lattice changes detected.".green());
+                            return;
+                        }
+
+                        println!(
+                            "{}",
+                            format!(
+                                "Lattice changes since {} ({} total):\n",
+                                &result.base_ref[..std::cmp::min(8, result.base_ref.len())],
+                                result.total_count()
+                            )
+                            .bold()
+                        );
+
+                        if !result.added.is_empty() {
+                            println!("{}", "Added:".green().bold());
+                            for entry in &result.added {
+                                println!("  {} {}", "+".green(), format_entry_text(entry));
+                            }
+                            println!();
+                        }
+
+                        if !result.modified.is_empty() {
+                            println!("{}", "Modified:".yellow().bold());
+                            for entry in &result.modified {
+                                println!("  {} {}", "~".yellow(), format_entry_text(entry));
+                            }
+                            println!();
+                        }
+
+                        if !result.resolved.is_empty() {
+                            println!("{}", "Resolved:".cyan().bold());
+                            for entry in &result.resolved {
+                                println!("  {} {}", "✓".cyan(), format_entry_text(entry));
+                            }
+                            println!();
+                        }
+
+                        if !result.deleted.is_empty() {
+                            println!("{}", "Deleted:".red().bold());
+                            for entry in &result.deleted {
+                                println!("  {} {}", "-".red(), format_entry_text(entry));
+                            }
+                            println!();
+                        }
+                    }
+                }
+                Err(e) => emit_error(&format, "diff_error", &e.to_string()),
+            }
+        }
+
         Commands::Help { json } => {
             if json {
                 println!(
@@ -3068,6 +3196,7 @@ mod tests {
             "edit",
             "verify",
             "refine",
+            "diff",
             "drift",
             "lint",
             "summary",
