@@ -12,8 +12,8 @@ use lattice::{
     add_implementation, add_requirement, add_source, add_thesis, build_node_index, edit_node,
     export_html, export_narrative, find_drift, find_lattice_root, fix_issues, format_diff_markdown,
     format_entry_text, generate_plan, get_github_pages_url, init_lattice, lattice_diff,
-    lint_lattice, load_config, load_nodes_by_type, refine_requirement, resolve_node, split_csv,
-    verify_implementation,
+    lint_lattice, load_all_nodes, load_config, load_nodes_by_type, refine_requirement,
+    resolve_node, split_csv, verify_implementation,
 };
 use serde_json::json;
 use std::env;
@@ -371,6 +371,21 @@ enum Commands {
         /// Output MCP version instead of CLI version
         #[arg(long)]
         mcp: bool,
+    },
+
+    /// Push lattice data to a remote API
+    Push {
+        /// API URL (overrides config and LATTICE_API_URL env var)
+        #[arg(long)]
+        api_url: Option<String>,
+
+        /// API key (overrides config and LATTICE_API_KEY env var)
+        #[arg(long)]
+        api_key: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
     /// Show lattice nodes added, modified, or resolved since a git ref
@@ -1315,6 +1330,7 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Mcp => "mcp",
         Commands::Update { .. } => "update",
         Commands::Prompt { .. } => "prompt",
+        Commands::Push { .. } => "push",
         Commands::Diff { .. } => "diff",
         Commands::Help { .. } => "help",
     }
@@ -2969,6 +2985,85 @@ fn main() {
                 "Tip: Run `lattice init --skill` to auto-install as a Claude Code skill (recommended)."
                     .dimmed()
             );
+        }
+
+        Commands::Push {
+            api_url,
+            api_key,
+            format,
+        } => {
+            let root = get_lattice_root();
+            let config = load_config(&root);
+
+            // Resolve api_url: CLI flag > env var > config
+            let url = api_url
+                .or_else(|| std::env::var("LATTICE_API_URL").ok())
+                .or(config.api_url.clone())
+                .unwrap_or_else(|| {
+                    emit_error(
+                        &format,
+                        "no_api_url",
+                        "No API URL configured. Set api_url in .lattice/config.yaml, pass --api-url, or set LATTICE_API_URL",
+                    );
+                });
+
+            // Resolve api_key: CLI flag > env var > config
+            let key = api_key
+                .or_else(|| std::env::var("LATTICE_API_KEY").ok())
+                .or(config.api_key.clone())
+                .unwrap_or_else(|| {
+                    emit_error(
+                        &format,
+                        "no_api_key",
+                        "No API key configured. Pass --api-key or set LATTICE_API_KEY",
+                    );
+                });
+
+            let nodes = load_all_nodes(&root).unwrap_or_else(|e| {
+                emit_error(&format, "load_failed", &format!("Failed to load lattice: {}", e));
+            });
+
+            if !is_json(&format) {
+                println!(
+                    "{}",
+                    format!(
+                        "Pushing {} nodes to {}...",
+                        nodes.len(),
+                        url
+                    )
+                    .dimmed()
+                );
+            }
+
+            let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+            match rt.block_on(lattice::push::push(&url, &key, &config.project, &nodes)) {
+                Ok(resp) => {
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "success": true,
+                                "project_id": resp.project_id,
+                                "nodes_upserted": resp.nodes_upserted,
+                                "edges_replaced": resp.edges_replaced,
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            format!(
+                                "✓ Pushed to project #{}: {} nodes, {} edges",
+                                resp.project_id, resp.nodes_upserted, resp.edges_replaced
+                            )
+                            .green()
+                        );
+                    }
+                }
+                Err(e) => {
+                    emit_error(&format, "push_failed", &e.to_string());
+                }
+            }
         }
 
         Commands::Diff { since, md, format } => {

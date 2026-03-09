@@ -10,6 +10,7 @@ pub mod graph;
 pub mod html_export;
 pub mod lint;
 pub mod mcp;
+pub mod push;
 pub mod search;
 pub mod storage;
 pub mod types;
