@@ -637,6 +637,8 @@ pub struct EditNodeOptions {
     pub priority: Option<Priority>,
     pub tags: Option<Vec<String>>,
     pub category: Option<String>,
+    pub files: Option<Vec<String>>,
+    pub test_command: Option<String>,
 }
 
 /// Bump the patch component of a semver version string.
@@ -697,6 +699,63 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
     {
         node.category = Some(category);
         changed = true;
+    }
+    if options.files.is_some() || options.test_command.is_some() {
+        if node.node_type != NodeType::Implementation {
+            let field = if options.files.is_some() {
+                "Files"
+            } else {
+                "Test command"
+            };
+            return Err(StorageError::InvalidField(format!(
+                "{} can only be set on implementation nodes",
+                field
+            )));
+        }
+
+        // Re-parse meta as ImplementationMeta to work around #[serde(untagged)]
+        // round-trip issue where ImplementationMeta may deserialize as SourceMeta
+        let mut impl_meta = match &node.meta {
+            Some(NodeMeta::Implementation(im)) => im.clone(),
+            Some(other) => {
+                // Attempt re-parse from the serialized form
+                let val = serde_yaml::to_value(other).unwrap_or_default();
+                serde_yaml::from_value::<crate::types::ImplementationMeta>(val).unwrap_or(
+                    crate::types::ImplementationMeta {
+                        language: None,
+                        files: None,
+                        test_command: None,
+                    },
+                )
+            }
+            None => crate::types::ImplementationMeta {
+                language: None,
+                files: None,
+                test_command: None,
+            },
+        };
+
+        if let Some(file_paths) = options.files {
+            let new_files: Vec<crate::types::FileRef> = file_paths
+                .into_iter()
+                .map(|p| crate::types::FileRef {
+                    path: p,
+                    functions: None,
+                })
+                .collect();
+            if impl_meta.files.as_ref() != Some(&new_files) {
+                impl_meta.files = Some(new_files);
+                changed = true;
+            }
+        }
+        if let Some(test_cmd) = options.test_command
+            && impl_meta.test_command.as_deref() != Some(&test_cmd)
+        {
+            impl_meta.test_command = Some(test_cmd);
+            changed = true;
+        }
+
+        node.meta = Some(NodeMeta::Implementation(impl_meta));
     }
 
     if !changed {
@@ -1887,6 +1946,8 @@ mod tests {
                 priority: None,
                 tags: None,
                 category: None,
+                files: None,
+                test_command: None,
             },
         )
         .unwrap();
@@ -1930,6 +1991,8 @@ mod tests {
                 priority: None,
                 tags: Some(vec!["alpha".to_string(), "beta".to_string()]),
                 category: Some("NEW".to_string()),
+                files: None,
+                test_command: None,
             },
         )
         .unwrap();
@@ -1976,6 +2039,8 @@ mod tests {
                 priority: None,
                 tags: None,
                 category: None,
+                files: None,
+                test_command: None,
             },
         )
         .unwrap();
@@ -2017,6 +2082,8 @@ mod tests {
                 priority: Some(crate::types::Priority::P0),
                 tags: None,
                 category: None,
+                files: None,
+                test_command: None,
             },
         )
         .unwrap();
@@ -2057,6 +2124,8 @@ mod tests {
                 priority: Some(crate::types::Priority::P0),
                 tags: None,
                 category: None,
+                files: None,
+                test_command: None,
             },
         );
         assert!(result.is_err());
@@ -2065,6 +2134,144 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("Priority can only be set on requirement nodes")
+        );
+    }
+
+    #[test]
+    fn test_edit_node_files_on_implementation() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_implementation(
+            root,
+            AddImplementationOptions {
+                id: "IMP-EDIT-001".to_string(),
+                title: "Impl".to_string(),
+                body: "Body".to_string(),
+                language: Some("rust".to_string()),
+                files: Some(vec!["src/old.rs".to_string()]),
+                test_command: None,
+                satisfies: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let path = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "IMP-EDIT-001".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+                files: Some(vec!["src/new.rs".to_string(), "src/lib.rs".to_string()]),
+                test_command: None,
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(node.version, "1.0.1");
+        // Verify via YAML to avoid #[serde(untagged)] round-trip issues
+        let yaml = std::fs::read_to_string(&path).unwrap();
+        assert!(yaml.contains("src/new.rs"), "should contain src/new.rs");
+        assert!(yaml.contains("src/lib.rs"), "should contain src/lib.rs");
+        assert!(!yaml.contains("src/old.rs"), "should not contain old path");
+    }
+
+    #[test]
+    fn test_edit_node_test_command_on_implementation() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_implementation(
+            root,
+            AddImplementationOptions {
+                id: "IMP-EDIT-002".to_string(),
+                title: "Impl".to_string(),
+                body: "Body".to_string(),
+                language: None,
+                files: None,
+                test_command: Some("cargo test".to_string()),
+                satisfies: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let path = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "IMP-EDIT-002".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+                files: None,
+                test_command: Some("cargo test -- --run".to_string()),
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        assert_eq!(node.version, "1.0.1");
+        let yaml = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            yaml.contains("cargo test -- --run"),
+            "should contain new test command"
+        );
+    }
+
+    #[test]
+    fn test_edit_node_files_on_non_implementation() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_source(
+            root,
+            AddSourceOptions {
+                id: "SRC-EDIT-002".to_string(),
+                title: "Source".to_string(),
+                body: "Body".to_string(),
+                url: None,
+                citations: None,
+                reliability: Reliability::Unverified,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let result = edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "SRC-EDIT-002".to_string(),
+                title: None,
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+                files: Some(vec!["src/foo.rs".to_string()]),
+                test_command: None,
+            },
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Files can only be set on implementation nodes")
         );
     }
 }

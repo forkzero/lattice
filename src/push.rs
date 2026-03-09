@@ -60,7 +60,9 @@ pub enum PushError {
     #[error("API returned {status}: {body}")]
     Api { status: u16, body: String },
 
-    #[error("No API URL configured. Set api_url in .lattice/config.yaml, pass --api-url, or set LATTICE_API_URL")]
+    #[error(
+        "No API URL configured. Set api_url in .lattice/config.yaml, pass --api-url, or set LATTICE_API_URL"
+    )]
     NoApiUrl,
 
     #[error("No API key configured. Pass --api-key or set LATTICE_API_KEY")]

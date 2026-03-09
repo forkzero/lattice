@@ -139,6 +139,14 @@ enum Commands {
         #[arg(long)]
         category: Option<String>,
 
+        /// Comma-separated file paths (replaces existing) — implementations only
+        #[arg(long)]
+        files: Option<String>,
+
+        /// Test command (e.g., cargo test) — implementations only
+        #[arg(long)]
+        test_command: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -1150,11 +1158,14 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--priority", "string", false, "New priority: P0, P1, P2 (requirements only)"),
                     param("--tags", "string", false, "Comma-separated tags (replaces existing)"),
                     param("--category", "string", false, "New category"),
+                    param("--files", "string", false, "Comma-separated file paths (replaces existing, implementations only)"),
+                    param("--test-command", "string", false, "Test command (implementations only)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice edit REQ-CORE-001 --title 'Updated title'",
                     "lattice edit REQ-CORE-001 --tags 'core,storage' --priority P0",
+                    "lattice edit IMP-CLI-001 --files 'src/main.rs,src/lib.rs' --test-command 'cargo test'",
                     "lattice edit IMP-CLI-001 --status active --format json"
                 ]
             },
@@ -1773,10 +1784,13 @@ fn main() {
             priority,
             tags,
             category,
+            files,
+            test_command,
             format,
         } => {
             let root = get_lattice_root();
             let tags = split_csv(tags);
+            let files = split_csv(files);
             let status = status.map(|s| parse_status(&s));
             let priority = priority.map(|p| parse_priority(&p));
 
@@ -1788,6 +1802,8 @@ fn main() {
                 priority,
                 tags,
                 category,
+                files,
+                test_command,
             };
 
             match edit_node(&root, options) {
@@ -3020,18 +3036,17 @@ fn main() {
                 });
 
             let nodes = load_all_nodes(&root).unwrap_or_else(|e| {
-                emit_error(&format, "load_failed", &format!("Failed to load lattice: {}", e));
+                emit_error(
+                    &format,
+                    "load_failed",
+                    &format!("Failed to load lattice: {}", e),
+                );
             });
 
             if !is_json(&format) {
                 println!(
                     "{}",
-                    format!(
-                        "Pushing {} nodes to {}...",
-                        nodes.len(),
-                        url
-                    )
-                    .dimmed()
+                    format!("Pushing {} nodes to {}...", nodes.len(), url).dimmed()
                 );
             }
 
