@@ -15,7 +15,7 @@ pass() { ((PASS++)) || true; echo "  ✓ $1"; }
 fail() { ((FAIL++)) || true; echo "  ✗ $1"; }
 
 assert_contains() {
-  if echo "$1" | grep -q "$2"; then pass "$3"; else fail "$3 (expected '$2')"; fi
+  if grep -q "$2" <<< "$1"; then pass "$3"; else fail "$3 (expected '$2')"; fi
 }
 
 assert_file_exists() {

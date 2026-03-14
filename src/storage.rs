@@ -765,6 +765,66 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
     }
 
     node.version = bump_patch_version(&node.version);
+    // Re-snapshot edge target versions when content changes
+    re_snapshot_edges(root, &mut node);
+    save_node(&path, &node)?;
+    Ok(path)
+}
+
+/// Re-snapshot all edge target versions to their current values.
+///
+/// Iterates every edge on the node and updates the pinned version
+/// to the target node's current version. Edges pointing to missing
+/// nodes are left unchanged.
+fn re_snapshot_edges(root: &Path, node: &mut LatticeNode) {
+    let edges = match &mut node.edges {
+        Some(e) => e,
+        None => return,
+    };
+
+    macro_rules! update_versions {
+        ($field:ident) => {
+            if let Some(vec) = &mut edges.$field {
+                for edge in vec.iter_mut() {
+                    if let Ok(target_path) = find_node_path(root, &edge.target) {
+                        if let Ok(target_node) = load_node(&target_path) {
+                            edge.version = Some(target_node.version.clone());
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    update_versions!(supported_by);
+    update_versions!(derives_from);
+    update_versions!(depends_on);
+    update_versions!(satisfies);
+    update_versions!(extends);
+    update_versions!(reveals_gap_in);
+    update_versions!(challenges);
+    update_versions!(validates);
+    update_versions!(conflicts_with);
+    update_versions!(supersedes);
+}
+
+/// Acknowledge drift on a node by re-snapshotting all edge target versions.
+///
+/// Does not change any node content or bump the version — only updates
+/// the pinned versions on edges to match current target versions.
+pub fn acknowledge_drift(root: &Path, node_id: &str) -> Result<PathBuf, StorageError> {
+    let path = find_node_path(root, node_id)?;
+    let mut node = load_node(&path)?;
+
+    let has_edges = node.edges.as_ref().is_some_and(|e| *e != Edges::default());
+    if !has_edges {
+        return Err(StorageError::EdgeNotFound(format!(
+            "Node '{}' has no edges",
+            node_id
+        )));
+    }
+
+    re_snapshot_edges(root, &mut node);
     save_node(&path, &node)?;
     Ok(path)
 }
@@ -2814,5 +2874,201 @@ mod tests {
                 .to_string()
                 .contains("No 'reveals_gap_in' edge to")
         );
+    }
+
+    #[test]
+    fn test_edit_node_re_snapshots_edges() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        // Create two requirements
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-SNAP-001".to_string(),
+                title: "Target".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-SNAP-002".to_string(),
+                title: "Source".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: Some(vec!["REQ-SNAP-001".to_string()]),
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        // Verify edge is at version 1.0.0
+        let path = find_node_path(root, "REQ-SNAP-002").unwrap();
+        let node = load_node(&path).unwrap();
+        let deps = node.edges.unwrap().depends_on.unwrap();
+        assert_eq!(deps[0].version.as_deref(), Some("1.0.0"));
+
+        // Edit the target to bump its version
+        edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-SNAP-001".to_string(),
+                title: Some("Updated target".to_string()),
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+                files: None,
+                test_command: None,
+            },
+        )
+        .unwrap();
+
+        // Verify target is now at 1.0.1
+        let target_path = find_node_path(root, "REQ-SNAP-001").unwrap();
+        let target = load_node(&target_path).unwrap();
+        assert_eq!(target.version, "1.0.1");
+
+        // Now edit the source — should re-snapshot edge to 1.0.1
+        edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-SNAP-002".to_string(),
+                title: Some("Updated source".to_string()),
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+                files: None,
+                test_command: None,
+            },
+        )
+        .unwrap();
+
+        let path = find_node_path(root, "REQ-SNAP-002").unwrap();
+        let node = load_node(&path).unwrap();
+        let deps = node.edges.unwrap().depends_on.unwrap();
+        assert_eq!(deps[0].version.as_deref(), Some("1.0.1"));
+    }
+
+    #[test]
+    fn test_acknowledge_drift() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-ACK-001".to_string(),
+                title: "Target".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-ACK-002".to_string(),
+                title: "Source".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: Some(vec!["REQ-ACK-001".to_string()]),
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        // Bump target version to create drift
+        edit_node(
+            root,
+            EditNodeOptions {
+                node_id: "REQ-ACK-001".to_string(),
+                title: Some("Updated".to_string()),
+                body: None,
+                status: None,
+                priority: None,
+                tags: None,
+                category: None,
+                files: None,
+                test_command: None,
+            },
+        )
+        .unwrap();
+
+        // Verify drift exists (edge still at 1.0.0, target at 1.0.1)
+        let path = find_node_path(root, "REQ-ACK-002").unwrap();
+        let node = load_node(&path).unwrap();
+        let deps = node.edges.unwrap().depends_on.unwrap();
+        assert_eq!(deps[0].version.as_deref(), Some("1.0.0"));
+
+        // Acknowledge drift
+        acknowledge_drift(root, "REQ-ACK-002").unwrap();
+
+        // Verify edge is now at 1.0.1
+        let path = find_node_path(root, "REQ-ACK-002").unwrap();
+        let node = load_node(&path).unwrap();
+        let deps = node.edges.unwrap().depends_on.unwrap();
+        assert_eq!(deps[0].version.as_deref(), Some("1.0.1"));
+
+        // Verify node version was NOT bumped (acknowledge doesn't change content)
+        assert_eq!(node.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_acknowledge_drift_no_edges() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        add_requirement(
+            root,
+            AddRequirementOptions {
+                id: "REQ-ACNE-001".to_string(),
+                title: "No edges".to_string(),
+                body: "Body".to_string(),
+                priority: crate::types::Priority::P1,
+                category: "TEST".to_string(),
+                tags: None,
+                derives_from: None,
+                depends_on: None,
+                status: crate::types::Status::Active,
+                created_by: "test".to_string(),
+            },
+        )
+        .unwrap();
+
+        let result = acknowledge_drift(root, "REQ-ACNE-001");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("has no edges"));
     }
 }

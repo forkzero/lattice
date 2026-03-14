@@ -177,6 +177,10 @@ enum Commands {
         #[arg(long)]
         check: bool,
 
+        /// Acknowledge drift on a node (re-snapshot edge versions)
+        #[arg(long)]
+        acknowledge: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -1298,14 +1302,16 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "drift",
-                "description": "Check for version drift in edge bindings",
+                "description": "Check for version drift in edge bindings, or acknowledge drift on a node",
                 "parameters": [
                     param("--check", "bool", false, "Exit with code 2 if drift detected"),
+                    param("--acknowledge", "string", false, "Node ID to acknowledge drift on (re-snapshots edge versions)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
                     "lattice drift",
-                    "lattice drift --check --format json"
+                    "lattice drift --check --format json",
+                    "lattice drift --acknowledge REQ-INFRA-015"
                 ]
             },
             {
@@ -2040,8 +2046,42 @@ fn run_command(command: Commands) {
             }
         }
 
-        Commands::Drift { check, format } => {
+        Commands::Drift {
+            check,
+            acknowledge,
+            format,
+        } => {
             let root = get_lattice_root();
+
+            // Handle --acknowledge
+            if let Some(node_id) = acknowledge {
+                match lattice::storage::acknowledge_drift(&root, &node_id) {
+                    Ok(path) => {
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "acknowledged": true,
+                                    "node_id": node_id,
+                                    "path": path.display().to_string(),
+                                }))
+                                .unwrap()
+                            );
+                        } else {
+                            println!(
+                                "{} Edge versions re-snapshotted on {}",
+                                "Drift acknowledged.".green(),
+                                node_id.cyan()
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} {}", "Error:".red(), e);
+                        process::exit(1);
+                    }
+                }
+                return;
+            }
 
             match find_drift(&root) {
                 Ok(reports) => {
