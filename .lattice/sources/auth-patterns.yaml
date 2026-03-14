@@ -1,0 +1,13 @@
+id: SRC-AUTH-PATTERNS
+type: source
+title: Auth team CLI recommendations based on GWS CLI analysis
+body: 'Recommendations from the auth team for lattice CLI auth integration. Covers: credential fallback chain (env var → keyring → encrypted file → device flow), AES-256-GCM encryption at rest, multi-org profile support, API key scope management (lattice:read, lattice:push), and anti-patterns to avoid. Complements forkzero/auth infrastructure (device flow, API key scopes, token introspection).'
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:27:53.433883+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://github.com/forkzero/lattice/issues/6
+  reliability: unverified
+  retrieved_at: 2026-03-10

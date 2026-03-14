@@ -1,0 +1,13 @@
+id: SRC-GWS-CLI
+type: source
+title: Google Workspace CLI (gws) — dynamic schema-driven CLI with auto-generated agent skills
+body: 'Open-source Rust CLI for Google Workspace APIs. Key architectural patterns: (1) Dynamic command generation from Discovery Documents at runtime — CLI surface always matches API. (2) Schema introspection command (gws schema) lets agents inspect payload shapes before constructing requests. (3) Auto-generated skills from CLI metadata via generate-skills command with BLOCKED_METHODS for dangerous operations. (4) Layered skills architecture: base services → personas → recipes. (5) Context window protection as explicit agent rule. (6) Dry-run flag for mutating operations. Apache 2.0 license.'
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:25:32.504364+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://github.com/googleworkspace/cli
+  reliability: unverified
+  retrieved_at: 2026-03-10

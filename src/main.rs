@@ -7,13 +7,13 @@ use colored::Colorize;
 use lattice::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
     AddThesisOptions, Audience, DiffEntry, DriftSeverity, EditNodeOptions, ExportOptions, GapType,
-    HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority, RefineOptions, Resolution,
-    ResolveOptions, SearchEngine, SearchParams, Status, VerifyOptions, add_edge,
-    add_implementation, add_requirement, add_source, add_thesis, build_node_index, edit_node,
-    export_html, export_narrative, find_drift, find_lattice_root, fix_issues, format_diff_markdown,
-    format_entry_text, generate_plan, get_github_pages_url, init_lattice, lattice_diff,
-    lint_lattice, load_all_nodes, load_config, load_nodes_by_type, refine_requirement,
-    resolve_node, split_csv, verify_implementation,
+    HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority, RefineOptions, RemoveEdgeOptions,
+    ReplaceEdgeOptions, Resolution, ResolveOptions, SearchEngine, SearchParams, Status,
+    VerifyOptions, add_edge, add_implementation, add_requirement, add_source, add_thesis,
+    build_node_index, edit_node, export_html, export_narrative, find_drift, find_lattice_root,
+    fix_issues, format_diff_markdown, format_entry_text, generate_plan, get_github_pages_url,
+    init_lattice, lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
+    refine_requirement, remove_edge, replace_edge, resolve_node, split_csv, verify_implementation,
 };
 use serde_json::json;
 use std::env;
@@ -56,6 +56,18 @@ enum Commands {
     Add {
         #[command(subcommand)]
         add_command: AddCommands,
+    },
+
+    /// Remove an edge from a node
+    Remove {
+        #[command(subcommand)]
+        remove_command: RemoveCommands,
+    },
+
+    /// Replace an edge's target on a node
+    Replace {
+        #[command(subcommand)]
+        replace_command: ReplaceCommands,
     },
 
     /// List nodes of a given type
@@ -614,6 +626,60 @@ enum AddCommands {
     },
 }
 
+#[derive(Subcommand)]
+enum RemoveCommands {
+    /// Remove an edge between two nodes
+    Edge {
+        /// Source node ID (edge goes FROM this node)
+        #[arg(long)]
+        from: String,
+
+        /// Edge type (supported_by, derives_from, depends_on, satisfies, extends,
+        /// reveals_gap_in, challenges, validates, conflicts_with, supersedes)
+        #[arg(long, alias = "type", name = "type")]
+        edge_type: String,
+
+        /// Target node ID (edge goes TO this node)
+        #[arg(long)]
+        to: String,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ReplaceCommands {
+    /// Replace an edge's target with a new target
+    Edge {
+        /// Source node ID (edge goes FROM this node)
+        #[arg(long)]
+        from: String,
+
+        /// Edge type (supported_by, derives_from, depends_on, satisfies, extends,
+        /// reveals_gap_in, challenges, validates, conflicts_with, supersedes)
+        #[arg(long, alias = "type", name = "type")]
+        edge_type: String,
+
+        /// Current target node ID to replace
+        #[arg(long)]
+        old_to: String,
+
+        /// New target node ID
+        #[arg(long)]
+        new_to: String,
+
+        /// Why this edge exists (updates existing rationale)
+        #[arg(long)]
+        rationale: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+}
+
 fn get_lattice_root() -> std::path::PathBuf {
     let cwd = env::current_dir().expect("Failed to get current directory");
     match find_lattice_root(&cwd) {
@@ -1132,6 +1198,35 @@ fn build_command_catalog() -> serde_json::Value {
                 ]
             },
             {
+                "name": "remove edge",
+                "description": "Remove an edge between two nodes",
+                "parameters": [
+                    param("--from", "string", true, "Source node ID (edge originates FROM this node)"),
+                    param("--edge-type / --type", "string", true, "Edge type to remove"),
+                    param("--to", "string", true, "Target node ID"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice remove edge --from IMP-CLI-001 --type satisfies --to REQ-CORE-001"
+                ]
+            },
+            {
+                "name": "replace edge",
+                "description": "Replace the target of an existing edge with a new target",
+                "parameters": [
+                    param("--from", "string", true, "Source node ID"),
+                    param("--edge-type / --type", "string", true, "Edge type"),
+                    param("--old-to", "string", true, "Current target node ID to replace"),
+                    param("--new-to", "string", true, "New target node ID"),
+                    param("--rationale", "string", false, "Updated rationale for the edge"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "examples": [
+                    "lattice replace edge --from IMP-CLI-001 --type satisfies --old-to REQ-CORE-001 --new-to REQ-CORE-002",
+                    "lattice replace edge --from IMP-CLI-001 --type satisfies --old-to REQ-CORE-001 --new-to REQ-CORE-002 --rationale 'Requirement was split'"
+                ]
+            },
+            {
                 "name": "resolve",
                 "description": "Resolve a requirement with a status",
                 "parameters": [
@@ -1326,6 +1421,8 @@ fn command_to_name(cmd: &Commands) -> &'static str {
     match cmd {
         Commands::Init { .. } => "init",
         Commands::Add { .. } => "add",
+        Commands::Remove { .. } => "remove",
+        Commands::Replace { .. } => "replace",
         Commands::List { .. } => "list",
         Commands::Resolve { .. } => "resolve",
         Commands::Edit { .. } => "edit",
@@ -1619,6 +1716,100 @@ fn main() {
                         }
                     }
                     Err(e) => emit_error(&format, "add_edge_error", &e.to_string()),
+                }
+            }
+        },
+
+        Commands::Remove { remove_command } => match remove_command {
+            RemoveCommands::Edge {
+                from,
+                edge_type,
+                to,
+                format,
+            } => {
+                let root = get_lattice_root();
+
+                let options = RemoveEdgeOptions {
+                    from_id: from.clone(),
+                    edge_type: edge_type.clone(),
+                    to_id: to.clone(),
+                };
+
+                match remove_edge(&root, options) {
+                    Ok(path) => {
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "success": true,
+                                    "from": from,
+                                    "edge_type": edge_type,
+                                    "to": to,
+                                    "file": path.display().to_string(),
+                                }))
+                                .unwrap()
+                            );
+                        } else {
+                            println!(
+                                "{}",
+                                format!("Removed edge: {} --[{}]--> {}", from, edge_type, to)
+                                    .green()
+                            );
+                            println!("{}", format!("File: {}", path.display()).dimmed());
+                        }
+                    }
+                    Err(e) => emit_error(&format, "remove_edge_error", &e.to_string()),
+                }
+            }
+        },
+
+        Commands::Replace { replace_command } => match replace_command {
+            ReplaceCommands::Edge {
+                from,
+                edge_type,
+                old_to,
+                new_to,
+                rationale,
+                format,
+            } => {
+                let root = get_lattice_root();
+
+                let options = ReplaceEdgeOptions {
+                    from_id: from.clone(),
+                    edge_type: edge_type.clone(),
+                    old_to_id: old_to.clone(),
+                    new_to_id: new_to.clone(),
+                    rationale,
+                };
+
+                match replace_edge(&root, options) {
+                    Ok(path) => {
+                        if is_json(&format) {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&json!({
+                                    "success": true,
+                                    "from": from,
+                                    "edge_type": edge_type,
+                                    "old_to": old_to,
+                                    "new_to": new_to,
+                                    "file": path.display().to_string(),
+                                }))
+                                .unwrap()
+                            );
+                        } else {
+                            println!(
+                                "{}",
+                                format!(
+                                    "Replaced edge: {} --[{}]--> {} (was {})",
+                                    from, edge_type, new_to, old_to
+                                )
+                                .green()
+                            );
+                            println!("{}", format!("File: {}", path.display()).dimmed());
+                        }
+                    }
+                    Err(e) => emit_error(&format, "replace_edge_error", &e.to_string()),
                 }
             }
         },
@@ -3310,6 +3501,8 @@ mod tests {
             "add source",
             "add implementation",
             "add edge",
+            "remove edge",
+            "replace edge",
             "resolve",
             "edit",
             "verify",

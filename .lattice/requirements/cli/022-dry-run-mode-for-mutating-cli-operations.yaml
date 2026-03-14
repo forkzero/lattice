@@ -1,0 +1,15 @@
+id: REQ-CLI-022
+type: requirement
+title: Dry-run mode for mutating CLI operations
+body: Mutating lattice commands (add, edit, resolve, refine) SHOULD support a --dry-run flag that validates input and prints what would be created or modified without writing to disk. This provides a safety net for agent operations and enables payload validation before execution. Lower priority than schema and skill-gen since lattice mutations are local files with git undo.
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:26:00.180137+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: CLI
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

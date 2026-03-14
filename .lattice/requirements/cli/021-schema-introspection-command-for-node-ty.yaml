@@ -1,0 +1,15 @@
+id: REQ-CLI-021
+type: requirement
+title: Schema introspection command for node types
+body: A lattice schema <type> command MUST display the YAML structure for a given node type (requirement, thesis, source, implementation), showing all fields, their types, which are required vs optional, and valid enum values. This eliminates agent guessing about node structure and prevents malformed YAML when agents fall back to direct editing. Inspired by gws schema which lets agents inspect API payload shapes before constructing requests.
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:25:52.144039+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

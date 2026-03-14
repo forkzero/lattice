@@ -1,0 +1,15 @@
+id: REQ-CLI-025
+type: requirement
+title: Multi-org profile support for CLI authentication
+body: The CLI MUST support multiple organization contexts since API keys are scoped to user + organization. MUST store active org context in config. MUST support --org flag to override per-command. lattice auth login --org MUST switch active context. lattice auth status MUST show current org.
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:28:22.255550+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+edges:
+  depends_on:
+  - target: REQ-CLI-023
+    version: 1.0.0

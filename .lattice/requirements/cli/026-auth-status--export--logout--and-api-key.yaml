@@ -1,0 +1,15 @@
+id: REQ-CLI-026
+type: requirement
+title: Auth status, export, logout, and API key management commands
+body: 'The CLI MUST provide: lattice auth status (show method, org, scopes, token validity), lattice auth export (masked credentials for debugging), lattice auth export --unmasked (for CI credential transfer), lattice auth logout (clear stored credentials), lattice auth api-keys (create, list, revoke API keys with lattice:read and lattice:push scopes).'
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:28:28.677335+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P2
+category: CLI
+edges:
+  depends_on:
+  - target: REQ-CLI-023
+    version: 1.0.0

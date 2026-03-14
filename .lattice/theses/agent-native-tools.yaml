@@ -35,3 +35,9 @@ edges:
   - target: SRC-AGENT-CODE-GEN
     version: 1.0.0
     rationale: Agent capabilities depend on input quality
+  - target: SRC-GWS-CLI
+    version: 1.0.0
+    rationale: gws demonstrates that schema-driven, introspectable CLIs with auto-generated skills are more effective for agent workflows
+  - target: SRC-AUTH-PATTERNS
+    version: 1.0.0
+    rationale: Auth team analysis demonstrates that agent-native tools require structured credential management with fallback chains and multi-org support

@@ -1,12 +1,14 @@
 ---
 name: lattice
 description: "Lattice knowledge graph integration. Use when working in a project with a .lattice/ directory — for requirements, theses, sources, implementations, drift detection, or lattice CLI commands."
-allowed-tools: Bash(lattice *), Bash(./target/release/lattice *), Bash(./target/debug/lattice *), Read, Grep, Glob
+allowed-tools: Bash(lattice *), Bash(./target/release/lattice *), Bash(./target/debug/lattice *), Bash(gh issue *), Read, Grep, Glob
 ---
 
 # Lattice Skill
 
 You have access to a **Lattice** knowledge graph in this project. The `.lattice/` directory contains the structured knowledge graph (YAML files). Use the `lattice` CLI to query and modify it.
+
+The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this document are to be interpreted as described in RFC 2119.
 
 ## Quick Reference
 
@@ -24,6 +26,21 @@ lattice update                   # Self-update to latest version
 lattice update --check           # Check for updates without installing
 ```
 
+## Editing Rules
+
+Agents MUST use the `lattice` CLI for all supported operations.
+The CLI handles timestamps, version bumps, edge wiring, and ID validation.
+
+If the CLI does not support a required operation, agents MAY edit `.lattice/` YAML files directly, but MUST run `lattice lint` immediately after to verify correctness.
+
+If a CLI gap is found, agents SHOULD file an issue on `forkzero/lattice` describing the missing capability:
+```bash
+gh issue create --repo forkzero/lattice \
+  --title "CLI gap: <what's missing>" \
+  --body "Encountered while working on <context>. Had to edit YAML directly because <reason>." \
+  --label "cli-gap"
+```
+
 ## Workflow
 
 ### Before Starting Work
@@ -39,8 +56,9 @@ lattice update --check           # Check for updates without installing
 - `lattice resolve REQ-XXX --verified` to mark requirements as done
 - `lattice verify IMP-XXX satisfies REQ-XXX --tests-pass` to record satisfaction evidence
 - If you implemented a new feature, add matching requirement(s) and resolve them as verified
-- `lattice edit IMP-XXX --body "updated description"` to update implementation nodes
+- `lattice edit IMP-XXX --body "updated description" --files "src/new.rs,src/lib.rs" --test-command "cargo test"` to update implementation nodes
 - `lattice add edge --from IMP-XXX --type satisfies --to REQ-XXX` to wire new edges
+- Run `lattice drift` to confirm no unresolved drift
 
 ### If Gaps Are Found
 - `lattice refine REQ-XXX --gap-type missing_requirement --title "..." --description "..."` to create sub-requirements
@@ -90,15 +108,28 @@ lattice add source \
   --id SRC-NEW --title "Reference" --body "Summary" \
   --url "https://..." --created-by "agent:claude"
 
+lattice add implementation \
+  --id IMP-FEAT-001 --title "Feature implementation" \
+  --body "Description of what was implemented" \
+  --language rust --files "src/main.rs,src/lib.rs" \
+  --test-command "cargo test" --satisfies REQ-FEAT-001 \
+  --created-by "agent:claude"
+
 lattice add edge \
   --from IMP-XXX --type validates --to THX-XXX \
   --rationale "Implementation confirms thesis"
 ```
 
-## Editing Rules
+## Editing Nodes
 
-**Always use the CLI** to create and modify nodes — never hand-edit `.lattice/` YAML files.
-The CLI handles timestamps, version bumps, edge wiring, and ID validation.
+```bash
+lattice edit REQ-XXX --title "New title" --body "New body"
+lattice edit REQ-XXX --priority P0 --tags "core,storage"
+lattice edit IMP-XXX --files "src/new.rs,src/lib.rs" --test-command "cargo test"
+lattice edit IMP-XXX --body "Updated description" --status active
+```
+
+Agents MUST use `lattice edit` to modify existing nodes. The `edit` command auto-bumps the patch version and preserves all other fields. Type-specific flags: `--priority` (requirements only), `--files` and `--test-command` (implementations only).
 
 ## JSON Output
 

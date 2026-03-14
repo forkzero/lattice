@@ -1,0 +1,15 @@
+id: REQ-CLI-023
+type: requirement
+title: Auth login command with device flow and encrypted credential storage
+body: lattice auth login MUST implement OAuth2 device flow for authentication, storing refresh tokens encrypted at rest. Credential storage MUST use OS keyring (keyring crate) with AES-256-GCM encrypted file fallback for headless environments. Credential files MUST use 0o600 permissions, directories 0o700. MUST support auto-migration from file to keyring when available.
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:28:09.068889+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+edges:
+  depends_on:
+  - target: REQ-API-010
+    version: 1.0.0

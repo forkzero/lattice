@@ -1,0 +1,15 @@
+id: REQ-CLI-020
+type: requirement
+title: Auto-generate SKILL.md from CLI command catalog
+body: The lattice init --skill command MUST generate SKILL.md from the lattice --json command catalog rather than shipping a static template. This ensures the skill always reflects the current CLI surface — new commands, flags, and examples appear automatically. Inspired by gws generate-skills which builds skills from Discovery Documents. The generator SHOULD include all commands, parameters, and examples from the catalog. It SHOULD omit or warn about commands marked as dangerous.
+status: active
+version: 1.0.0
+created_at: 2026-03-10T00:25:45.399384+00:00
+created_by: agent:claude
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: CLI
+edges:
+  derives_from:
+  - target: THX-SKILL-AWARE-GRAPH
+    version: 1.0.0

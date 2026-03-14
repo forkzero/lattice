@@ -184,6 +184,8 @@ pub enum StorageError {
     AlreadyExists(String),
     #[error("Invalid field value: {0}")]
     InvalidField(String),
+    #[error("Edge not found: {0}")]
+    EdgeNotFound(String),
 }
 
 /// Find the lattice root by searching upward for .lattice directory.
@@ -1055,6 +1057,155 @@ pub fn add_edge(root: &Path, options: AddEdgeOptions) -> Result<PathBuf, Storage
         "validates" => upsert_edge!(validates),
         "conflicts_with" => upsert_edge!(conflicts_with),
         "supersedes" => upsert_edge!(supersedes),
+        _ => unreachable!(),
+    }
+
+    save_node(&from_path, &from_node)?;
+    Ok(from_path)
+}
+
+/// Options for removing an edge between two nodes.
+pub struct RemoveEdgeOptions {
+    pub from_id: String,
+    pub edge_type: String,
+    pub to_id: String,
+}
+
+/// Remove an edge from one node to another.
+pub fn remove_edge(root: &Path, options: RemoveEdgeOptions) -> Result<PathBuf, StorageError> {
+    if !EDGE_TYPES.contains(&options.edge_type.as_str()) {
+        return Err(StorageError::InvalidNodeType(format!(
+            "Unknown edge type '{}'. Valid types: {}",
+            options.edge_type,
+            EDGE_TYPES.join(", ")
+        )));
+    }
+
+    let from_path = find_node_path(root, &options.from_id)?;
+    let mut from_node = load_node(&from_path)?;
+
+    let edges = match &mut from_node.edges {
+        Some(e) => e,
+        None => {
+            return Err(StorageError::EdgeNotFound(format!(
+                "No '{}' edge to '{}' found on node '{}'",
+                options.edge_type, options.to_id, options.from_id
+            )));
+        }
+    };
+
+    macro_rules! remove_from {
+        ($field:ident) => {{
+            if let Some(vec) = &mut edges.$field {
+                let before = vec.len();
+                vec.retain(|e| e.target != options.to_id);
+                if vec.len() == before {
+                    return Err(StorageError::EdgeNotFound(format!(
+                        "No '{}' edge to '{}' found on node '{}'",
+                        options.edge_type, options.to_id, options.from_id
+                    )));
+                }
+                if vec.is_empty() {
+                    edges.$field = None;
+                }
+            } else {
+                return Err(StorageError::EdgeNotFound(format!(
+                    "No '{}' edge to '{}' found on node '{}'",
+                    options.edge_type, options.to_id, options.from_id
+                )));
+            }
+        }};
+    }
+
+    match options.edge_type.as_str() {
+        "supported_by" => remove_from!(supported_by),
+        "derives_from" => remove_from!(derives_from),
+        "depends_on" => remove_from!(depends_on),
+        "satisfies" => remove_from!(satisfies),
+        "extends" => remove_from!(extends),
+        "reveals_gap_in" => remove_from!(reveals_gap_in),
+        "challenges" => remove_from!(challenges),
+        "validates" => remove_from!(validates),
+        "conflicts_with" => remove_from!(conflicts_with),
+        "supersedes" => remove_from!(supersedes),
+        _ => unreachable!(),
+    }
+
+    save_node(&from_path, &from_node)?;
+    Ok(from_path)
+}
+
+/// Options for replacing an edge target on a node.
+pub struct ReplaceEdgeOptions {
+    pub from_id: String,
+    pub edge_type: String,
+    pub old_to_id: String,
+    pub new_to_id: String,
+    pub rationale: Option<String>,
+}
+
+/// Replace an edge's target with a new target, updating the version binding.
+pub fn replace_edge(root: &Path, options: ReplaceEdgeOptions) -> Result<PathBuf, StorageError> {
+    if !EDGE_TYPES.contains(&options.edge_type.as_str()) {
+        return Err(StorageError::InvalidNodeType(format!(
+            "Unknown edge type '{}'. Valid types: {}",
+            options.edge_type,
+            EDGE_TYPES.join(", ")
+        )));
+    }
+
+    // Load new target to get its version
+    let new_target_path = find_node_path(root, &options.new_to_id)?;
+    let new_target_node = load_node(&new_target_path)?;
+
+    let from_path = find_node_path(root, &options.from_id)?;
+    let mut from_node = load_node(&from_path)?;
+
+    let edges = match &mut from_node.edges {
+        Some(e) => e,
+        None => {
+            return Err(StorageError::EdgeNotFound(format!(
+                "No '{}' edge to '{}' found on node '{}'",
+                options.edge_type, options.old_to_id, options.from_id
+            )));
+        }
+    };
+
+    macro_rules! replace_in {
+        ($field:ident) => {{
+            if let Some(vec) = &mut edges.$field {
+                if let Some(existing) = vec.iter_mut().find(|e| e.target == options.old_to_id) {
+                    existing.target = options.new_to_id.clone();
+                    existing.version = Some(new_target_node.version.clone());
+                    if let Some(rationale) = options.rationale {
+                        existing.rationale = Some(rationale);
+                    }
+                } else {
+                    return Err(StorageError::EdgeNotFound(format!(
+                        "No '{}' edge to '{}' found on node '{}'",
+                        options.edge_type, options.old_to_id, options.from_id
+                    )));
+                }
+            } else {
+                return Err(StorageError::EdgeNotFound(format!(
+                    "No '{}' edge to '{}' found on node '{}'",
+                    options.edge_type, options.old_to_id, options.from_id
+                )));
+            }
+        }};
+    }
+
+    match options.edge_type.as_str() {
+        "supported_by" => replace_in!(supported_by),
+        "derives_from" => replace_in!(derives_from),
+        "depends_on" => replace_in!(depends_on),
+        "satisfies" => replace_in!(satisfies),
+        "extends" => replace_in!(extends),
+        "reveals_gap_in" => replace_in!(reveals_gap_in),
+        "challenges" => replace_in!(challenges),
+        "validates" => replace_in!(validates),
+        "conflicts_with" => replace_in!(conflicts_with),
+        "supersedes" => replace_in!(supersedes),
         _ => unreachable!(),
     }
 
@@ -2272,6 +2423,396 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("Files can only be set on implementation nodes")
+        );
+    }
+
+    #[test]
+    fn test_remove_edge_success() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let req_opts = AddRequirementOptions {
+            id: "REQ-REM-001".to_string(),
+            title: "Remove target".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P1,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, req_opts).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-REM-001".to_string(),
+            title: "Remove source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        // Add edge then remove it
+        add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-REM-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                to_id: "REQ-REM-001".to_string(),
+                rationale: Some("test".to_string()),
+            },
+        )
+        .unwrap();
+
+        let path = remove_edge(
+            root,
+            RemoveEdgeOptions {
+                from_id: "IMP-REM-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                to_id: "REQ-REM-001".to_string(),
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        // Edge field should be None (cleaned up empty vec)
+        assert!(node.edges.is_none() || node.edges.as_ref().unwrap().reveals_gap_in.is_none());
+    }
+
+    #[test]
+    fn test_remove_edge_not_found() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-RNF-001".to_string(),
+            title: "Source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        let result = remove_edge(
+            root,
+            RemoveEdgeOptions {
+                from_id: "IMP-RNF-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                to_id: "REQ-NONEXISTENT".to_string(),
+            },
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No 'reveals_gap_in' edge to")
+        );
+    }
+
+    #[test]
+    fn test_remove_edge_invalid_type() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-RIT-001".to_string(),
+            title: "Source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        let result = remove_edge(
+            root,
+            RemoveEdgeOptions {
+                from_id: "IMP-RIT-001".to_string(),
+                edge_type: "invalid_type".to_string(),
+                to_id: "REQ-FOO".to_string(),
+            },
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown edge type")
+        );
+    }
+
+    #[test]
+    fn test_remove_edge_preserves_other_edges() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        // Create two targets
+        for id in &["REQ-RPE-001", "REQ-RPE-002"] {
+            add_requirement(
+                root,
+                AddRequirementOptions {
+                    id: id.to_string(),
+                    title: format!("Target {}", id),
+                    body: "Body".to_string(),
+                    priority: crate::types::Priority::P1,
+                    category: "TEST".to_string(),
+                    tags: None,
+                    derives_from: None,
+                    depends_on: None,
+                    status: crate::types::Status::Active,
+                    created_by: "test".to_string(),
+                },
+            )
+            .unwrap();
+        }
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-RPE-001".to_string(),
+            title: "Source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        // Add two edges of same type
+        for to in &["REQ-RPE-001", "REQ-RPE-002"] {
+            add_edge(
+                root,
+                AddEdgeOptions {
+                    from_id: "IMP-RPE-001".to_string(),
+                    edge_type: "reveals_gap_in".to_string(),
+                    to_id: to.to_string(),
+                    rationale: None,
+                },
+            )
+            .unwrap();
+        }
+
+        // Remove one edge
+        let path = remove_edge(
+            root,
+            RemoveEdgeOptions {
+                from_id: "IMP-RPE-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                to_id: "REQ-RPE-001".to_string(),
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        let gaps = node.edges.unwrap().reveals_gap_in.unwrap();
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].target, "REQ-RPE-002");
+    }
+
+    #[test]
+    fn test_replace_edge_success() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        for id in &["REQ-RPL-001", "REQ-RPL-002"] {
+            add_requirement(
+                root,
+                AddRequirementOptions {
+                    id: id.to_string(),
+                    title: format!("Target {}", id),
+                    body: "Body".to_string(),
+                    priority: crate::types::Priority::P1,
+                    category: "TEST".to_string(),
+                    tags: None,
+                    derives_from: None,
+                    depends_on: None,
+                    status: crate::types::Status::Active,
+                    created_by: "test".to_string(),
+                },
+            )
+            .unwrap();
+        }
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-RPL-001".to_string(),
+            title: "Source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-RPL-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                to_id: "REQ-RPL-001".to_string(),
+                rationale: Some("original".to_string()),
+            },
+        )
+        .unwrap();
+
+        let path = replace_edge(
+            root,
+            ReplaceEdgeOptions {
+                from_id: "IMP-RPL-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                old_to_id: "REQ-RPL-001".to_string(),
+                new_to_id: "REQ-RPL-002".to_string(),
+                rationale: Some("replaced".to_string()),
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        let gaps = node.edges.unwrap().reveals_gap_in.unwrap();
+        assert_eq!(gaps.len(), 1);
+        assert_eq!(gaps[0].target, "REQ-RPL-002");
+        assert_eq!(gaps[0].rationale.as_deref(), Some("replaced"));
+    }
+
+    #[test]
+    fn test_replace_edge_preserves_rationale() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        for id in &["REQ-RPR-001", "REQ-RPR-002"] {
+            add_requirement(
+                root,
+                AddRequirementOptions {
+                    id: id.to_string(),
+                    title: format!("Target {}", id),
+                    body: "Body".to_string(),
+                    priority: crate::types::Priority::P1,
+                    category: "TEST".to_string(),
+                    tags: None,
+                    derives_from: None,
+                    depends_on: None,
+                    status: crate::types::Status::Active,
+                    created_by: "test".to_string(),
+                },
+            )
+            .unwrap();
+        }
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-RPR-001".to_string(),
+            title: "Source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        add_edge(
+            root,
+            AddEdgeOptions {
+                from_id: "IMP-RPR-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                to_id: "REQ-RPR-001".to_string(),
+                rationale: Some("keep this".to_string()),
+            },
+        )
+        .unwrap();
+
+        // Replace without providing new rationale — should keep original
+        let path = replace_edge(
+            root,
+            ReplaceEdgeOptions {
+                from_id: "IMP-RPR-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                old_to_id: "REQ-RPR-001".to_string(),
+                new_to_id: "REQ-RPR-002".to_string(),
+                rationale: None,
+            },
+        )
+        .unwrap();
+
+        let node = load_node(&path).unwrap();
+        let gaps = node.edges.unwrap().reveals_gap_in.unwrap();
+        assert_eq!(gaps[0].target, "REQ-RPR-002");
+        assert_eq!(gaps[0].rationale.as_deref(), Some("keep this"));
+    }
+
+    #[test]
+    fn test_replace_edge_not_found() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        init_lattice(root, false).unwrap();
+
+        let req_opts = AddRequirementOptions {
+            id: "REQ-RPNF-001".to_string(),
+            title: "Target".to_string(),
+            body: "Body".to_string(),
+            priority: crate::types::Priority::P1,
+            category: "TEST".to_string(),
+            tags: None,
+            derives_from: None,
+            depends_on: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_requirement(root, req_opts).unwrap();
+
+        let impl_opts = AddImplementationOptions {
+            id: "IMP-RPNF-001".to_string(),
+            title: "Source".to_string(),
+            body: "Impl".to_string(),
+            language: None,
+            files: None,
+            test_command: None,
+            satisfies: None,
+            status: crate::types::Status::Active,
+            created_by: "test".to_string(),
+        };
+        add_implementation(root, impl_opts).unwrap();
+
+        let result = replace_edge(
+            root,
+            ReplaceEdgeOptions {
+                from_id: "IMP-RPNF-001".to_string(),
+                edge_type: "reveals_gap_in".to_string(),
+                old_to_id: "REQ-NONEXISTENT".to_string(),
+                new_to_id: "REQ-RPNF-001".to_string(),
+                rationale: None,
+            },
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No 'reveals_gap_in' edge to")
         );
     }
 }
