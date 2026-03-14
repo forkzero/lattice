@@ -1460,15 +1460,22 @@ fn main() {
     let command = match cli.command {
         Some(cmd) => cmd,
         None => {
-            // Re-parse with --help to show usage
-            Cli::parse_from(["lattice", "--help"]);
+            // Show update notification before help (Clap's --help exits the process)
             lattice::update::maybe_notify_update(None);
+            Cli::parse_from(["lattice", "--help"]);
             return;
         }
     };
 
     let command_name = command_to_name(&command);
 
+    run_command(command);
+
+    // Passive update check after command output is complete
+    lattice::update::maybe_notify_update(Some(command_name));
+}
+
+fn run_command(command: Commands) {
     match command {
         Commands::Init {
             force,
@@ -3409,9 +3416,6 @@ fn main() {
             }
         }
     }
-
-    // Passive update check after command output is complete
-    lattice::update::maybe_notify_update(Some(command_name));
 }
 
 #[cfg(test)]

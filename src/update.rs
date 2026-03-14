@@ -355,17 +355,10 @@ fn print_update_notice(latest: &Version) {
 /// non-TTY stderr, dev builds, and when HOME is unset. Caches the check
 /// result for 24 hours to avoid repeated network requests.
 pub fn maybe_notify_update(command_name: Option<&str>) {
-    use std::io::IsTerminal;
-
     // Skip for commands that handle updates themselves or use stdio protocol
     if let Some(name) = command_name
         && (name == "update" || name == "mcp")
     {
-        return;
-    }
-
-    // Skip if stderr is not a terminal (piped output)
-    if !std::io::stderr().is_terminal() {
         return;
     }
 
