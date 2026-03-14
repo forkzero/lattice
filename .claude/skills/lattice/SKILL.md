@@ -22,6 +22,9 @@ lattice drift                    # Check for stale edge bindings
 lattice lint                     # Structural issues
 lattice search -q "keyword"      # Text search (defaults to requirements)
 lattice edit REQ-XXX --title "..." # Edit node fields (auto-bumps version)
+lattice add edge --from IMP-XXX --type satisfies --to REQ-XXX  # Wire edges
+lattice remove edge --from IMP-XXX --type satisfies --to REQ-XXX  # Remove edges
+lattice replace edge --from IMP-XXX --type satisfies --old-to REQ-OLD --new-to REQ-NEW  # Retarget edges
 lattice update                   # Self-update to latest version
 lattice update --check           # Check for updates without installing
 ```
@@ -118,6 +121,17 @@ lattice add implementation \
 lattice add edge \
   --from IMP-XXX --type validates --to THX-XXX \
   --rationale "Implementation confirms thesis"
+```
+
+## Managing Edges
+
+```bash
+# Remove an edge
+lattice remove edge --from IMP-XXX --type satisfies --to REQ-XXX
+
+# Replace an edge target (retarget to a different node)
+lattice replace edge --from IMP-XXX --type satisfies \
+  --old-to REQ-OLD --new-to REQ-NEW --rationale "Requirement was split"
 ```
 
 ## Editing Nodes

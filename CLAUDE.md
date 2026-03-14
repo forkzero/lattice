@@ -100,6 +100,9 @@ lattice drift --check           # Exit non-zero if drift detected
 lattice add requirement ...     # Add a requirement
 lattice add thesis ...          # Add a thesis
 lattice add source ...          # Add a source
+lattice add edge ...            # Add an edge between nodes
+lattice remove edge ...         # Remove an edge
+lattice replace edge ...        # Retarget an edge to a new node
 lattice export                  # Export narrative (overview)
 lattice export -a investor      # Export for investors
 lattice export -a contributor   # Export for contributors
