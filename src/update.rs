@@ -54,6 +54,11 @@ pub enum UpdateError {
     #[error("No asset found for target {0}")]
     NoAsset(String),
 
+    #[error(
+        "Release v{0} exists but binaries are not yet available (release may still be building)"
+    )]
+    AssetsNotReady(String),
+
     #[error("Checksum mismatch (expected {expected}, got {actual})")]
     ChecksumMismatch { expected: String, actual: String },
 
@@ -119,8 +124,15 @@ fn check_response(status: reqwest::StatusCode, fallback: UpdateError) -> Result<
     Ok(())
 }
 
-/// Fetch the latest release tag from GitHub. Returns (tag, version).
-async fn fetch_latest_version(client: &reqwest::Client) -> Result<(String, Version), UpdateError> {
+/// Release metadata from GitHub API.
+struct ReleaseInfo {
+    tag: String,
+    version: Version,
+    asset_names: Vec<String>,
+}
+
+/// Fetch the latest release from GitHub.
+async fn fetch_latest_version(client: &reqwest::Client) -> Result<ReleaseInfo, UpdateError> {
     let url = format!(
         "https://api.github.com/repos/{}/releases/latest",
         GITHUB_REPO
@@ -128,6 +140,11 @@ async fn fetch_latest_version(client: &reqwest::Client) -> Result<(String, Versi
     let resp = client.get(&url).send().await?;
     check_response(resp.status(), UpdateError::NoRelease)?;
 
+    parse_release_response(resp).await
+}
+
+/// Parse a GitHub release API response into ReleaseInfo.
+async fn parse_release_response(resp: reqwest::Response) -> Result<ReleaseInfo, UpdateError> {
     let body: serde_json::Value = resp.json().await?;
     let tag = body["tag_name"]
         .as_str()
@@ -138,14 +155,28 @@ async fn fetch_latest_version(client: &reqwest::Client) -> Result<(String, Versi
     let version =
         Version::parse(version_str).map_err(|_| UpdateError::InvalidVersion(tag.clone()))?;
 
-    Ok((tag, version))
+    let asset_names = body["assets"]
+        .as_array()
+        .map(|assets| {
+            assets
+                .iter()
+                .filter_map(|a| a["name"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(ReleaseInfo {
+        tag,
+        version,
+        asset_names,
+    })
 }
 
-/// Fetch a specific version tag from GitHub. Returns (tag, version).
+/// Fetch a specific version from GitHub.
 async fn fetch_specific_version(
     client: &reqwest::Client,
     target_version: &str,
-) -> Result<(String, Version), UpdateError> {
+) -> Result<ReleaseInfo, UpdateError> {
     let version_str = target_version.strip_prefix('v').unwrap_or(target_version);
     let version = Version::parse(version_str)
         .map_err(|_| UpdateError::InvalidVersion(target_version.to_string()))?;
@@ -158,7 +189,7 @@ async fn fetch_specific_version(
     let resp = client.get(&url).send().await?;
     check_response(resp.status(), UpdateError::NoRelease)?;
 
-    Ok((tag, version))
+    parse_release_response(resp).await
 }
 
 /// Download bytes from a URL.
@@ -245,38 +276,43 @@ pub async fn run_update(options: UpdateOptions) -> Result<UpdateResult, UpdateEr
     let client = build_client()?;
 
     // Resolve target version
-    let (tag, target) = if let Some(ref v) = options.target_version {
+    let release = if let Some(ref v) = options.target_version {
         fetch_specific_version(&client, v).await?
     } else {
         fetch_latest_version(&client).await?
     };
 
     // Compare versions
-    if !options.force && target <= current && options.target_version.is_none() {
+    if !options.force && release.version <= current && options.target_version.is_none() {
         return Ok(UpdateResult::AlreadyUpToDate { version: current });
     }
 
     if options.check_only {
-        if target > current {
+        if release.version > current {
             return Ok(UpdateResult::UpdateAvailable {
                 current,
-                latest: target,
+                latest: release.version,
             });
         } else {
             return Ok(UpdateResult::AlreadyUpToDate { version: current });
         }
     }
 
-    // Download archive + checksums
-    let version_str = tag.strip_prefix('v').unwrap_or(&tag);
-    let archive_filename = archive_name(version_str, TARGET_TRIPLE);
+    // Check that the release has the binary asset for this platform
+    let version_str = release.version.to_string();
+    let archive_filename = archive_name(&version_str, TARGET_TRIPLE);
+
+    if !release.asset_names.iter().any(|a| a == &archive_filename) {
+        return Err(UpdateError::AssetsNotReady(release.version.to_string()));
+    }
+
     let archive_url = format!(
         "https://github.com/{}/releases/download/{}/{}",
-        GITHUB_REPO, tag, archive_filename
+        GITHUB_REPO, release.tag, archive_filename
     );
     let checksums_url = format!(
         "https://github.com/{}/releases/download/{}/checksums.txt",
-        GITHUB_REPO, tag
+        GITHUB_REPO, release.tag
     );
 
     let (archive_result, checksums_result) = tokio::join!(
@@ -301,7 +337,7 @@ pub async fn run_update(options: UpdateOptions) -> Result<UpdateResult, UpdateEr
 
     Ok(UpdateResult::Updated {
         from: current,
-        to: target,
+        to: release.version,
     })
 }
 
@@ -402,7 +438,9 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
     };
 
     match rt.block_on(fetch_latest_version(&client)) {
-        Ok((_tag, latest)) => {
+        Ok(ReleaseInfo {
+            version: latest, ..
+        }) => {
             write_check_state(
                 &cache_path,
                 &UpdateCheckState {
