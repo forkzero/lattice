@@ -415,8 +415,20 @@ enum Commands {
     /// Show lattice nodes added, modified, or resolved since a git ref
     Diff {
         /// Git ref to compare against (default: merge-base with main)
-        #[arg(long)]
+        #[arg(long, conflicts_with = "since_push")]
         since: Option<String>,
+
+        /// Use the last push SHA as the baseline (fetches from API)
+        #[arg(long, conflicts_with = "since")]
+        since_push: bool,
+
+        /// API URL for --since-push (overrides config and LATTICE_API_URL env var)
+        #[arg(long)]
+        api_url: Option<String>,
+
+        /// API key for --since-push (overrides config and LATTICE_API_KEY env var)
+        #[arg(long)]
+        api_key: Option<String>,
 
         /// Output as markdown (for GitHub comments)
         #[arg(long)]
@@ -804,6 +816,38 @@ fn emit_error(format: &str, code: &str, detail: &str) -> ! {
         eprintln!("{}", format!("Error: {}", detail).red());
     }
     process::exit(1);
+}
+
+/// Resolve API URL and key from CLI args, env vars, and config (in priority order).
+fn resolve_api_credentials(
+    api_url: Option<String>,
+    api_key: Option<String>,
+    config: &lattice::LatticeConfig,
+    format: &str,
+) -> (String, String) {
+    let url = api_url
+        .or_else(|| std::env::var("LATTICE_API_URL").ok())
+        .or(config.api_url.clone())
+        .unwrap_or_else(|| {
+            emit_error(
+                format,
+                "no_api_url",
+                "No API URL configured. Set api_url in .lattice/config.yaml, pass --api-url, or set LATTICE_API_URL",
+            );
+        });
+
+    let key = api_key
+        .or_else(|| std::env::var("LATTICE_API_KEY").ok())
+        .or(config.api_key.clone())
+        .unwrap_or_else(|| {
+            emit_error(
+                format,
+                "no_api_key",
+                "No API key configured. Pass --api-key or set LATTICE_API_KEY",
+            );
+        });
+
+    (url, key)
 }
 
 fn install_agent_definitions(root: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
@@ -3254,30 +3298,7 @@ fn run_command(command: Commands) {
         } => {
             let root = get_lattice_root();
             let config = load_config(&root);
-
-            // Resolve api_url: CLI flag > env var > config
-            let url = api_url
-                .or_else(|| std::env::var("LATTICE_API_URL").ok())
-                .or(config.api_url.clone())
-                .unwrap_or_else(|| {
-                    emit_error(
-                        &format,
-                        "no_api_url",
-                        "No API URL configured. Set api_url in .lattice/config.yaml, pass --api-url, or set LATTICE_API_URL",
-                    );
-                });
-
-            // Resolve api_key: CLI flag > env var > config
-            let key = api_key
-                .or_else(|| std::env::var("LATTICE_API_KEY").ok())
-                .or(config.api_key.clone())
-                .unwrap_or_else(|| {
-                    emit_error(
-                        &format,
-                        "no_api_key",
-                        "No API key configured. Pass --api-key or set LATTICE_API_KEY",
-                    );
-                });
+            let (url, key) = resolve_api_credentials(api_url, api_key, &config, &format);
 
             let nodes = load_all_nodes(&root).unwrap_or_else(|e| {
                 emit_error(
@@ -3285,6 +3306,15 @@ fn run_command(command: Commands) {
                     "load_failed",
                     &format!("Failed to load lattice: {}", e),
                 );
+            });
+
+            // Get current git SHA
+            let git_sha = lattice::diff::git_head_sha().unwrap_or_else(|e| {
+                eprintln!(
+                    "{}",
+                    format!("Warning: could not get git SHA: {}", e).yellow()
+                );
+                "unknown".to_string()
             });
 
             if !is_json(&format) {
@@ -3295,28 +3325,63 @@ fn run_command(command: Commands) {
             }
 
             let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
-            match rt.block_on(lattice::push::push(&url, &key, &config.project, &nodes)) {
-                Ok(resp) => {
-                    if is_json(&format) {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&json!({
-                                "success": true,
-                                "project_id": resp.project_id,
-                                "nodes_upserted": resp.nodes_upserted,
-                                "edges_replaced": resp.edges_replaced,
-                            }))
-                            .unwrap()
-                        );
-                    } else {
-                        println!(
+
+            // Fetch last push SHA and compute diff if available
+            let push_diff = rt
+                .block_on(lattice::push::fetch_last_push_sha(
+                    &url,
+                    &key,
+                    &config.project,
+                ))
+                .and_then(|baseline_sha| {
+                    if !is_json(&format) {
+                        eprintln!(
                             "{}",
                             format!(
-                                "✓ Pushed to project #{}: {} nodes, {} edges",
-                                resp.project_id, resp.nodes_upserted, resp.edges_replaced
+                                "Computing diff since {}...",
+                                &baseline_sha[..std::cmp::min(8, baseline_sha.len())]
                             )
-                            .green()
+                            .dimmed()
                         );
+                    }
+                    lattice::diff::lattice_diff(&root, Some(&baseline_sha))
+                        .ok()
+                        .filter(|d| !d.is_empty())
+                        .map(|d| lattice::push::diff_result_to_push_diff(&d))
+                });
+
+            let diff_count = push_diff.as_ref().map(|d| d.entries.len());
+
+            match rt.block_on(lattice::push::push(
+                &url,
+                &key,
+                &config.project,
+                &nodes,
+                &git_sha,
+                push_diff,
+            )) {
+                Ok(resp) => {
+                    if is_json(&format) {
+                        let mut result = json!({
+                            "success": true,
+                            "project_id": resp.project_id,
+                            "nodes_upserted": resp.nodes_upserted,
+                            "edges_replaced": resp.edges_replaced,
+                            "git_sha": git_sha,
+                        });
+                        if let Some(count) = diff_count {
+                            result["diff_entries"] = json!(count);
+                        }
+                        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+                    } else {
+                        let mut msg = format!(
+                            "✓ Pushed to project #{}: {} nodes, {} edges",
+                            resp.project_id, resp.nodes_upserted, resp.edges_replaced
+                        );
+                        if let Some(count) = diff_count {
+                            msg.push_str(&format!(" ({} changes)", count));
+                        }
+                        println!("{}", msg.green());
                     }
                 }
                 Err(e) => {
@@ -3327,14 +3392,53 @@ fn run_command(command: Commands) {
 
         Commands::Diff {
             since,
+            since_push,
+            api_url,
+            api_key,
             md,
             raw,
             format,
         } => {
             let root = get_lattice_root();
 
+            // Resolve --since-push to a SHA
+            let effective_since = if since_push {
+                let config = load_config(&root);
+                let (url, key) = resolve_api_credentials(api_url, api_key, &config, &format);
+
+                let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+                match rt.block_on(lattice::push::fetch_last_push_sha(
+                    &url,
+                    &key,
+                    &config.project,
+                )) {
+                    Some(sha) => {
+                        if !is_json(&format) {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "Using last push SHA: {}",
+                                    &sha[..std::cmp::min(8, sha.len())]
+                                )
+                                .dimmed()
+                            );
+                        }
+                        Some(sha)
+                    }
+                    None => {
+                        emit_error(
+                            &format,
+                            "no_prior_push",
+                            "No prior push found. Push first with `lattice push`.",
+                        );
+                    }
+                }
+            } else {
+                since
+            };
+
             if raw {
-                match lattice::diff::git_diff_raw(&root, since.as_deref()) {
+                match lattice::diff::git_diff_raw(&root, effective_since.as_deref()) {
                     Ok(output) => {
                         if output.is_empty() {
                             println!("No lattice changes detected.");
@@ -3347,7 +3451,7 @@ fn run_command(command: Commands) {
                 return;
             }
 
-            match lattice_diff(&root, since.as_deref()) {
+            match lattice_diff(&root, effective_since.as_deref()) {
                 Ok(result) => {
                     if md {
                         println!("{}", format_diff_markdown(&result));
@@ -3366,6 +3470,9 @@ fn run_command(command: Commands) {
                                     }
                                     if let Some(ref r) = e.resolution {
                                         obj["resolution"] = json!(r);
+                                    }
+                                    if let Some(ref f) = e.fields {
+                                        obj["fields"] = json!(f);
                                     }
                                     obj
                                 })

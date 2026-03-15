@@ -1,0 +1,18 @@
+id: REQ-CLI-028
+type: requirement
+title: lattice push includes semantic diff since last push
+body: lattice push should compute a semantic diff (added/modified/resolved/deleted nodes) since the last push and include it in the push payload. The app tracks the last-push git SHA per project so the CLI can query it as the baseline. A convenience flag lattice diff --since-push shows the diff without pushing. No local state is stored — the app is the source of truth for what it last received.
+status: active
+version: 1.0.0
+created_at: 2026-03-15T22:01:39.979647+00:00
+created_by: agent:claude-2026-03-15
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: cli
+edges:
+  derives_from:
+  - target: THX-BIDIRECTIONAL-FLOW
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CLI-006
+    version: 1.0.0

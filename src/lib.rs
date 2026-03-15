@@ -17,8 +17,8 @@ pub mod types;
 pub mod update;
 
 pub use diff::{
-    ChangeType, DiffEntry, DiffError, DiffResult, format_diff_markdown, format_entry_text,
-    lattice_diff,
+    ChangeType, DiffEntry, DiffError, DiffResult, compute_changed_fields, format_diff_markdown,
+    format_entry_text, git_head_sha, lattice_diff,
 };
 pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
 pub use graph::{
@@ -26,6 +26,7 @@ pub use graph::{
 };
 pub use html_export::{HtmlExportOptions, export_html};
 pub use lint::{LintReport, LintSeverity, fix_issues, lint_lattice};
+pub use push::{PushDiff, PushDiffEntry, diff_result_to_push_diff, fetch_last_push_sha};
 #[cfg(feature = "vector-search")]
 pub use search::FastEmbedProvider;
 pub use search::{

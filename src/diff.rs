@@ -27,6 +27,7 @@ pub struct DiffEntry {
     pub priority: Option<String>,
     pub resolution: Option<String>,
     pub change_type: ChangeType,
+    pub fields: Option<Vec<String>>,
 }
 
 /// Type of change detected.
@@ -58,6 +59,50 @@ impl DiffResult {
     pub fn total_count(&self) -> usize {
         self.added.len() + self.modified.len() + self.resolved.len() + self.deleted.len()
     }
+}
+
+/// Get the current HEAD SHA.
+pub fn git_head_sha() -> Result<String, DiffError> {
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .map_err(|e| DiffError::GitError(format!("failed to run git rev-parse: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(DiffError::GitError(format!(
+            "git rev-parse HEAD failed: {}",
+            stderr.trim()
+        )));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// Compare two nodes field-by-field using serde_json and return the names of changed fields.
+pub fn compute_changed_fields(old: &LatticeNode, new: &LatticeNode) -> Vec<String> {
+    let old_val = match serde_json::to_value(old) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+    let new_val = match serde_json::to_value(new) {
+        Ok(v) => v,
+        Err(_) => return vec![],
+    };
+
+    let mut changed = Vec::new();
+    if let (Some(old_obj), Some(new_obj)) = (old_val.as_object(), new_val.as_object()) {
+        // Collect all keys from both
+        let mut keys: Vec<&String> = old_obj.keys().chain(new_obj.keys()).collect();
+        keys.sort();
+        keys.dedup();
+        for key in keys {
+            if old_obj.get(key) != new_obj.get(key) {
+                changed.push(key.clone());
+            }
+        }
+    }
+    changed
 }
 
 /// Compute the merge-base between HEAD and the given ref.
@@ -174,6 +219,7 @@ fn node_to_entry(node: &LatticeNode, change_type: ChangeType) -> DiffEntry {
         priority,
         resolution,
         change_type,
+        fields: None,
     }
 }
 
@@ -196,18 +242,6 @@ fn git_show_at_ref(git_ref: &str, path: &Path) -> Result<Option<String>, DiffErr
 fn parse_node_yaml(yaml: &str) -> Result<LatticeNode, DiffError> {
     serde_yaml::from_str(yaml)
         .map_err(|e| DiffError::ParseError(format!("YAML parse error: {}", e)))
-}
-
-/// Check if a modified node was resolved (wasn't resolved before, is now).
-fn was_resolved(old_yaml: &str, new_node: &LatticeNode) -> bool {
-    if new_node.resolution.is_none() {
-        return false;
-    }
-    // Check if old version had no resolution
-    if let Ok(old_node) = parse_node_yaml(old_yaml) {
-        return old_node.resolution.is_none();
-    }
-    false
 }
 
 /// Resolve the base git ref, falling back to merge-base with main/master.
@@ -252,14 +286,28 @@ pub fn lattice_diff(lattice_root: &Path, since: Option<&str>) -> Result<DiffResu
             "M" => {
                 // Modified: load current file, check if newly resolved
                 if let Ok(node) = load_node(path) {
+                    let old_node = git_show_at_ref(&base_ref, path)
+                        .ok()
+                        .flatten()
+                        .and_then(|yaml| parse_node_yaml(&yaml).ok());
+
                     // Check if the node was resolved in this change
-                    if let Ok(Some(old_yaml)) = git_show_at_ref(&base_ref, path)
-                        && was_resolved(&old_yaml, &node)
+                    if let Some(ref old) = old_node
+                        && old.resolution.is_none()
+                        && node.resolution.is_some()
                     {
                         resolved.push(node_to_entry(&node, ChangeType::Modified));
                         continue;
                     }
-                    modified.push(node_to_entry(&node, ChangeType::Modified));
+
+                    let mut entry = node_to_entry(&node, ChangeType::Modified);
+                    if let Some(ref old) = old_node {
+                        let fields = compute_changed_fields(old, &node);
+                        if !fields.is_empty() {
+                            entry.fields = Some(fields);
+                        }
+                    }
+                    modified.push(entry);
                 }
             }
             "D" => {
@@ -424,6 +472,7 @@ mod tests {
             priority: Some("P1".to_string()),
             resolution: None,
             change_type: ChangeType::Added,
+            fields: None,
         };
         let result = DiffResult {
             base_ref: "abc123".to_string(),
@@ -445,6 +494,7 @@ mod tests {
             priority: Some("P1".to_string()),
             resolution: None,
             change_type: ChangeType::Added,
+            fields: None,
         };
         let formatted = format_entry(&entry);
         assert_eq!(formatted, "REQ-API-007: Rate limiting (P1)");
@@ -459,6 +509,7 @@ mod tests {
             priority: None,
             resolution: Some("verified".to_string()),
             change_type: ChangeType::Modified,
+            fields: None,
         };
         let formatted = format_entry(&entry);
         assert_eq!(formatted, "REQ-API-007: Rate limiting (verified)");
@@ -473,6 +524,7 @@ mod tests {
             priority: None,
             resolution: None,
             change_type: ChangeType::Added,
+            fields: None,
         };
         let formatted = format_entry(&entry);
         assert_eq!(formatted, "SRC-TEST: Test source");
@@ -503,6 +555,7 @@ mod tests {
                 priority: Some("P1".to_string()),
                 resolution: None,
                 change_type: ChangeType::Added,
+                fields: None,
             }],
             modified: vec![DiffEntry {
                 id: "THX-OPS".to_string(),
@@ -511,6 +564,7 @@ mod tests {
                 priority: None,
                 resolution: None,
                 change_type: ChangeType::Modified,
+                fields: None,
             }],
             resolved: vec![DiffEntry {
                 id: "REQ-OLD-001".to_string(),
@@ -519,6 +573,7 @@ mod tests {
                 priority: None,
                 resolution: Some("verified".to_string()),
                 change_type: ChangeType::Modified,
+                fields: None,
             }],
             deleted: vec![],
         };
@@ -553,11 +608,78 @@ mod tests {
                 priority: None,
                 resolution: None,
                 change_type: ChangeType::Deleted,
+                fields: None,
             }],
         };
         let md = format_diff_markdown(&result);
         assert!(md.contains("### Deleted"));
         assert!(md.contains("- SRC-OLD: Removed source"));
         assert!(!md.contains("### Added"));
+    }
+
+    fn make_test_node(id: &str, title: &str) -> LatticeNode {
+        LatticeNode {
+            id: id.to_string(),
+            node_type: NodeType::Requirement,
+            title: title.to_string(),
+            body: "test body".to_string(),
+            status: crate::types::Status::Active,
+            version: "1.0.0".to_string(),
+            created_at: "2025-01-01".to_string(),
+            created_by: "test".to_string(),
+            requested_by: None,
+            priority: None,
+            category: None,
+            tags: None,
+            acceptance: None,
+            visibility: None,
+            resolution: None,
+            meta: None,
+            edges: None,
+        }
+    }
+
+    #[test]
+    fn test_compute_changed_fields_single() {
+        let old = make_test_node("REQ-001", "Old title");
+        let new = make_test_node("REQ-001", "New title");
+        let fields = compute_changed_fields(&old, &new);
+        assert_eq!(fields, vec!["title"]);
+    }
+
+    #[test]
+    fn test_compute_changed_fields_multiple() {
+        let old = make_test_node("REQ-001", "Title");
+        let mut new = make_test_node("REQ-001", "Title");
+        new.body = "updated body".to_string();
+        new.status = crate::types::Status::Deprecated;
+        let fields = compute_changed_fields(&old, &new);
+        assert!(fields.contains(&"body".to_string()));
+        assert!(fields.contains(&"status".to_string()));
+    }
+
+    #[test]
+    fn test_compute_changed_fields_none() {
+        let old = make_test_node("REQ-001", "Title");
+        let new = make_test_node("REQ-001", "Title");
+        let fields = compute_changed_fields(&old, &new);
+        assert!(fields.is_empty());
+    }
+
+    #[test]
+    fn test_diff_entry_has_fields() {
+        let entry = DiffEntry {
+            id: "REQ-001".to_string(),
+            title: "Test".to_string(),
+            node_type: NodeType::Requirement,
+            priority: None,
+            resolution: None,
+            change_type: ChangeType::Modified,
+            fields: Some(vec!["title".to_string(), "body".to_string()]),
+        };
+        assert_eq!(
+            entry.fields,
+            Some(vec!["title".to_string(), "body".to_string()])
+        );
     }
 }
