@@ -1,0 +1,18 @@
+id: REQ-LINT-001
+type: requirement
+title: Lint warns on orphan nodes with no edges
+body: 'lattice lint should emit a warning for any node that has zero edges (no inbound or outbound connections). These orphan nodes indicate incomplete graph wiring. Every node type has expected edge directions: Source should have outbound supports, Thesis should have inbound supports and outbound derives, Requirement should have inbound derives, Implementation should have outbound satisfies.'
+status: active
+version: 1.0.0
+created_at: 2026-03-15T01:00:16.261409+00:00
+created_by: agent:claude-2026-03-15
+requested_by: George Moon <george.moon@gmail.com>
+priority: P1
+category: lint
+edges:
+  derives_from:
+  - target: THX-BIDIRECTIONAL-FLOW
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CORE-012
+    version: 1.0.0
