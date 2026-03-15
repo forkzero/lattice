@@ -210,21 +210,24 @@ fn was_resolved(old_yaml: &str, new_node: &LatticeNode) -> bool {
     false
 }
 
+/// Resolve the base git ref, falling back to merge-base with main/master.
+fn resolve_base_ref(since: Option<&str>) -> Result<String, DiffError> {
+    match since {
+        Some(r) => Ok(r.to_string()),
+        None => git_merge_base("main")
+            .or_else(|_| git_merge_base("master"))
+            .map_err(|_| {
+                DiffError::GitError("could not find merge-base with main or master".to_string())
+            }),
+    }
+}
+
 /// Compute lattice diff since a given git ref.
 ///
 /// If `since` is None, defaults to merge-base with `main`.
 pub fn lattice_diff(lattice_root: &Path, since: Option<&str>) -> Result<DiffResult, DiffError> {
     let lattice_dir = lattice_root.join(".lattice");
-
-    // Determine the base ref
-    let base_ref = match since {
-        Some(r) => r.to_string(),
-        None => git_merge_base("main")
-            .or_else(|_| git_merge_base("master"))
-            .map_err(|_| {
-                DiffError::GitError("could not find merge-base with main or master".to_string())
-            })?,
-    };
+    let base_ref = resolve_base_ref(since)?;
 
     let changes = git_diff_name_status(&base_ref, &lattice_dir)?;
 
@@ -350,6 +353,31 @@ pub fn format_diff_markdown(result: &DiffResult) -> String {
 /// Format a single entry as a text line with color hints.
 pub fn format_entry_text(entry: &DiffEntry) -> String {
     format_entry(entry)
+}
+
+/// Produce a raw git diff of `.lattice/` files since a given ref.
+pub fn git_diff_raw(lattice_root: &Path, since: Option<&str>) -> Result<String, DiffError> {
+    let lattice_dir = lattice_root.join(".lattice");
+    let base_ref = resolve_base_ref(since)?;
+
+    let output = Command::new("git")
+        .arg("diff")
+        .arg(&base_ref)
+        .arg("--")
+        .arg(&lattice_dir)
+        .output()
+        .map_err(|e| DiffError::GitError(format!("failed to run git diff: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(DiffError::GitError(format!(
+            "git diff failed: {}",
+            stderr.trim()
+        )));
+    }
+
+    Ok(String::from_utf8(output.stdout)
+        .unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned()))
 }
 
 #[cfg(test)]
