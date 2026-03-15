@@ -422,6 +422,10 @@ enum Commands {
         #[arg(long)]
         md: bool,
 
+        /// Show raw git diff of .lattice/ files
+        #[arg(long)]
+        raw: bool,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -3319,8 +3323,27 @@ fn run_command(command: Commands) {
             }
         }
 
-        Commands::Diff { since, md, format } => {
+        Commands::Diff {
+            since,
+            md,
+            raw,
+            format,
+        } => {
             let root = get_lattice_root();
+
+            if raw {
+                match lattice::diff::git_diff_raw(&root, since.as_deref()) {
+                    Ok(output) => {
+                        if output.is_empty() {
+                            println!("No lattice changes detected.");
+                        } else {
+                            print!("{}", output);
+                        }
+                    }
+                    Err(e) => emit_error(&format, "diff_error", &e.to_string()),
+                }
+                return;
+            }
 
             match lattice_diff(&root, since.as_deref()) {
                 Ok(result) => {
