@@ -153,8 +153,11 @@ pub fn lint_lattice(root: &Path) -> LintReport {
     // Check for duplicate IDs
     check_duplicate_ids(root, &mut issues);
 
-    // Check edge references point to existing nodes
-    check_edge_references(root, &mut issues);
+    // Build node index once for cross-node checks
+    if let Ok(index) = crate::graph::build_node_index(root) {
+        check_edge_references(&index, &mut issues);
+        check_orphan_nodes(&index, &mut issues);
+    }
 
     LintReport { issues }
 }
@@ -357,12 +360,7 @@ fn check_duplicate_ids(root: &Path, issues: &mut Vec<LintIssue>) {
 }
 
 /// Check that edge references point to existing node IDs.
-fn check_edge_references(root: &Path, issues: &mut Vec<LintIssue>) {
-    let index = match crate::graph::build_node_index(root) {
-        Ok(idx) => idx,
-        Err(_) => return,
-    };
-
+fn check_edge_references(index: &crate::types::NodeIndex, issues: &mut Vec<LintIssue>) {
     for node in index.values() {
         for edge_ref in node.all_edges() {
             if !index.contains_key(&edge_ref.target) {
@@ -375,6 +373,41 @@ fn check_edge_references(root: &Path, issues: &mut Vec<LintIssue>) {
                 });
             }
         }
+    }
+}
+
+/// Check for orphan nodes that have no edges (no inbound or outbound connections).
+///
+/// Linked requirements: REQ-LINT-001
+fn check_orphan_nodes(index: &crate::types::NodeIndex, issues: &mut Vec<LintIssue>) {
+    // Collect all node IDs that participate in any edge (as source or target)
+    let mut connected: std::collections::HashSet<&str> = std::collections::HashSet::new();
+
+    for node in index.values() {
+        for edge_ref in node.all_edges() {
+            connected.insert(&node.id);
+            connected.insert(&edge_ref.target);
+        }
+    }
+
+    // Any node not in the connected set is an orphan
+    let mut orphans: Vec<&crate::types::LatticeNode> = index
+        .values()
+        .filter(|n| !connected.contains(n.id.as_str()))
+        .collect();
+    orphans.sort_by(|a, b| a.id.cmp(&b.id));
+
+    for node in &orphans {
+        issues.push(LintIssue {
+            file: PathBuf::from(format!("<{}>", node.id)),
+            node_id: Some(node.id.clone()),
+            severity: LintSeverity::Warning,
+            message: format!(
+                "Node has no edges (orphan) — expected at least one connection for {:?}",
+                node.node_type
+            ),
+            fixable: Fixable::No,
+        });
     }
 }
 
@@ -553,6 +586,53 @@ mod tests {
         let fixed = fix_issues(root, &report);
         assert!(!fixed.is_empty());
         assert!(lattice_dir.join("config.yaml").exists());
+    }
+
+    #[test]
+    fn test_lint_orphan_node_warned() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        crate::storage::init_lattice(root, false).unwrap();
+
+        // Create a node with no edges — should be flagged as orphan
+        let req_dir = root.join(LATTICE_DIR).join("requirements");
+        fs::write(
+            req_dir.join("orphan.yaml"),
+            "id: REQ-ORPHAN\ntype: requirement\ntitle: Orphan\nbody: Body\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\npriority: P0\n",
+        ).unwrap();
+
+        let report = lint_lattice(root);
+        let warnings = report.warnings();
+        assert!(
+            warnings.iter().any(|w| w.message.contains("orphan") && w.node_id.as_deref() == Some("REQ-ORPHAN")),
+            "Expected orphan warning for REQ-ORPHAN"
+        );
+    }
+
+    #[test]
+    fn test_lint_connected_node_not_orphan() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        crate::storage::init_lattice(root, false).unwrap();
+
+        // Create two nodes connected by an edge
+        let req_dir = root.join(LATTICE_DIR).join("requirements");
+        fs::write(
+            req_dir.join("parent.yaml"),
+            "id: REQ-PARENT\ntype: requirement\ntitle: Parent\nbody: Body\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\npriority: P0\n",
+        ).unwrap();
+        fs::write(
+            req_dir.join("child.yaml"),
+            "id: REQ-CHILD\ntype: requirement\ntitle: Child\nbody: Body\nstatus: active\nversion: '1.0.0'\ncreated_at: '2026-01-01'\ncreated_by: test\npriority: P0\nedges:\n  depends_on:\n    - target: REQ-PARENT\n      version: '1.0.0'\n",
+        ).unwrap();
+
+        let report = lint_lattice(root);
+        let warnings = report.warnings();
+        // Neither should be flagged as orphan
+        assert!(
+            !warnings.iter().any(|w| w.message.contains("orphan")),
+            "Connected nodes should not be flagged as orphans"
+        );
     }
 
     #[test]
