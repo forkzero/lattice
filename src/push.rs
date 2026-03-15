@@ -57,6 +57,12 @@ pub enum PushError {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
+    #[error("Failed to serialize payload: {0}")]
+    Serialize(#[from] serde_json::Error),
+
+    #[error("Failed to compress payload: {0}")]
+    Compress(#[from] std::io::Error),
+
     #[error("API returned {status}: {body}")]
     Api { status: u16, body: String },
 
@@ -181,10 +187,23 @@ pub async fn push(
 
     let url = format!("{}/api/lattice/push", api_url.trim_end_matches('/'));
 
+    let json_bytes = serde_json::to_vec(&payload)?;
+
+    let compressed = {
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
+        use std::io::Write;
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
+        encoder.write_all(&json_bytes)?;
+        encoder.finish()?
+    };
+
     let resp = client
         .post(&url)
         .header("Authorization", format!("Bearer {}", api_key))
-        .json(&payload)
+        .header("Content-Type", "application/json")
+        .header("Content-Encoding", "gzip")
+        .body(compressed)
         .send()
         .await?;
 
