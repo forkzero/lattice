@@ -2,7 +2,7 @@
 //!
 //! Linked requirements: REQ-CLI-001 through REQ-CLI-005, REQ-CORE-009
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
@@ -1470,9 +1470,11 @@ fn main() {
     let command = match cli.command {
         Some(cmd) => cmd,
         None => {
-            // Show update notification before help (Clap's --help exits the process)
+            // Render help without exiting so update notice can follow
+            let mut cmd = Cli::command();
+            let help = cmd.render_help();
+            println!("{}", help);
             lattice::update::maybe_notify_update(None);
-            Cli::parse_from(["lattice", "--help"]);
             return;
         }
     };
