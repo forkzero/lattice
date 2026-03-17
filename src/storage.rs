@@ -21,7 +21,7 @@ pub struct GitRepoInfo {
 }
 
 /// Get the git remote origin URL.
-fn get_git_remote_url() -> Option<String> {
+pub fn get_git_remote_url() -> Option<String> {
     let output = Command::new("git")
         .args(["remote", "get-url", "origin"])
         .output()

@@ -3355,6 +3355,7 @@ fn run_command(command: Commands) {
                 });
 
             let diff_count = push_diff.as_ref().map(|d| d.entries.len());
+            let repo_url = lattice::storage::get_git_remote_url();
 
             match rt.block_on(lattice::push::push(
                 &url,
@@ -3362,6 +3363,7 @@ fn run_command(command: Commands) {
                 &config.project,
                 &nodes,
                 &git_sha,
+                repo_url,
                 push_diff,
             )) {
                 Ok(resp) => {

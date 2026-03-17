@@ -23,6 +23,8 @@ pub struct FlatEdge {
 pub struct PushPayload {
     pub project_name: String,
     pub git_sha: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_url: Option<String>,
     pub nodes: Vec<PushNode>,
     pub edges: Vec<FlatEdge>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -317,6 +319,7 @@ pub async fn push(
     project_name: &str,
     nodes: &[LatticeNode],
     git_sha: &str,
+    repo_url: Option<String>,
     diff: Option<PushDiff>,
 ) -> Result<PushResponse, PushError> {
     let push_nodes: Vec<PushNode> = nodes.iter().map(to_push_node).collect();
@@ -325,6 +328,7 @@ pub async fn push(
     let payload = PushPayload {
         project_name: project_name.to_string(),
         git_sha: git_sha.to_string(),
+        repo_url,
         nodes: push_nodes,
         edges,
         diff,
@@ -376,6 +380,7 @@ mod tests {
         let payload = PushPayload {
             project_name: "test".to_string(),
             git_sha: "abc123".to_string(),
+            repo_url: Some("https://github.com/forkzero/lattice.git".to_string()),
             nodes: vec![],
             edges: vec![],
             diff: Some(PushDiff {
@@ -391,6 +396,7 @@ mod tests {
         };
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["gitSha"], "abc123");
+        assert_eq!(json["repoUrl"], "https://github.com/forkzero/lattice.git");
         assert!(json["diff"].is_object());
         assert_eq!(json["diff"]["baseRef"], "def456");
         assert_eq!(json["diff"]["entries"][0]["changeType"], "added");
@@ -401,6 +407,7 @@ mod tests {
         let payload = PushPayload {
             project_name: "test".to_string(),
             git_sha: "abc123".to_string(),
+            repo_url: None,
             nodes: vec![],
             edges: vec![],
             diff: None,
@@ -408,6 +415,7 @@ mod tests {
         let json = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["gitSha"], "abc123");
         assert!(json.get("diff").is_none());
+        assert!(json.get("repoUrl").is_none());
     }
 
     #[test]
