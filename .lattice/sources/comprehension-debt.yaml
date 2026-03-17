@@ -1,0 +1,13 @@
+id: SRC-COMPREHENSION-DEBT
+type: source
+title: 'Comprehension Debt: When AI-Generated Code Outruns Understanding'
+body: 'Addy Osmani (Google Chrome engineering lead) argues that AI-generated code creates a hidden cost: the growing gap between how much code exists and how much any human genuinely understands. Key claims: (1) AI generates code faster than humans can evaluate it, breaking the review bottleneck that historically distributed knowledge; (2) tests are necessary but insufficient — they only catch behaviors developers thought to specify; (3) Anthropic study found 17% lower comprehension scores among developers using AI for code generation; (4) passive delegation impairs skill development far more than active, question-driven AI use. Recommends being ruthlessly explicit about intent before code is written, treating verification as a structural constraint, and maintaining system-level mental models.'
+status: active
+version: 1.0.0
+created_at: 2026-03-16T23:35:14.808215+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  url: https://addyosmani.com/blog/comprehension-debt/
+  reliability: unverified
+  retrieved_at: 2026-03-16

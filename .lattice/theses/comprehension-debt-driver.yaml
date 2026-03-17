@@ -1,0 +1,16 @@
+id: THX-COMPREHENSION-DEBT-DRIVER
+type: thesis
+title: Comprehension debt is an emerging market driver for knowledge coordination tools
+body: 'As AI accelerates code generation, the bottleneck shifts from production to comprehension. Teams accumulate decision-level debt — no one knows why code exists, what research justified it, or what requirements it satisfies. Traditional documentation fails because it decouples intent from implementation. Tools that enforce explicit reasoning chains (research → strategy → requirements → code) and detect when those chains break provide structural protection against comprehension debt. Lattice addresses this at the architectural/strategic layer: every implementation traces back through requirements, theses, and sources, making the reasoning behind decisions traversable and version-aware. This positions knowledge coordination protocols as essential infrastructure for AI-augmented development teams.'
+status: active
+version: 1.0.0
+created_at: 2026-03-16T23:35:28.067064+00:00
+created_by: unknown
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  category: market
+  confidence: 0.8
+edges:
+  supported_by:
+  - target: SRC-COMPREHENSION-DEBT
+    version: 1.0.0

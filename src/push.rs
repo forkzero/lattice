@@ -49,6 +49,17 @@ pub struct PushDiff {
     pub entries: Vec<PushDiffEntry>,
 }
 
+/// Resolution info included in the push payload.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PushResolution {
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_by: Option<String>,
+}
+
 /// Simplified node for the push payload.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +74,8 @@ pub struct PushNode {
     pub url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolution: Option<PushResolution>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -101,6 +114,14 @@ pub enum PushError {
     NoApiKey,
 }
 
+/// Serialize a serde-serializable enum to its lowercase string representation.
+fn enum_to_string<T: serde::Serialize>(value: &T, default: &str) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|v| v.as_str().map(String::from))
+        .unwrap_or_else(|| default.to_string())
+}
+
 /// Convert a `LatticeNode` to a `PushNode`.
 fn to_push_node(node: &LatticeNode) -> PushNode {
     // Extract URL from source metadata if present
@@ -112,12 +133,15 @@ fn to_push_node(node: &LatticeNode) -> PushNode {
         }
     });
 
+    let resolution = node.resolution.as_ref().map(|r| PushResolution {
+        status: enum_to_string(&r.status, "verified"),
+        resolved_at: Some(r.resolved_at.clone()),
+        resolved_by: Some(r.resolved_by.clone()),
+    });
+
     PushNode {
         id: node.id.clone(),
-        node_type: serde_json::to_value(&node.node_type)
-            .ok()
-            .and_then(|v| v.as_str().map(String::from))
-            .unwrap_or_default(),
+        node_type: enum_to_string(&node.node_type, ""),
         title: node.title.clone(),
         body: if node.body.is_empty() {
             None
@@ -125,12 +149,8 @@ fn to_push_node(node: &LatticeNode) -> PushNode {
             Some(node.body.clone())
         },
         url,
-        status: Some(
-            serde_json::to_value(&node.status)
-                .ok()
-                .and_then(|v| v.as_str().map(String::from))
-                .unwrap_or_else(|| "active".to_string()),
-        ),
+        status: Some(enum_to_string(&node.status, "active")),
+        resolution,
         created_at: node.created_at.clone(),
         updated_at: node.created_at.clone(),
     }
@@ -226,25 +246,49 @@ pub async fn fetch_last_push_sha(
     project_name: &str,
 ) -> Option<String> {
     let base = api_url.trim_end_matches('/');
-    let url = reqwest::Url::parse_with_params(
-        &format!("{}/api/lattice/last-push-sha", base),
-        &[("projectName", project_name)],
-    )
-    .ok()?;
+    let url = match reqwest::Url::parse_with_params(
+        &format!("{}/api/lattice/push/last", base),
+        &[("project", project_name)],
+    ) {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("Warning: could not build last-push URL: {}", e);
+            return None;
+        }
+    };
 
-    let client = reqwest::Client::builder()
+    let client = match reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .build()
-        .ok()?;
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Warning: could not create HTTP client: {}", e);
+            return None;
+        }
+    };
 
-    let resp = client
+    let resp = match client
         .get(url)
         .header("Authorization", format!("Bearer {}", api_key))
         .send()
         .await
-        .ok()?;
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "Warning: could not fetch last push SHA, skipping diff: {}",
+                e
+            );
+            return None;
+        }
+    };
 
     if !resp.status().is_success() {
+        eprintln!(
+            "Warning: last push SHA endpoint returned {}, skipping diff",
+            resp.status()
+        );
         return None;
     }
 
@@ -254,8 +298,16 @@ pub async fn fetch_last_push_sha(
         git_sha: Option<String>,
     }
 
-    let body: ShaResponse = resp.json().await.ok()?;
-    body.git_sha
+    match resp.json::<ShaResponse>().await {
+        Ok(body) => body.git_sha,
+        Err(e) => {
+            eprintln!(
+                "Warning: could not parse last push SHA response, skipping diff: {}",
+                e
+            );
+            None
+        }
+    }
 }
 
 /// Push lattice data to a remote API.

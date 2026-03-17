@@ -3344,10 +3344,14 @@ fn run_command(command: Commands) {
                             .dimmed()
                         );
                     }
-                    lattice::diff::lattice_diff(&root, Some(&baseline_sha))
-                        .ok()
-                        .filter(|d| !d.is_empty())
-                        .map(|d| lattice::push::diff_result_to_push_diff(&d))
+                    match lattice::diff::lattice_diff(&root, Some(&baseline_sha)) {
+                        Ok(d) if !d.is_empty() => Some(lattice::push::diff_result_to_push_diff(&d)),
+                        Ok(_) => None, // empty diff
+                        Err(e) => {
+                            eprintln!("Warning: could not compute diff, skipping: {}", e);
+                            None
+                        }
+                    }
                 });
 
             let diff_count = push_diff.as_ref().map(|d| d.entries.len());
@@ -3378,8 +3382,9 @@ fn run_command(command: Commands) {
                             "✓ Pushed to project #{}: {} nodes, {} edges",
                             resp.project_id, resp.nodes_upserted, resp.edges_replaced
                         );
-                        if let Some(count) = diff_count {
-                            msg.push_str(&format!(" ({} changes)", count));
+                        match diff_count {
+                            Some(count) => msg.push_str(&format!(" ({} changes)", count)),
+                            None => msg.push_str(" (no diff)"),
                         }
                         println!("{}", msg.green());
                     }
