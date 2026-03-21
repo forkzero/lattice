@@ -1,0 +1,48 @@
+name: Deploy Install Script
+
+on:
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  deploy:
+    name: Deploy Install Script
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload install scripts to S3
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          aws s3 cp install.sh s3://forkzero-lattice-prod/lattice/install.sh \
+            --content-type "text/plain"
+          aws s3 cp install.ps1 s3://forkzero-lattice-prod/lattice/install.ps1 \
+            --content-type "text/plain"
+
+      - name: Invalidate CloudFront cache
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} \
+            --paths "/lattice/*"
+
+      - name: Verify deployment
+        run: |
+          sleep 10
+          curl -fsSL ${{ vars.INSTALL_URL }} -o /tmp/live-install.sh
+          EXPECTED=$(sha256sum install.sh | awk '{print $1}')
+          LIVE=$(sha256sum /tmp/live-install.sh | awk '{print $1}')
+          echo "Expected: $EXPECTED"
+          echo "Live:     $LIVE"
+          if [ "$EXPECTED" != "$LIVE" ]; then
+            echo "::warning::Checksums don't match yet — CloudFront cache may still be propagating"
+          else
+            echo "Install script verified"
+          fi
