@@ -1,4 +1,4 @@
-.PHONY: fmt lint test check build clean install docker-e2e pre-commit pre-push
+.PHONY: fmt lint test test-all check build clean install docker-e2e pre-commit pre-push
 
 # Format code
 fmt:
@@ -12,9 +12,13 @@ fmt-check:
 lint:
 	cargo clippy --all-targets --all-features -- -D warnings
 
-# Run tests
+# Run tests with JUnit XML output
 test:
-	cargo test
+	@mkdir -p test-results
+	cargo nextest run --workspace
+
+# Alias for consistency with other repos
+test-all: test
 
 # Pre-commit gate: fast checks (format + lint)
 pre-commit: fmt-check lint
@@ -70,7 +74,8 @@ help:
 	@echo "  make pre-push   - Full check: format + lint + test + build (run before push)"
 	@echo "  make fmt        - Format code with cargo fmt"
 	@echo "  make lint       - Run clippy lints"
-	@echo "  make test       - Run tests"
+	@echo "  make test       - Run tests (JUnit XML output)"
+	@echo "  make test-all   - Alias for test (consistency with other repos)"
 	@echo "  make build      - Build release binary"
 	@echo "  make clean      - Clean build artifacts"
 	@echo "  make install  - Install to ~/.cargo/bin"

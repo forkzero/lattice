@@ -1,0 +1,5 @@
+[profile.default]
+
+[profile.default.junit]
+path = "../../../test-results/rust.xml"
+report-name = "lattice"
