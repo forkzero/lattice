@@ -39,3 +39,27 @@ jobs:
         run: |
           sh /tmp/live-install.sh
           lattice --version
+
+      - name: Audit S3 bucket for unexpected files
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          echo "Auditing bucket contents..."
+          OBJECTS=$(aws s3api list-objects-v2 --bucket forkzero-lattice-prod --query 'Contents[].Key' --output text 2>/dev/null || echo "")
+          EXPECTED_FILES="lattice/install.sh lattice/install.ps1"
+          UNEXPECTED=""
+          for key in $OBJECTS; do
+            if echo "$EXPECTED_FILES" | grep -qw "$key"; then
+              echo "  OK: $key"
+            else
+              echo "  UNEXPECTED: $key"
+              UNEXPECTED="$UNEXPECTED $key"
+            fi
+          done
+          if [ -n "$UNEXPECTED" ]; then
+            echo "::error::Unexpected files found in forkzero-lattice-prod:$UNEXPECTED"
+            exit 1
+          fi
+          echo "Bucket audit passed — only expected files present"

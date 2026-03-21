@@ -12,6 +12,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Remove unexpected files from bucket
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          echo "Auditing bucket contents..."
+          OBJECTS=$(aws s3api list-objects-v2 --bucket forkzero-lattice-prod --query 'Contents[].Key' --output text 2>/dev/null || echo "")
+          EXPECTED_FILES="lattice/install.sh lattice/install.ps1"
+          for key in $OBJECTS; do
+            if echo "$EXPECTED_FILES" | grep -qw "$key"; then
+              echo "  OK: $key"
+            else
+              echo "  REMOVING unexpected file: $key"
+              aws s3 rm "s3://forkzero-lattice-prod/$key"
+            fi
+          done
+
       - name: Upload install scripts to S3
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
