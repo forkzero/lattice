@@ -448,6 +448,9 @@ enum Commands {
         /// Output as structured JSON for agent consumption
         #[arg(long)]
         json: bool,
+
+        /// Topic to show: concepts, workflows (omit for command list)
+        topic: Option<String>,
     },
 }
 
@@ -1554,12 +1557,15 @@ fn build_command_catalog() -> serde_json::Value {
             },
             {
                 "name": "help",
-                "description": "Show available commands. Use --json for the full machine-readable catalog (this output).",
+                "description": "Show available commands, or a specific topic (concepts, workflows). Use --json for the full machine-readable catalog (this output).",
                 "parameters": [
+                    param("topic", "string", false, "Help topic: concepts, workflows (omit for command list)"),
                     param("--json", "bool", false, "Output as structured JSON for agent consumption")
                 ],
                 "examples": [
                     {"command": "lattice help", "explanation": "Show human-readable command list"},
+                    {"command": "lattice help concepts", "explanation": "Learn about node types, edge semantics, versioning, and ID conventions"},
+                    {"command": "lattice help workflows", "explanation": "See common task-oriented command sequences"},
                     {"command": "lattice help --json", "explanation": "Output the full command catalog as JSON for LLM consumption"}
                 ],
                 "related_commands": []
@@ -3660,12 +3666,87 @@ fn run_command(command: Commands) {
             }
         }
 
-        Commands::Help { json } => {
+        Commands::Help { json, topic } => {
             if json {
                 println!(
                     "{}",
                     serde_json::to_string_pretty(&build_command_catalog()).unwrap()
                 );
+            } else if let Some(ref t) = topic {
+                let catalog = build_command_catalog();
+                match t.as_str() {
+                    "concepts" => {
+                        println!("{}\n", "LATTICE CONCEPTS".bold());
+                        let concepts = &catalog["concepts"];
+
+                        // Description
+                        if let Some(desc) = catalog["description"].as_str() {
+                            println!("{}\n", desc);
+                        }
+
+                        // Node types
+                        println!("{}\n", "NODE TYPES:".bold());
+                        for nt in &["source", "thesis", "requirement", "implementation"] {
+                            let node = &concepts["node_types"][nt];
+                            let prefix = node["prefix"].as_str().unwrap_or("");
+                            let purpose = node["purpose"].as_str().unwrap_or("");
+                            let connects = node["connects_to"].as_str().unwrap_or("");
+                            println!(
+                                "  {} {}",
+                                format!("{:<16}", format!("{} ({})", nt, prefix)).cyan(),
+                                purpose
+                            );
+                            println!("  {:<16} {}\n", "", connects.dimmed());
+                        }
+
+                        // Edge types
+                        println!("{}\n", "EDGE TYPES:".bold());
+                        if let Some(edges) = concepts["edges"].as_object() {
+                            for (name, desc) in edges {
+                                println!("  {:<20} {}", name.cyan(), desc.as_str().unwrap_or(""));
+                            }
+                        }
+                        println!();
+
+                        // Versioning
+                        println!("{}\n", "VERSIONING:".bold());
+                        if let Some(v) = concepts["versions"].as_str() {
+                            println!("  {}\n", v);
+                        }
+
+                        // ID conventions
+                        println!("{}\n", "ID CONVENTIONS:".bold());
+                        if let Some(id) = concepts["id_conventions"].as_str() {
+                            println!("  {}", id);
+                        }
+                    }
+                    "workflows" => {
+                        println!("{}\n", "LATTICE WORKFLOWS".bold());
+                        if let Some(workflows) = catalog["workflows"].as_array() {
+                            for wf in workflows {
+                                let name = wf["name"].as_str().unwrap_or("");
+                                let desc = wf["description"].as_str().unwrap_or("");
+                                println!("  {}", name.cyan().bold());
+                                println!("  {}\n", desc);
+                                if let Some(steps) = wf["steps"].as_array() {
+                                    for (i, step) in steps.iter().enumerate() {
+                                        println!("    {}. {}", i + 1, step.as_str().unwrap_or(""));
+                                    }
+                                }
+                                println!();
+                            }
+                        }
+                    }
+                    other => {
+                        eprintln!(
+                            "Unknown help topic: {}. Available topics: {}, {}",
+                            other.red(),
+                            "concepts".cyan(),
+                            "workflows".cyan()
+                        );
+                        std::process::exit(1);
+                    }
+                }
             } else {
                 // Human-readable help
                 let catalog = build_command_catalog();
@@ -3689,6 +3770,16 @@ fn run_command(command: Commands) {
                 println!(
                     "  {}  Actionable condition (drift detected, lint issues)",
                     "2".cyan()
+                );
+                println!();
+                println!("{}", "TOPICS:".bold());
+                println!(
+                    "  {:<22} Node types, edge semantics, versioning, ID conventions",
+                    "lattice help concepts".cyan()
+                );
+                println!(
+                    "  {:<22} Common task-oriented command sequences",
+                    "lattice help workflows".cyan()
                 );
                 println!();
                 println!(
