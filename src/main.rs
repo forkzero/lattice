@@ -31,6 +31,10 @@ struct Cli {
     #[arg(long)]
     json: bool,
 
+    /// With --json: output compact schema only (command signatures, no examples/descriptions)
+    #[arg(long, requires = "json")]
+    compact: bool,
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -448,6 +452,10 @@ enum Commands {
         /// Output as structured JSON for agent consumption
         #[arg(long)]
         json: bool,
+
+        /// With --json: output compact schema only (command signatures, no examples/descriptions)
+        #[arg(long, requires = "json")]
+        compact: bool,
 
         /// Topic to show: concepts, workflows (omit for command list)
         topic: Option<String>,
@@ -1560,13 +1568,15 @@ fn build_command_catalog() -> serde_json::Value {
                 "description": "Show available commands, or a specific topic (concepts, workflows). Use --json for the full machine-readable catalog (this output).",
                 "parameters": [
                     param("topic", "string", false, "Help topic: concepts, workflows (omit for command list)"),
-                    param("--json", "bool", false, "Output as structured JSON for agent consumption")
+                    param("--json", "bool", false, "Output as structured JSON for agent consumption"),
+                    param("--compact", "bool", false, "With --json: output only command signatures (name + parameters), no examples/descriptions/concepts")
                 ],
                 "examples": [
                     {"command": "lattice help", "explanation": "Show human-readable command list"},
                     {"command": "lattice help concepts", "explanation": "Learn about node types, edge semantics, versioning, and ID conventions"},
                     {"command": "lattice help workflows", "explanation": "See common task-oriented command sequences"},
-                    {"command": "lattice help --json", "explanation": "Output the full command catalog as JSON for LLM consumption"}
+                    {"command": "lattice help --json", "explanation": "Output the full command catalog as JSON for LLM consumption"},
+                    {"command": "lattice help --json --compact", "explanation": "Output compact schema — just command names and parameter specs (~50% smaller)"}
                 ],
                 "related_commands": []
             }
@@ -1578,6 +1588,8 @@ fn build_command_catalog() -> serde_json::Value {
         },
         "global_flags": {
             "--format json": "Available on all read and write commands for structured output",
+            "--json": "Output machine-readable command catalog (top-level flag)",
+            "--json --compact": "Output compact command catalog — signatures only, no examples/descriptions",
             "--help": "Show help for any command",
             "--version": "Show version"
         }
@@ -1611,15 +1623,40 @@ fn command_to_name(cmd: &Commands) -> &'static str {
     }
 }
 
+/// Strip a full catalog down to just command signatures (name + parameters).
+fn compact_catalog(catalog: &serde_json::Value) -> serde_json::Value {
+    let commands = catalog["commands"]
+        .as_array()
+        .map(|cmds| {
+            cmds.iter()
+                .map(|cmd| {
+                    json!({
+                        "name": cmd["name"],
+                        "parameters": cmd["parameters"],
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    json!({
+        "version": catalog["version"],
+        "commands": commands,
+    })
+}
+
 fn main() {
     let cli = Cli::parse();
 
     // Handle top-level --json flag (outputs command catalog)
     if cli.json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&build_command_catalog()).unwrap()
-        );
+        let catalog = build_command_catalog();
+        let output = if cli.compact {
+            compact_catalog(&catalog)
+        } else {
+            catalog
+        };
+        println!("{}", serde_json::to_string_pretty(&output).unwrap());
         return;
     }
 
@@ -3666,12 +3703,19 @@ fn run_command(command: Commands) {
             }
         }
 
-        Commands::Help { json, topic } => {
+        Commands::Help {
+            json,
+            compact,
+            topic,
+        } => {
             if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&build_command_catalog()).unwrap()
-                );
+                let catalog = build_command_catalog();
+                let output = if compact {
+                    compact_catalog(&catalog)
+                } else {
+                    catalog
+                };
+                println!("{}", serde_json::to_string_pretty(&output).unwrap());
             } else if let Some(ref t) = topic {
                 let catalog = build_command_catalog();
                 match t.as_str() {
@@ -4039,6 +4083,47 @@ mod tests {
         assert!(
             catalog["description"].is_string(),
             "Catalog should have a top-level description"
+        );
+    }
+
+    #[test]
+    fn test_compact_catalog_has_only_signatures() {
+        let full = build_command_catalog();
+        let compact = compact_catalog(&full);
+
+        // Has version and commands
+        assert!(compact["version"].is_string());
+        let commands = compact["commands"].as_array().unwrap();
+        assert!(!commands.is_empty());
+
+        // Each command has only name and parameters
+        for cmd in commands {
+            assert!(cmd["name"].is_string());
+            assert!(cmd["parameters"].is_array());
+            // Should NOT have description, examples, related_commands, output_schema_hint
+            assert!(
+                cmd["description"].is_null(),
+                "compact should omit description"
+            );
+            assert!(cmd["examples"].is_null(), "compact should omit examples");
+            assert!(
+                cmd["related_commands"].is_null(),
+                "compact should omit related_commands"
+            );
+            assert!(
+                cmd["output_schema_hint"].is_null(),
+                "compact should omit output_schema_hint"
+            );
+        }
+
+        // Should NOT have concepts, workflows, global_flags
+        assert!(
+            compact["concepts"].is_null(),
+            "compact should omit concepts"
+        );
+        assert!(
+            compact["workflows"].is_null(),
+            "compact should omit workflows"
         );
     }
 }
