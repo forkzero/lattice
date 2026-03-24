@@ -1089,25 +1089,104 @@ fn build_command_catalog() -> serde_json::Value {
 
     json!({
         "version": env!("CARGO_PKG_VERSION"),
+        "description": "Lattice is a knowledge coordination protocol that connects research, strategy, requirements, and implementation into a traversable, version-aware graph. File-based (YAML in .lattice/), Git-native.",
+        "concepts": {
+            "node_types": {
+                "source": {
+                    "prefix": "SRC-",
+                    "purpose": "Primary research — papers, articles, data, references. The evidence layer.",
+                    "connects_to": "Supports theses via 'supported_by' edges"
+                },
+                "thesis": {
+                    "prefix": "THX-",
+                    "purpose": "Strategic claims derived from research. Positions your team is taking.",
+                    "connects_to": "Derives requirements via 'derives_from' edges. Can be challenged or validated."
+                },
+                "requirement": {
+                    "prefix": "REQ-",
+                    "purpose": "Testable specifications. What needs to be built and why.",
+                    "connects_to": "Satisfied by implementations. Can depend on other requirements."
+                },
+                "implementation": {
+                    "prefix": "IMP-",
+                    "purpose": "Code that satisfies requirements. Binds files to specifications.",
+                    "connects_to": "Satisfies requirements. Can reveal gaps or validate theses."
+                }
+            },
+            "edges": {
+                "supported_by": "Source supports a thesis — research backing a strategic claim. Direction: thesis → source.",
+                "derives_from": "Requirement derives from a thesis — specification grounded in strategy. Direction: requirement → thesis.",
+                "depends_on": "Requirement depends on another requirement — must be satisfied first. Direction: requirement → requirement.",
+                "satisfies": "Implementation satisfies a requirement — code fulfills a specification. Direction: implementation → requirement.",
+                "extends": "Node extends another node — adds capability without replacing. Direction: any → any.",
+                "reveals_gap_in": "Implementation discovered a gap in a requirement or thesis — feedback edge, knowledge flowing upstream from code. Direction: implementation → requirement/thesis.",
+                "challenges": "Evidence contradicts a thesis — signals the thesis may need revision. Direction: any → thesis.",
+                "validates": "Implementation confirms a thesis through working code — positive feedback. Direction: implementation → thesis.",
+                "conflicts_with": "Two nodes make incompatible claims — needs resolution. Direction: any → any.",
+                "supersedes": "Node replaces an older node — the old node is deprecated. Direction: new → old."
+            },
+            "versions": "All nodes use semver (MAJOR.MINOR.PATCH). Edges record the target node's version at binding time. When a node is edited, its version bumps and edges bound to the old version become 'potentially stale' — this is drift.",
+            "id_conventions": "IDs follow the pattern PREFIX-CATEGORY-NNN (e.g. REQ-CORE-001, THX-AGENT-PROTOCOL, SRC-MCP-SPEC). Categories group related nodes (CORE, CLI, API, AGENT, DIST, etc.)."
+        },
+        "workflows": [
+            {
+                "name": "capture_decision",
+                "description": "Record a decision from research through to implementation",
+                "steps": [
+                    "lattice add source --id SRC-... --title '...' --body '...'",
+                    "lattice add thesis --id THX-... --title '...' --body '...' --supported-by SRC-...",
+                    "lattice add requirement --id REQ-... --title '...' --body '...' --derives-from THX-...",
+                    "lattice add implementation --id IMP-... --title '...' --body '...' --satisfies REQ-...",
+                    "lattice resolve REQ-... --verified"
+                ]
+            },
+            {
+                "name": "check_health",
+                "description": "Assess the current state of the lattice for issues and gaps",
+                "steps": [
+                    "lattice summary",
+                    "lattice drift",
+                    "lattice lint --strict",
+                    "lattice search --priority P0 --resolution unresolved"
+                ]
+            },
+            {
+                "name": "respond_to_drift",
+                "description": "Investigate and resolve version drift flagged by drift detection",
+                "steps": [
+                    "lattice drift --format json",
+                    "lattice get <flagged-node-id>",
+                    "lattice edit <flagged-node-id> --body 'Updated to reflect upstream changes'",
+                    "lattice drift --acknowledge <flagged-node-id>"
+                ]
+            },
+            {
+                "name": "record_gap",
+                "description": "Record a gap discovered during implementation — knowledge flowing upstream from code to requirements",
+                "steps": [
+                    "lattice refine <parent-req-id> --gap-type <type> --title '...' --description '...' --implementation <imp-id>",
+                    "lattice drift"
+                ]
+            }
+        ],
         "commands": [
             {
                 "name": "init",
-                "description": "Initialize a new lattice in the current directory",
+                "description": "Initialize a new lattice in the current directory. Run once at project start to create the .lattice/ directory structure.",
                 "parameters": [
                     param("--force", "bool", false, "Overwrite existing lattice"),
                     param("--agents", "bool", false, "Install agent definitions (.claude/agents/)"),
                     param("--skill", "bool", false, "Install Claude Code skill and agent definitions (.claude/skills/lattice/)")
                 ],
                 "examples": [
-                    "lattice init",
-                    "lattice init --force",
-                    "lattice init --agents",
-                    "lattice init --skill"
-                ]
+                    {"command": "lattice init", "explanation": "Create a new .lattice/ directory with default config"},
+                    {"command": "lattice init --skill", "explanation": "Initialize and install the Claude Code skill for LLM integration"}
+                ],
+                "related_commands": ["list", "summary", "add source"]
             },
             {
                 "name": "list",
-                "description": "List nodes of a given type",
+                "description": "List nodes of a given type with optional filters. Use to browse what exists before adding or modifying nodes.",
                 "parameters": [
                     param("node_type", "string", true, "Node type: sources, theses, requirements, implementations"),
                     param_s("--status", "-s", "string", false, "Filter by status"),
@@ -1116,27 +1195,31 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--deferred", "bool", false, "Show only deferred items"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "[{ id, version, priority?, title, status?, resolution? }]",
                 "examples": [
-                    "lattice list requirements",
-                    "lattice list requirements --priority P0 --format json",
-                    "lattice list theses"
-                ]
+                    {"command": "lattice list requirements", "explanation": "See all requirements with their status and priority"},
+                    {"command": "lattice list requirements --priority P0 --format json", "explanation": "Get critical requirements as JSON for programmatic use"},
+                    {"command": "lattice list theses", "explanation": "Browse strategic claims to understand project direction"}
+                ],
+                "related_commands": ["get", "search", "summary"]
             },
             {
                 "name": "get",
-                "description": "Get a specific node by ID with full details. Text mode shows resolution and edge summary.",
+                "description": "Get a specific node by ID with full details including edges and resolution. Use when you know the node ID and need complete context.",
                 "parameters": [
                     param("id", "string", true, "Node ID (e.g. REQ-CORE-001)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, title, body, status, version, priority?, category?, tags[], edges: { derives_from[], depends_on[], satisfies[], ... }, resolution?, created_at, created_by }",
                 "examples": [
-                    "lattice get REQ-CORE-001",
-                    "lattice get THX-AGENT-NATIVE-TOOLS --format json"
-                ]
+                    {"command": "lattice get REQ-CORE-001", "explanation": "View a requirement with its edges and resolution status"},
+                    {"command": "lattice get THX-AGENT-NATIVE-TOOLS --format json", "explanation": "Get full node data as JSON for processing"}
+                ],
+                "related_commands": ["list", "search", "edit"]
             },
             {
                 "name": "search",
-                "description": "Search nodes with filters. Node type can be a positional arg or -t flag (default: requirements).",
+                "description": "Search nodes with filters. More flexible than list — supports text search, tag filtering, and cross-references. Use when you need to find nodes matching complex criteria.",
                 "parameters": [
                     param("node_type", "string", false, "Node type (positional or -t): sources, theses, requirements, implementations (default: requirements)"),
                     param_s("--node-type", "-t", "string", false, "Node type to search (alternative to positional arg)"),
@@ -1154,19 +1237,18 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--limit", "integer", false, "Max results to return (default: 20 for semantic)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "[{ id, version, priority?, title, resolution? }]",
                 "examples": [
-                    "lattice search requirements -q 'vibes'",
-                    "lattice search -q 'product owner' --format json",
-                    "lattice search --priority P0 --resolution unresolved",
-                    "lattice search --tag agent --category AGENT",
-                    "lattice search --index",
-                    "lattice search --index-status",
-                    "lattice search --semantic -q 'version drift detection'"
-                ]
+                    {"command": "lattice search requirements -q 'vibes'", "explanation": "Find requirements mentioning a keyword"},
+                    {"command": "lattice search --priority P0 --resolution unresolved", "explanation": "Find critical unresolved requirements — the most urgent work"},
+                    {"command": "lattice search --related-to THX-AGENT-NATIVE-TOOLS", "explanation": "Find all nodes connected to a thesis"},
+                    {"command": "lattice search --tag agent --category AGENT", "explanation": "Filter by tag and category simultaneously"}
+                ],
+                "related_commands": ["list", "get"]
             },
             {
                 "name": "add requirement",
-                "description": "Add a requirement (testable specification derived from theses)",
+                "description": "Add a requirement — a testable specification derived from theses. Create when a strategic claim needs to be broken down into buildable work.",
                 "parameters": [
                     param("--id", "string", true, "Requirement ID (e.g. REQ-API-003)"),
                     param("--title", "string", true, "Requirement title"),
@@ -1180,13 +1262,15 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--created-by", "string", false, "Author (e.g. human:george)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, title, version, status }",
                 "examples": [
-                    "lattice add requirement --id REQ-FEAT-001 --title 'New feature' --body 'Description' --priority P1 --category FEAT"
-                ]
+                    {"command": "lattice add requirement --id REQ-FEAT-001 --title 'New feature' --body 'Description' --priority P1 --category FEAT --derives-from THX-AGENT-PROTOCOL", "explanation": "Add a requirement traced back to a thesis"}
+                ],
+                "related_commands": ["add thesis", "resolve", "refine", "verify"]
             },
             {
                 "name": "add thesis",
-                "description": "Add a thesis (strategic claim backed by sources)",
+                "description": "Add a thesis — a strategic position your team is taking, backed by sources. Create when you have synthesized research into a decision or direction.",
                 "parameters": [
                     param("--id", "string", true, "Thesis ID (e.g. THX-AGENT-PROTOCOL)"),
                     param("--title", "string", true, "Thesis title"),
@@ -1197,13 +1281,15 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--supported-by", "string", false, "Comma-separated source IDs"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, title, version, status }",
                 "examples": [
-                    "lattice add thesis --id THX-NEW --title 'Thesis' --body 'Claim' --category technical"
-                ]
+                    {"command": "lattice add thesis --id THX-NEW --title 'Thesis' --body 'Strategic claim based on research' --category technical --supported-by SRC-PAPER-001", "explanation": "Add a thesis linked to its supporting research"}
+                ],
+                "related_commands": ["add source", "add requirement"]
             },
             {
                 "name": "add source",
-                "description": "Add a source (research, paper, or reference material)",
+                "description": "Add a source — research, paper, or reference material that provides evidence. Create when you have new research to anchor strategic claims.",
                 "parameters": [
                     param("--id", "string", true, "Source ID (e.g. SRC-PAPER-001)"),
                     param("--title", "string", true, "Source title"),
@@ -1213,13 +1299,15 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--tags", "string", false, "Comma-separated tags"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, title, version, status }",
                 "examples": [
-                    "lattice add source --id SRC-NEW --title 'Paper' --body 'Summary' --url https://example.com"
-                ]
+                    {"command": "lattice add source --id SRC-NEW --title 'Research paper' --body 'Key findings summary' --url https://example.com", "explanation": "Add a source with a URL for reference"}
+                ],
+                "related_commands": ["add thesis", "add edge"]
             },
             {
                 "name": "add implementation",
-                "description": "Add an implementation (code that satisfies requirements)",
+                "description": "Add an implementation — code that satisfies requirements. Create after writing code to record which requirements it addresses and which files are involved.",
                 "parameters": [
                     param("--id", "string", true, "Implementation ID (e.g. IMP-STORAGE-001)"),
                     param("--title", "string", true, "Implementation title"),
@@ -1229,13 +1317,15 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--tags", "string", false, "Comma-separated tags"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, title, version, status }",
                 "examples": [
-                    "lattice add implementation --id IMP-NEW --title 'Impl' --body 'Description' --satisfies REQ-CORE-001"
-                ]
+                    {"command": "lattice add implementation --id IMP-NEW --title 'Storage layer' --body 'File-based YAML storage' --satisfies REQ-CORE-001 --files 'src/storage.rs'", "explanation": "Record an implementation with its requirement bindings and source files"}
+                ],
+                "related_commands": ["verify", "resolve", "refine", "add edge"]
             },
             {
                 "name": "add edge",
-                "description": "Add an edge between two existing nodes (feedback, dependency, traceability)",
+                "description": "Add a relationship between two existing nodes. Use for feedback edges (reveals_gap_in, challenges, validates), traceability, or dependencies not captured during node creation.",
                 "parameters": [
                     param("--from", "string", true, "Source node ID (edge goes FROM this node)"),
                     param("--edge-type / --type", "string", true, "Edge type: supported_by, derives_from, depends_on, satisfies, extends, reveals_gap_in, challenges, validates, conflicts_with, supersedes"),
@@ -1243,15 +1333,17 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--rationale", "string", false, "Why this edge exists"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ from, edge_type, to, rationale?, version }",
                 "examples": [
-                    "lattice add edge --from IMP-CLI-001 --type reveals_gap_in --to REQ-CORE-005 --rationale 'Requirement does not specify timeout behavior'",
-                    "lattice add edge --from IMP-CLI-001 --type validates --to THX-AGENT-NATIVE-TOOLS --rationale 'CLI confirms structured knowledge is queryable'",
-                    "lattice add edge --from IMP-CLI-001 --type challenges --to THX-PROSE-PRIMARY --rationale 'Agents prefer JSON over prose'"
-                ]
+                    {"command": "lattice add edge --from IMP-CLI-001 --type reveals_gap_in --to REQ-CORE-005 --rationale 'Requirement does not specify timeout behavior'", "explanation": "During implementation, you discovered the requirement is underspecified. This feedback edge flags the gap."},
+                    {"command": "lattice add edge --from IMP-CLI-001 --type validates --to THX-AGENT-NATIVE-TOOLS --rationale 'CLI confirms structured knowledge is queryable'", "explanation": "Working code confirmed a strategic thesis — positive feedback from implementation to strategy."},
+                    {"command": "lattice add edge --from IMP-CLI-001 --type challenges --to THX-PROSE-PRIMARY --rationale 'Agents prefer JSON over prose'", "explanation": "Implementation evidence contradicts a thesis — signals the thesis may need revision."}
+                ],
+                "related_commands": ["remove edge", "replace edge", "refine"]
             },
             {
                 "name": "remove edge",
-                "description": "Remove an edge between two nodes",
+                "description": "Remove an edge between two nodes. Use when a relationship is no longer valid.",
                 "parameters": [
                     param("--from", "string", true, "Source node ID (edge originates FROM this node)"),
                     param("--edge-type / --type", "string", true, "Edge type to remove"),
@@ -1259,12 +1351,13 @@ fn build_command_catalog() -> serde_json::Value {
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
-                    "lattice remove edge --from IMP-CLI-001 --type satisfies --to REQ-CORE-001"
-                ]
+                    {"command": "lattice remove edge --from IMP-CLI-001 --type satisfies --to REQ-CORE-001", "explanation": "Remove a satisfaction binding that is no longer accurate"}
+                ],
+                "related_commands": ["add edge", "replace edge"]
             },
             {
                 "name": "replace edge",
-                "description": "Replace the target of an existing edge with a new target",
+                "description": "Retarget an existing edge to a new node. Use when a requirement is split or reorganized and existing edges need to follow.",
                 "parameters": [
                     param("--from", "string", true, "Source node ID"),
                     param("--edge-type / --type", "string", true, "Edge type"),
@@ -1274,13 +1367,13 @@ fn build_command_catalog() -> serde_json::Value {
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
-                    "lattice replace edge --from IMP-CLI-001 --type satisfies --old-to REQ-CORE-001 --new-to REQ-CORE-002",
-                    "lattice replace edge --from IMP-CLI-001 --type satisfies --old-to REQ-CORE-001 --new-to REQ-CORE-002 --rationale 'Requirement was split'"
-                ]
+                    {"command": "lattice replace edge --from IMP-CLI-001 --type satisfies --old-to REQ-CORE-001 --new-to REQ-CORE-002 --rationale 'Requirement was split'", "explanation": "Retarget an implementation's satisfaction edge after a requirement was reorganized"}
+                ],
+                "related_commands": ["add edge", "remove edge"]
             },
             {
                 "name": "resolve",
-                "description": "Resolve a requirement with a status",
+                "description": "Set the resolution status of a requirement. Use after verifying an implementation satisfies it, or to mark it blocked/deferred/wontfix.",
                 "parameters": [
                     param("id", "string", true, "Requirement ID"),
                     param("--verified", "bool", false, "Mark as verified"),
@@ -1289,14 +1382,16 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--wontfix", "string", false, "Mark as wontfix with reason"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, resolution: { status, reason?, resolved_at } }",
                 "examples": [
-                    "lattice resolve REQ-CORE-001 --verified",
-                    "lattice resolve REQ-API-002 --deferred 'Post-MVP'"
-                ]
+                    {"command": "lattice resolve REQ-CORE-001 --verified", "explanation": "Mark a requirement as verified after confirming the implementation works"},
+                    {"command": "lattice resolve REQ-API-002 --deferred 'Post-MVP'", "explanation": "Defer a requirement with a reason — it stays tracked but is not blocking"}
+                ],
+                "related_commands": ["verify", "get", "list"]
             },
             {
                 "name": "edit",
-                "description": "Edit fields on an existing node (auto-bumps patch version)",
+                "description": "Edit fields on an existing node. Auto-bumps the patch version, which may trigger drift on downstream edges. Use when a node's content needs updating.",
                 "parameters": [
                     param("id", "string", true, "Node ID (e.g. REQ-CORE-001)"),
                     param("--title", "string", false, "New title"),
@@ -1309,16 +1404,16 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--test-command", "string", false, "Test command (implementations only)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, title, version, changed_fields[] }",
                 "examples": [
-                    "lattice edit REQ-CORE-001 --title 'Updated title'",
-                    "lattice edit REQ-CORE-001 --tags 'core,storage' --priority P0",
-                    "lattice edit IMP-CLI-001 --files 'src/main.rs,src/lib.rs' --test-command 'cargo test'",
-                    "lattice edit IMP-CLI-001 --status active --format json"
-                ]
+                    {"command": "lattice edit REQ-CORE-001 --title 'Updated title' --priority P0", "explanation": "Update a requirement's title and escalate its priority"},
+                    {"command": "lattice edit IMP-CLI-001 --files 'src/main.rs,src/lib.rs' --test-command 'cargo test'", "explanation": "Update an implementation's file bindings and test command"}
+                ],
+                "related_commands": ["get", "drift"]
             },
             {
                 "name": "verify",
-                "description": "Record that an implementation satisfies a requirement",
+                "description": "Record that an implementation satisfies a requirement with evidence. Use after running tests to formally bind implementation to requirement with proof.",
                 "parameters": [
                     param("implementation", "string", true, "Implementation ID"),
                     param("relation", "string", true, "Must be 'satisfies'"),
@@ -1329,12 +1424,13 @@ fn build_command_catalog() -> serde_json::Value {
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
-                    "lattice verify IMP-STORAGE-001 satisfies REQ-CORE-004 --tests-pass --coverage 0.94"
-                ]
+                    {"command": "lattice verify IMP-STORAGE-001 satisfies REQ-CORE-004 --tests-pass --coverage 0.94", "explanation": "Record that tests pass with 94% coverage as evidence of satisfaction"}
+                ],
+                "related_commands": ["resolve", "add implementation"]
             },
             {
                 "name": "refine",
-                "description": "Create a sub-requirement from a discovered gap in an existing requirement",
+                "description": "Create a sub-requirement when implementation reveals a requirement is underspecified. This is a feedback edge — knowledge flowing upstream from code to requirements.",
                 "parameters": [
                     param("parent", "string", true, "Parent requirement ID"),
                     param("--gap-type", "string", true, "Gap type: clarification, design_decision, missing_requirement, contradiction"),
@@ -1344,78 +1440,88 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--implementation / --discovered-by", "string", false, "Implementation ID that discovered this gap (alias: --discovered-by)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ id, parent, gap_type, title }",
                 "examples": [
-                    "lattice refine REQ-CORE-005 --gap-type design_decision --title 'Drift threshold' --description 'Should minor version drift be flagged?'"
-                ]
+                    {"command": "lattice refine REQ-CORE-005 --gap-type design_decision --title 'Drift threshold' --description 'Should minor version drift be flagged?' --implementation IMP-GRAPH-001", "explanation": "During implementation, discovered the requirement doesn't specify drift sensitivity — create a sub-requirement to resolve the ambiguity"}
+                ],
+                "related_commands": ["add edge", "drift", "resolve"]
             },
             {
                 "name": "drift",
-                "description": "Check for version drift in edge bindings, or acknowledge drift on a node",
+                "description": "Check whether upstream knowledge has changed since downstream nodes were last reviewed. Run after editing sources or theses to see which requirements need attention.",
                 "parameters": [
                     param("--check", "bool", false, "Exit with code 2 if drift detected"),
                     param("--acknowledge", "string", false, "Node ID to acknowledge drift on (re-snapshots edge versions)"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ drift_detected: bool, items: [{ node_id, edge_type, target_id, bound_version, current_version }] }",
                 "examples": [
-                    "lattice drift",
-                    "lattice drift --check --format json",
-                    "lattice drift --acknowledge REQ-INFRA-015"
-                ]
+                    {"command": "lattice drift", "explanation": "Check all edges for version drift — shows which nodes have stale bindings"},
+                    {"command": "lattice drift --check --format json", "explanation": "Machine-readable drift check — exits non-zero if drift exists (useful in CI)"},
+                    {"command": "lattice drift --acknowledge REQ-INFRA-015", "explanation": "After reviewing a node, re-snapshot its edge versions to clear the drift warning"}
+                ],
+                "related_commands": ["get", "edit", "summary"]
             },
             {
                 "name": "lint",
-                "description": "Lint lattice files for structural issues",
+                "description": "Check lattice files for structural issues like missing fields, broken edges, or invalid references. Run as part of health checks or CI.",
                 "parameters": [
                     param("--fix", "bool", false, "Attempt to auto-fix fixable issues"),
                     param("--strict", "bool", false, "Exit with non-zero status on any issue"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ issues: [{ severity, node_id?, message, fixable }], total, fixable_count }",
                 "examples": [
-                    "lattice lint",
-                    "lattice lint --fix",
-                    "lattice lint --strict --format json"
-                ]
+                    {"command": "lattice lint", "explanation": "Check for structural issues across all lattice files"},
+                    {"command": "lattice lint --fix", "explanation": "Auto-fix issues like missing config fields or malformed references"},
+                    {"command": "lattice lint --strict --format json", "explanation": "Strict mode for CI — exits non-zero on any issue"}
+                ],
+                "related_commands": ["drift", "summary"]
             },
             {
                 "name": "summary",
-                "description": "Show a compact status overview of the lattice",
+                "description": "Show a compact status overview — node counts, resolution breakdown, drift status, and orphaned nodes. Start here to understand the lattice's current state.",
                 "parameters": [
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ nodes: { sources, theses, requirements, implementations }, resolutions: { verified, blocked, deferred, unresolved }, drift: { detected, count }, orphans[] }",
                 "examples": [
-                    "lattice summary",
-                    "lattice summary --format json"
-                ]
+                    {"command": "lattice summary", "explanation": "Quick overview of lattice health — how many nodes, what's resolved, any drift"},
+                    {"command": "lattice summary --format json", "explanation": "Machine-readable summary for dashboards or agent consumption"}
+                ],
+                "related_commands": ["drift", "lint", "list"]
             },
             {
                 "name": "diff",
-                "description": "Show lattice nodes added, modified, or resolved since a git ref",
+                "description": "Show lattice nodes added, modified, or resolved since a git ref. Use to understand what changed on a branch or since a specific commit.",
                 "parameters": [
                     param("--since", "string", false, "Git ref to compare against (default: merge-base with main)"),
                     param("--md", "bool", false, "Output as markdown for GitHub comments"),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
+                "output_schema_hint": "{ base_ref, has_changes, total_changes, added[], modified[], resolved[], deleted[] }",
                 "examples": [
-                    "lattice diff",
-                    "lattice diff --since main",
-                    "lattice diff --since abc123f",
-                    "lattice diff --since main --md",
-                    "lattice diff --format json"
-                ]
+                    {"command": "lattice diff", "explanation": "Show lattice changes on the current branch vs main"},
+                    {"command": "lattice diff --since HEAD~3 --md", "explanation": "Generate markdown summary of changes over the last 3 commits"},
+                    {"command": "lattice diff --format json", "explanation": "Machine-readable diff for CI or automated comments"}
+                ],
+                "related_commands": ["summary", "get"]
             },
             {
                 "name": "plan",
-                "description": "Plan implementation order for requirements based on dependency graph",
+                "description": "Plan implementation order for requirements based on their dependency graph. Shows which requirements are ready, which are blocked, and the optimal sequence.",
                 "parameters": [
                     param("requirements", "string[]", true, "Requirement IDs to plan")
                 ],
+                "output_schema_hint": "{ ready[], blocked[], sequence[] }",
                 "examples": [
-                    "lattice plan REQ-CLI-001 REQ-CLI-002"
-                ]
+                    {"command": "lattice plan REQ-CLI-001 REQ-CLI-002", "explanation": "Determine the implementation order for two requirements based on dependencies"}
+                ],
+                "related_commands": ["list", "get", "summary"]
             },
             {
                 "name": "export",
-                "description": "Export the lattice to narrative, JSON, HTML, or GitHub Pages",
+                "description": "Export the lattice as a narrative document, JSON data, HTML page, or GitHub Pages site. Use to share lattice state with stakeholders or publish documentation.",
                 "parameters": [
                     param("--format", "string", false, "Export format: narrative, json, html, pages (default: narrative)"),
                     param("--audience", "string", false, "Target audience: investor, contributor, overview (default: overview)"),
@@ -1424,15 +1530,15 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--output", "string", false, "Output directory for HTML/pages export")
                 ],
                 "examples": [
-                    "lattice export",
-                    "lattice export --format json",
-                    "lattice export --format html --output ./docs",
-                    "lattice export --format pages --output _site"
-                ]
+                    {"command": "lattice export", "explanation": "Generate a narrative overview of the lattice for general audiences"},
+                    {"command": "lattice export --format json", "explanation": "Export full lattice data as JSON"},
+                    {"command": "lattice export --format pages --output _site", "explanation": "Generate a GitHub Pages site with interactive lattice viewer"}
+                ],
+                "related_commands": ["summary", "list"]
             },
             {
                 "name": "update",
-                "description": "Update lattice to the latest version (self-update)",
+                "description": "Self-update lattice to the latest version. Use --check to see if an update is available without installing.",
                 "parameters": [
                     param("--check", "bool", false, "Only check for updates, don't install"),
                     param("--force", "bool", false, "Force update even if already up to date"),
@@ -1440,22 +1546,23 @@ fn build_command_catalog() -> serde_json::Value {
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "examples": [
-                    "lattice update",
-                    "lattice update --check",
-                    "lattice update --version 0.1.5",
-                    "lattice update --format json"
-                ]
+                    {"command": "lattice update", "explanation": "Update to the latest release"},
+                    {"command": "lattice update --check", "explanation": "Check if a newer version is available without installing"},
+                    {"command": "lattice update --version 0.1.5", "explanation": "Install a specific version"}
+                ],
+                "related_commands": []
             },
             {
                 "name": "help",
-                "description": "Show available commands (use --json for machine-readable catalog)",
+                "description": "Show available commands. Use --json for the full machine-readable catalog (this output).",
                 "parameters": [
                     param("--json", "bool", false, "Output as structured JSON for agent consumption")
                 ],
                 "examples": [
-                    "lattice help",
-                    "lattice help --json"
-                ]
+                    {"command": "lattice help", "explanation": "Show human-readable command list"},
+                    {"command": "lattice help --json", "explanation": "Output the full command catalog as JSON for LLM consumption"}
+                ],
+                "related_commands": []
             }
         ],
         "exit_codes": {
@@ -3724,5 +3831,123 @@ mod tests {
         let params = search["parameters"].as_array().unwrap();
         let query_param = params.iter().find(|p| p["name"] == "--query").unwrap();
         assert_eq!(query_param["short"].as_str().unwrap(), "-q");
+    }
+
+    #[test]
+    fn test_catalog_has_concepts_block() {
+        let catalog = build_command_catalog();
+        let concepts = &catalog["concepts"];
+        assert!(concepts.is_object(), "concepts should be an object");
+
+        // Node types
+        let node_types = &concepts["node_types"];
+        for nt in &["source", "thesis", "requirement", "implementation"] {
+            assert!(node_types[nt].is_object(), "Missing node type: {}", nt);
+            assert!(
+                node_types[nt]["prefix"].is_string(),
+                "Missing prefix for {}",
+                nt
+            );
+            assert!(
+                node_types[nt]["purpose"].is_string(),
+                "Missing purpose for {}",
+                nt
+            );
+        }
+
+        // Edge types — validate against the canonical EDGE_TYPES constant
+        let edges = &concepts["edges"];
+        for et in lattice::EDGE_TYPES {
+            assert!(edges[*et].is_string(), "Missing edge description: {}", et);
+        }
+
+        // Versions and ID conventions
+        assert!(concepts["versions"].is_string());
+        assert!(concepts["id_conventions"].is_string());
+    }
+
+    #[test]
+    fn test_catalog_has_workflows() {
+        let catalog = build_command_catalog();
+        let workflows = catalog["workflows"].as_array().unwrap();
+        assert!(
+            workflows.len() >= 4,
+            "Expected at least 4 workflows, got {}",
+            workflows.len()
+        );
+
+        let names: Vec<&str> = workflows
+            .iter()
+            .map(|w| w["name"].as_str().unwrap())
+            .collect();
+        for expected in &[
+            "capture_decision",
+            "check_health",
+            "respond_to_drift",
+            "record_gap",
+        ] {
+            assert!(names.contains(expected), "Missing workflow: {}", expected);
+        }
+
+        // Each workflow has steps
+        for w in workflows {
+            assert!(
+                !w["steps"].as_array().unwrap().is_empty(),
+                "Workflow {} has no steps",
+                w["name"]
+            );
+        }
+    }
+
+    #[test]
+    fn test_catalog_has_structured_examples() {
+        let catalog = build_command_catalog();
+        let commands = catalog["commands"].as_array().unwrap();
+        let init = commands.iter().find(|c| c["name"] == "init").unwrap();
+        let examples = init["examples"].as_array().unwrap();
+        let first = &examples[0];
+        assert!(
+            first["command"].is_string(),
+            "Examples should have a 'command' field"
+        );
+        assert!(
+            first["explanation"].is_string(),
+            "Examples should have an 'explanation' field"
+        );
+    }
+
+    #[test]
+    fn test_catalog_has_related_commands() {
+        let catalog = build_command_catalog();
+        let commands = catalog["commands"].as_array().unwrap();
+        let drift = commands.iter().find(|c| c["name"] == "drift").unwrap();
+        assert!(
+            drift["related_commands"].is_array(),
+            "Commands should have related_commands"
+        );
+    }
+
+    #[test]
+    fn test_catalog_has_output_schema_hints() {
+        let catalog = build_command_catalog();
+        let commands = catalog["commands"].as_array().unwrap();
+        // Commands that produce --format json output should have hints
+        for name in &["list", "get", "search", "drift", "summary", "diff"] {
+            let cmd = commands.iter().find(|c| c["name"] == *name).unwrap();
+            assert!(
+                cmd["output_schema_hint"].is_string(),
+                "Command '{}' should have output_schema_hint",
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_catalog_has_description() {
+        let catalog = build_command_catalog();
+        assert!(
+            catalog["description"].is_string(),
+            "Catalog should have a top-level description"
+        );
     }
 }
