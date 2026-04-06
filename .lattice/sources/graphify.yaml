@@ -1,0 +1,18 @@
+id: SRC-GRAPHIFY
+type: source
+title: 'Graphify: Confidence-Tagged Knowledge Graphs from Code'
+body: 'Claude Code skill that builds knowledge graphs from codebases with confidence-tagged edges (EXTRACTED/INFERRED/AMBIGUOUS). Uses AST parsing, Leiden community clustering, and content-addressed SHA256 caching. Key insight: tagging edge provenance enables prioritized review and surfaces ambiguous relationships as suggested questions. MIT licensed.'
+status: active
+version: 1.0.0
+created_at: 2026-04-06T02:34:16.502772409+00:00
+created_by: agent:claude-opus
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  url: https://github.com/safishamsi/graphify
+  reliability: industry
+  retrieved_at: 2026-04-06
+edges:
+  supported_by:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: Demonstrates that confidence-tagged edges improve agent knowledge graph interactions

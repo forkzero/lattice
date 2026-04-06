@@ -1,0 +1,25 @@
+id: REQ-CORE-016
+type: requirement
+title: Confidence-Tagged Edges with Provenance
+body: 'Edges support an optional confidence field indicating provenance: asserted (human/agent explicitly created with evidence, weight 1.0), inferred (derived automatically from analysis, weight 0.8), or ambiguous (suspected but unconfirmed, weight 0.5). Drift detection prioritizes ambiguous edges for review. Export views can filter or highlight by confidence level. Default confidence for human-created edges is asserted; for agent-created edges is inferred.'
+status: active
+version: 1.0.0
+created_at: 2026-04-06T02:35:49.461562441+00:00
+created_by: agent:mcp-2026-04-06
+requested_by: Claude <noreply@anthropic.com>
+priority: P1
+category: CORE
+tags:
+- research-inspired
+- gh-issue-24
+edges:
+  derives_from:
+  - target: THX-BIDIRECTIONAL-FLOW
+    version: 1.0.0
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CORE-002
+    version: 1.0.0
+  - target: REQ-CORE-005
+    version: 1.0.0

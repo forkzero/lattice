@@ -1,0 +1,18 @@
+id: SRC-GRAPH-CENTRALITY
+type: source
+title: Node Centrality Analysis for Knowledge Graph Health
+body: 'Degree and betweenness centrality are foundational graph metrics for identifying bottleneck nodes, fragile structures, and structural risks. Applied to knowledge graphs: high-degree nodes are change-risk hotspots, single-source theses are fragile claims, and orphan nodes indicate incomplete coverage. Well-established in graph theory literature (Freeman 1977, Brandes 2001). Graphify applies god-node detection to code graphs as a practical example.'
+status: active
+version: 1.0.0
+created_at: 2026-04-06T02:34:23.221355976+00:00
+created_by: agent:claude-opus
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  url: https://en.wikipedia.org/wiki/Centrality
+  reliability: peer_reviewed
+  retrieved_at: 2026-04-06
+edges:
+  supported_by:
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+    rationale: Centrality metrics identify structural risks that complement version-aware drift detection
