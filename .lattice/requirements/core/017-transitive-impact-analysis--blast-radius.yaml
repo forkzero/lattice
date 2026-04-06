@@ -1,0 +1,25 @@
+id: REQ-CORE-017
+type: requirement
+title: Transitive Impact Analysis (Blast Radius)
+body: A lattice impact command performs transitive graph traversal from a given node to show all directly and transitively affected nodes. Supports --depth to limit traversal, --direction (upstream/downstream/both), and --json for machine output. Extends drift detection from direct-edge staleness to full change propagation analysis.
+status: active
+version: 1.0.0
+created_at: 2026-04-06T02:35:52.394406136+00:00
+created_by: agent:mcp-2026-04-06
+requested_by: Claude <noreply@anthropic.com>
+priority: P1
+category: CORE
+tags:
+- research-inspired
+- gh-issue-25
+edges:
+  derives_from:
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CORE-003
+    version: 1.0.0
+  - target: REQ-CORE-005
+    version: 1.0.0

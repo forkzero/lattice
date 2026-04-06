@@ -1,0 +1,18 @@
+id: SRC-BLAST-RADIUS
+type: source
+title: Blast Radius Analysis in Code Knowledge Graphs
+body: 'Code-review-graph and CodeGraph both implement transitive impact analysis (blast radius) over code dependency graphs. When files change, they trace callers, dependents, and tests through the graph to compute the minimal affected set. The technique — standard graph traversal from changed nodes through dependency edges — is directly applicable to any directed knowledge graph including requirement traceability graphs. code-review-graph: MIT licensed. CodeGraph: MIT licensed.'
+status: active
+version: 1.0.0
+created_at: 2026-04-06T02:34:20.051099384+00:00
+created_by: agent:claude-opus
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  url: https://github.com/tirth8205/code-review-graph
+  reliability: industry
+  retrieved_at: 2026-04-06
+edges:
+  supported_by:
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+    rationale: Demonstrates transitive impact analysis as extension of version-aware drift detection
