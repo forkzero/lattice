@@ -237,11 +237,7 @@ fn generate_investor_narrative(data: &LatticeData, options: &ExportOptions) -> S
     // Progress
     lines.push("## Progress".to_string());
     lines.push(String::new());
-    let pct = if total > 0 {
-        (implemented * 100) / total
-    } else {
-        0
-    };
+    let pct = (implemented * 100).checked_div(total).unwrap_or(0);
     lines.push(format!(
         "**{} of {} requirements implemented ({}%)**",
         implemented, total, pct
@@ -426,11 +422,7 @@ fn generate_overview_narrative(data: &LatticeData, options: &ExportOptions) -> S
     // Progress
     lines.push("## Progress".to_string());
     lines.push(String::new());
-    let pct = if total > 0 {
-        (implemented * 100) / total
-    } else {
-        0
-    };
+    let pct = (implemented * 100).checked_div(total).unwrap_or(0);
     lines.push(format!("{}/{} implemented ({}%)", implemented, total, pct));
     lines.push(String::new());
 

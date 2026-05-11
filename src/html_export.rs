@@ -83,11 +83,7 @@ pub fn compute_statistics(data: &LatticeData) -> Statistics {
         .count();
 
     let total_reqs = data.requirements.len();
-    let coverage_pct = if total_reqs > 0 {
-        (implemented * 100) / total_reqs
-    } else {
-        0
-    };
+    let coverage_pct = (implemented * 100).checked_div(total_reqs).unwrap_or(0);
 
     let mut verified = 0;
     let mut blocked = 0;

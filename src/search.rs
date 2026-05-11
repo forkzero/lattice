@@ -735,7 +735,7 @@ impl SearchEngine {
         if !to_embed.is_empty() {
             let texts: Vec<String> = to_embed.iter().map(|(_, t)| t.clone()).collect();
             let embeddings = provider.embed(&texts)?;
-            for ((node_id, _), embedding) in to_embed.iter().zip(embeddings.into_iter()) {
+            for ((node_id, _), embedding) in to_embed.iter().zip(embeddings) {
                 new_embeddings.insert(node_id.clone(), embedding);
             }
         }
