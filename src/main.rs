@@ -245,6 +245,21 @@ enum Commands {
         format: String,
     },
 
+    /// Check if lattice has been updated alongside code changes
+    Freshness {
+        /// Maximum allowed age gap between code and lattice changes, in hours (default: 72)
+        #[arg(long, default_value = "72")]
+        threshold: u64,
+
+        /// Exit with code 2 if lattice is stale (for CI/hooks)
+        #[arg(long)]
+        check: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
     /// Verify that an implementation satisfies a requirement
     Verify {
         /// Implementation ID (e.g., IMP-STORAGE-001)
@@ -1487,7 +1502,24 @@ fn build_command_catalog() -> serde_json::Value {
                     {"command": "lattice lint --fix", "explanation": "Auto-fix issues like missing config fields or malformed references"},
                     {"command": "lattice lint --strict --format json", "explanation": "Strict mode for CI — exits non-zero on any issue"}
                 ],
-                "related_commands": ["drift", "summary"]
+                "related_commands": ["drift", "summary", "freshness"]
+            },
+            {
+                "name": "freshness",
+                "description": "Check if lattice has been updated alongside code changes. Compares the last git commit touching .lattice/ vs code files. Use in pre-commit hooks or CI to catch stale lattice.",
+                "parameters": [
+                    param("--threshold", "integer", false, "Maximum allowed gap in hours between code and lattice updates (default: 72)"),
+                    param("--check", "bool", false, "Exit with code 2 if lattice is stale (for CI/hooks)"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "output_schema_hint": "{ stale: bool, lattice_last_updated, code_last_updated, gap_hours, threshold_hours }",
+                "examples": [
+                    {"command": "lattice freshness", "explanation": "Check if lattice is up to date relative to code changes"},
+                    {"command": "lattice freshness --check", "explanation": "Exit non-zero if lattice is stale — use in CI or pre-commit hooks"},
+                    {"command": "lattice freshness --threshold 24 --check", "explanation": "Stricter threshold — flag if lattice hasn't been updated within 24h of code changes"},
+                    {"command": "lattice freshness --format json", "explanation": "Machine-readable freshness check for dashboards"}
+                ],
+                "related_commands": ["drift", "lint", "summary"]
             },
             {
                 "name": "summary",
@@ -1611,6 +1643,7 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Export { .. } => "export",
         Commands::Summary { .. } => "summary",
         Commands::Lint { .. } => "lint",
+        Commands::Freshness { .. } => "freshness",
         Commands::Verify { .. } => "verify",
         Commands::Refine { .. } => "refine",
         Commands::Search { .. } => "search",
@@ -2878,6 +2911,152 @@ fn run_command(command: Commands) {
             }
         }
 
+        Commands::Freshness {
+            threshold,
+            check,
+            format,
+        } => {
+            let root = get_lattice_root();
+            // Get the most recent commit timestamp touching .lattice/ files
+            let lattice_ts = std::process::Command::new("git")
+                .args(["log", "-1", "--format=%ct", "--", ".lattice/"])
+                .current_dir(&root)
+                .output()
+                .ok()
+                .and_then(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .trim()
+                        .parse::<i64>()
+                        .ok()
+                });
+
+            // Get the most recent commit timestamp touching code files (exclude .lattice/)
+            let code_ts = std::process::Command::new("git")
+                .args([
+                    "log",
+                    "-1",
+                    "--format=%ct",
+                    "--",
+                    ".",
+                    ":!.lattice/",
+                    ":!.claude/",
+                    ":!docs/",
+                    ":!README.md",
+                    ":!CLAUDE.md",
+                    ":!LICENSE",
+                ])
+                .current_dir(&root)
+                .output()
+                .ok()
+                .and_then(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .trim()
+                        .parse::<i64>()
+                        .ok()
+                });
+
+            match (lattice_ts, code_ts) {
+                (Some(lattice), Some(code)) => {
+                    let gap_hours = (code - lattice).max(0) as u64 / 3600;
+                    let stale = code > lattice && gap_hours >= threshold;
+
+                    let lattice_dt = chrono::DateTime::from_timestamp(lattice, 0)
+                        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    let code_dt = chrono::DateTime::from_timestamp(code, 0)
+                        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "stale": stale,
+                                "lattice_last_updated": lattice_dt,
+                                "code_last_updated": code_dt,
+                                "gap_hours": gap_hours,
+                                "threshold_hours": threshold,
+                            }))
+                            .unwrap()
+                        );
+                    } else if stale {
+                        println!(
+                            "{}",
+                            format!(
+                                "STALE: Code updated {} but lattice last updated {} ({} hours ago, threshold: {}h)",
+                                code_dt, lattice_dt, gap_hours, threshold
+                            )
+                            .yellow()
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            format!(
+                                "Fresh: lattice updated {} — within {}h threshold",
+                                lattice_dt, threshold
+                            )
+                            .green()
+                        );
+                    }
+
+                    if check && stale {
+                        process::exit(2);
+                    }
+                }
+                (None, Some(_)) => {
+                    let msg = "No lattice commits found — lattice has never been updated";
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "stale": true,
+                                "error": msg,
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("{}", msg.yellow());
+                    }
+                    if check {
+                        process::exit(2);
+                    }
+                }
+                (Some(lattice), None) => {
+                    let lattice_dt = chrono::DateTime::from_timestamp(lattice, 0)
+                        .map(|d| d.format("%Y-%m-%d %H:%M UTC").to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+                    let msg = format!("No code commits found — lattice updated {}", lattice_dt);
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "stale": false,
+                                "lattice_last_updated": lattice_dt,
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("{}", msg.green());
+                    }
+                }
+                (None, None) => {
+                    let msg = "No git history found";
+                    if is_json(&format) {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&json!({
+                                "stale": false,
+                                "error": msg,
+                            }))
+                            .unwrap()
+                        );
+                    } else {
+                        println!("{}", msg);
+                    }
+                }
+            }
+        }
+
         Commands::Verify {
             implementation,
             relation: _,
@@ -3935,6 +4114,7 @@ mod tests {
             "diff",
             "drift",
             "lint",
+            "freshness",
             "summary",
             "plan",
             "export",
