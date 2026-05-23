@@ -2,7 +2,7 @@
 //!
 //! Linked requirements: REQ-CLI-001 through REQ-CLI-005, REQ-CORE-009
 
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
     AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
@@ -23,9 +23,6 @@ use std::process;
 #[command(name = "lattice")]
 #[command(
     about = "A knowledge coordination protocol for human-agent collaboration.\nDesigned to be discoverable by LLMs — try: lattice --json"
-)]
-#[command(
-    before_help = "Lattice manages sources → theses → requirements → implementations\nConnected by version-tracked edges. Run 'lattice help concepts' for details."
 )]
 #[command(version)]
 #[command(disable_help_subcommand = true)]
@@ -1688,7 +1685,104 @@ fn compact_catalog(catalog: &serde_json::Value) -> serde_json::Value {
     })
 }
 
+fn print_grouped_help() {
+    let catalog = build_command_catalog();
+    println!(
+        "{}",
+        "Lattice manages sources → theses → requirements → implementations".bold()
+    );
+    println!(
+        "{}\n",
+        "Connected by version-tracked edges. Run 'lattice help concepts' for details.".dimmed()
+    );
+
+    let groups: &[(&str, &[&str])] = &[
+        (
+            "KNOWLEDGE GRAPH:",
+            &[
+                "add source",
+                "add thesis",
+                "add requirement",
+                "add implementation",
+                "add edge",
+                "get",
+                "list",
+                "search",
+                "edit",
+                "resolve",
+                "verify",
+                "refine",
+                "remove edge",
+                "replace edge",
+            ],
+        ),
+        (
+            "HEALTH & ANALYSIS:",
+            &[
+                "summary",
+                "drift",
+                "freshness",
+                "lint",
+                "diff",
+                "plan",
+                "export",
+            ],
+        ),
+        ("SETUP:", &["init", "update", "help"]),
+    ];
+
+    if let Some(commands) = catalog["commands"].as_array() {
+        for (heading, names) in groups {
+            println!("{}", heading.bold());
+            for name in *names {
+                if let Some(cmd) = commands.iter().find(|c| c["name"].as_str() == Some(name)) {
+                    let desc = cmd["description"].as_str().unwrap_or("");
+                    let short = desc.find(". ").map(|i| &desc[..i + 1]).unwrap_or(desc);
+                    println!("  {:<22} {}", name.cyan(), short);
+                }
+            }
+            println!();
+        }
+    }
+
+    println!("{}", "OPTIONS:".bold());
+    println!(
+        "  {:<22} Output machine-readable command catalog as JSON",
+        "--json".cyan()
+    );
+    println!(
+        "  {:<22} With --json: compact schema only (signatures, no examples)",
+        "--json --compact".cyan()
+    );
+    println!("  {:<22} Print help", "-h, --help".cyan());
+    println!("  {:<22} Print version", "-V, --version".cyan());
+    println!();
+
+    println!("{}", "TOPICS:".bold());
+    println!(
+        "  {:<22} Node types, edge semantics, versioning, ID conventions",
+        "lattice help concepts".cyan()
+    );
+    println!(
+        "  {:<22} Common task-oriented command sequences",
+        "lattice help workflows".cyan()
+    );
+    println!();
+    println!(
+        "Use {} for help on a specific command.",
+        "lattice <command> --help".cyan()
+    );
+}
+
 fn main() {
+    // Intercept top-level --help/-h before clap parses, so subcommand --help
+    // still uses clap's built-in per-command help.
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
+        print_grouped_help();
+        return;
+    }
+
     let cli = Cli::parse();
 
     // Handle top-level --json flag (outputs command catalog)
@@ -1703,14 +1797,11 @@ fn main() {
         return;
     }
 
-    // If no subcommand given, show help
+    // If no subcommand given, show grouped help
     let command = match cli.command {
         Some(cmd) => cmd,
         None => {
-            // Render help without exiting so update notice can follow
-            let mut cmd = Cli::command();
-            let help = cmd.render_help();
-            println!("{}", help);
+            print_grouped_help();
             lattice::update::maybe_notify_update(None);
             return;
         }
@@ -3981,97 +4072,7 @@ fn run_command(command: Commands) {
                     }
                 }
             } else {
-                // Human-readable help
-                let catalog = build_command_catalog();
-                println!(
-                    "{}",
-                    "Lattice manages sources → theses → requirements → implementations".bold()
-                );
-                println!(
-                    "{}\n",
-                    "Connected by version-tracked edges. Run 'lattice help concepts' for details."
-                        .dimmed()
-                );
-
-                // Group commands by section
-                let groups: &[(&str, &[&str])] = &[
-                    (
-                        "KNOWLEDGE GRAPH:",
-                        &[
-                            "add source",
-                            "add thesis",
-                            "add requirement",
-                            "add implementation",
-                            "add edge",
-                            "get",
-                            "list",
-                            "search",
-                            "edit",
-                            "resolve",
-                            "verify",
-                            "refine",
-                            "remove edge",
-                            "replace edge",
-                        ],
-                    ),
-                    (
-                        "HEALTH & ANALYSIS:",
-                        &[
-                            "summary",
-                            "drift",
-                            "freshness",
-                            "lint",
-                            "diff",
-                            "plan",
-                            "export",
-                        ],
-                    ),
-                    ("SETUP:", &["init", "update", "help"]),
-                ];
-
-                if let Some(commands) = catalog["commands"].as_array() {
-                    for (heading, names) in groups {
-                        println!("{}", heading.bold());
-                        for name in *names {
-                            if let Some(cmd) =
-                                commands.iter().find(|c| c["name"].as_str() == Some(name))
-                            {
-                                let desc = cmd["description"].as_str().unwrap_or("");
-                                // Truncate description at first period for compact display
-                                let short = desc.find(". ").map(|i| &desc[..i + 1]).unwrap_or(desc);
-                                println!("  {:<22} {}", name.cyan(), short);
-                            }
-                        }
-                        println!();
-                    }
-                }
-
-                println!("{}", "EXIT CODES:".bold());
-                println!("  {}  Success", "0".cyan());
-                println!("  {}  Error", "1".cyan());
-                println!(
-                    "  {}  Actionable condition (drift detected, lint issues)",
-                    "2".cyan()
-                );
-                println!();
-                println!("{}", "TOPICS:".bold());
-                println!(
-                    "  {:<22} Node types, edge semantics, versioning, ID conventions",
-                    "lattice help concepts".cyan()
-                );
-                println!(
-                    "  {:<22} Common task-oriented command sequences",
-                    "lattice help workflows".cyan()
-                );
-                println!();
-                println!(
-                    "Use {} for machine-readable command catalog.",
-                    "lattice help --json".cyan()
-                );
-                println!(
-                    "Use {} for help on a specific command.",
-                    "lattice <command> --help".cyan()
-                );
+                print_grouped_help();
             }
         }
     }
