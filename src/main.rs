@@ -24,6 +24,9 @@ use std::process;
 #[command(
     about = "A knowledge coordination protocol for human-agent collaboration.\nDesigned to be discoverable by LLMs — try: lattice --json"
 )]
+#[command(
+    before_help = "Lattice manages sources → theses → requirements → implementations\nConnected by version-tracked edges. Run 'lattice help concepts' for details."
+)]
 #[command(version)]
 #[command(disable_help_subcommand = true)]
 struct Cli {
@@ -41,40 +44,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize a new lattice in the current directory
-    Init {
-        /// Overwrite existing lattice
-        #[arg(short, long)]
-        force: bool,
-
-        /// Also install agent definitions (.claude/agents/)
-        #[arg(long)]
-        agents: bool,
-
-        /// Install Claude Code skill and agent definitions
-        #[arg(long)]
-        skill: bool,
-    },
-
-    /// Add a node (requirement, thesis, source, implementation, or edge) to the lattice
+    // ── Knowledge Graph ─────────────────────────────────────────────
+    /// Add a source, thesis, requirement, implementation, or edge
     Add {
         #[command(subcommand)]
         add_command: AddCommands,
     },
 
-    /// Remove an edge from a node
-    Remove {
-        #[command(subcommand)]
-        remove_command: RemoveCommands,
+    /// Get a node by ID (SRC-*, THX-*, REQ-*, IMP-*)
+    Get {
+        /// Node ID
+        id: String,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 
-    /// Replace an edge's target on a node
-    Replace {
-        #[command(subcommand)]
-        replace_command: ReplaceCommands,
-    },
-
-    /// List nodes of a given type
+    /// List sources, theses, requirements, or implementations
     List {
         /// Node type (sources, theses, requirements, implementations)
         node_type: String,
@@ -100,226 +87,7 @@ enum Commands {
         format: String,
     },
 
-    /// Resolve a requirement with a status
-    Resolve {
-        /// Requirement ID (e.g., REQ-CICD-003)
-        id: String,
-
-        /// Mark as verified (requirement satisfied)
-        #[arg(long, conflicts_with_all = ["blocked", "deferred", "wontfix"])]
-        verified: bool,
-
-        /// Mark as blocked with reason (external constraint)
-        #[arg(long, conflicts_with_all = ["verified", "deferred", "wontfix"])]
-        blocked: Option<String>,
-
-        /// Mark as deferred with reason (user choice to postpone)
-        #[arg(long, conflicts_with_all = ["verified", "blocked", "wontfix"])]
-        deferred: Option<String>,
-
-        /// Mark as wontfix with reason (will not implement)
-        #[arg(long, conflicts_with_all = ["verified", "blocked", "deferred"])]
-        wontfix: Option<String>,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Edit fields on an existing node (auto-bumps patch version)
-    Edit {
-        /// Node ID (e.g., REQ-CORE-001, IMP-DIST-001)
-        id: String,
-
-        /// New title
-        #[arg(long)]
-        title: Option<String>,
-
-        /// New body
-        #[arg(long)]
-        body: Option<String>,
-
-        /// New status (draft, active, deprecated, superseded)
-        #[arg(long)]
-        status: Option<String>,
-
-        /// New priority (P0, P1, P2) — requirements only
-        #[arg(long)]
-        priority: Option<String>,
-
-        /// Comma-separated tags (replaces existing)
-        #[arg(long)]
-        tags: Option<String>,
-
-        /// New category
-        #[arg(long)]
-        category: Option<String>,
-
-        /// Comma-separated file paths (replaces existing) — implementations only
-        #[arg(long)]
-        files: Option<String>,
-
-        /// Test command (e.g., cargo test) — implementations only
-        #[arg(long)]
-        test_command: Option<String>,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Plan implementation of requirements
-    Plan {
-        /// Requirement IDs to plan (e.g., REQ-CLI-001 REQ-CLI-002)
-        #[arg(required = true)]
-        requirements: Vec<String>,
-    },
-
-    /// Check for version drift in the lattice
-    Drift {
-        /// Exit with non-zero status if drift detected
-        #[arg(long)]
-        check: bool,
-
-        /// Acknowledge drift on a node (re-snapshot edge versions)
-        #[arg(long)]
-        acknowledge: Option<String>,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Get a specific node by ID
-    Get {
-        /// Node ID
-        id: String,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Export the lattice to various formats
-    Export {
-        /// Export format (narrative, json, html, pages)
-        #[arg(short, long, default_value = "narrative")]
-        format: String,
-
-        /// Target audience for narrative (investor, contributor, overview)
-        #[arg(short, long, default_value = "overview")]
-        audience: String,
-
-        /// Document title
-        #[arg(short, long, default_value = "Lattice")]
-        title: String,
-
-        /// Include nodes marked as internal
-        #[arg(long)]
-        include_internal: bool,
-
-        /// Output directory for HTML export
-        #[arg(short, long)]
-        output: Option<String>,
-    },
-
-    /// Show a compact status summary of the lattice
-    Summary {
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Lint lattice files for issues
-    Lint {
-        /// Attempt to auto-fix fixable issues
-        #[arg(long)]
-        fix: bool,
-
-        /// Exit with non-zero status on any issue (for CI)
-        #[arg(long)]
-        strict: bool,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Check if lattice has been updated alongside code changes
-    Freshness {
-        /// Maximum allowed age gap between code and lattice changes, in hours (default: 72)
-        #[arg(long, default_value = "72")]
-        threshold: u64,
-
-        /// Exit with code 2 if lattice is stale (for CI/hooks)
-        #[arg(long)]
-        check: bool,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Verify that an implementation satisfies a requirement
-    Verify {
-        /// Implementation ID (e.g., IMP-STORAGE-001)
-        implementation: String,
-
-        /// Must be the literal word "satisfies"
-        #[arg(value_parser = clap::builder::PossibleValuesParser::new(["satisfies"]))]
-        relation: String,
-
-        /// Requirement ID (e.g., REQ-CORE-001)
-        requirement: String,
-
-        /// Record that tests pass
-        #[arg(long)]
-        tests_pass: bool,
-
-        /// Record coverage percentage (0.0-1.0)
-        #[arg(long)]
-        coverage: Option<f64>,
-
-        /// Comma-separated file paths as evidence
-        #[arg(long)]
-        files: Option<String>,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Refine a requirement by creating a sub-requirement from a discovered gap
-    Refine {
-        /// Parent requirement ID (e.g., REQ-CORE-005)
-        parent: String,
-
-        /// Gap type: clarification, design_decision, missing_requirement, contradiction
-        #[arg(long)]
-        gap_type: String,
-
-        /// Brief title for the sub-requirement
-        #[arg(long)]
-        title: String,
-
-        /// What is underspecified and why it matters
-        #[arg(long)]
-        description: String,
-
-        /// Proposed resolution
-        #[arg(long, alias = "proposal")]
-        proposed: Option<String>,
-
-        /// Implementation ID that discovered this gap
-        #[arg(long, alias = "discovered-by")]
-        implementation: Option<String>,
-
-        /// Output format (text, json)
-        #[arg(short, long, default_value = "text")]
-        format: String,
-    },
-
-    /// Search nodes with filters (text, priority, resolution, tags, category, proximity)
+    /// Search sources, theses, requirements, or implementations
     Search {
         /// Node type to search (sources, theses, requirements, implementations)
         #[arg(value_name = "NODE_TYPE")]
@@ -387,51 +155,199 @@ enum Commands {
         format: String,
     },
 
-    /// Run as MCP server over stdio
-    Mcp,
+    /// Edit a source, thesis, requirement, or implementation
+    Edit {
+        /// Node ID (e.g., REQ-CORE-001, IMP-DIST-001)
+        id: String,
 
-    /// Update lattice to the latest version
-    Update {
-        /// Only check for updates, don't install
+        /// New title
+        #[arg(long)]
+        title: Option<String>,
+
+        /// New body
+        #[arg(long)]
+        body: Option<String>,
+
+        /// New status (draft, active, deprecated, superseded)
+        #[arg(long)]
+        status: Option<String>,
+
+        /// New priority (P0, P1, P2) — requirements only
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Comma-separated tags (replaces existing)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// New category
+        #[arg(long)]
+        category: Option<String>,
+
+        /// Comma-separated file paths (replaces existing) — implementations only
+        #[arg(long)]
+        files: Option<String>,
+
+        /// Test command (e.g., cargo test) — implementations only
+        #[arg(long)]
+        test_command: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Resolve a requirement (verified, blocked, deferred, wontfix)
+    Resolve {
+        /// Requirement ID (e.g., REQ-CICD-003)
+        id: String,
+
+        /// Mark as verified (requirement satisfied)
+        #[arg(long, conflicts_with_all = ["blocked", "deferred", "wontfix"])]
+        verified: bool,
+
+        /// Mark as blocked with reason (external constraint)
+        #[arg(long, conflicts_with_all = ["verified", "deferred", "wontfix"])]
+        blocked: Option<String>,
+
+        /// Mark as deferred with reason (user choice to postpone)
+        #[arg(long, conflicts_with_all = ["verified", "blocked", "wontfix"])]
+        deferred: Option<String>,
+
+        /// Mark as wontfix with reason (will not implement)
+        #[arg(long, conflicts_with_all = ["verified", "blocked", "deferred"])]
+        wontfix: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Record that an implementation satisfies a requirement
+    Verify {
+        /// Implementation ID (e.g., IMP-STORAGE-001)
+        implementation: String,
+
+        /// Must be the literal word "satisfies"
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(["satisfies"]))]
+        relation: String,
+
+        /// Requirement ID (e.g., REQ-CORE-001)
+        requirement: String,
+
+        /// Record that tests pass
+        #[arg(long)]
+        tests_pass: bool,
+
+        /// Record coverage percentage (0.0-1.0)
+        #[arg(long)]
+        coverage: Option<f64>,
+
+        /// Comma-separated file paths as evidence
+        #[arg(long)]
+        files: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Create a sub-requirement from a gap found during implementation
+    Refine {
+        /// Parent requirement ID (e.g., REQ-CORE-005)
+        parent: String,
+
+        /// Gap type: clarification, design_decision, missing_requirement, contradiction
+        #[arg(long)]
+        gap_type: String,
+
+        /// Brief title for the sub-requirement
+        #[arg(long)]
+        title: String,
+
+        /// What is underspecified and why it matters
+        #[arg(long)]
+        description: String,
+
+        /// Proposed resolution
+        #[arg(long, alias = "proposal")]
+        proposed: Option<String>,
+
+        /// Implementation ID that discovered this gap
+        #[arg(long, alias = "discovered-by")]
+        implementation: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Remove an edge between two nodes
+    Remove {
+        #[command(subcommand)]
+        remove_command: RemoveCommands,
+    },
+
+    /// Retarget an edge to a different node
+    Replace {
+        #[command(subcommand)]
+        replace_command: ReplaceCommands,
+    },
+
+    // ── Health & Analysis ───────────────────────────────────────────
+    /// Status overview — node counts, resolution, drift, orphans
+    Summary {
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Check for version drift in edge bindings
+    Drift {
+        /// Exit with non-zero status if drift detected
         #[arg(long)]
         check: bool,
 
-        /// Force update even if already up to date
+        /// Acknowledge drift on a node (re-snapshot edge versions)
         #[arg(long)]
-        force: bool,
-
-        /// Install a specific version (e.g., 0.1.5 or v0.1.5)
-        #[arg(long)]
-        version: Option<String>,
+        acknowledge: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
     },
 
-    /// Output CLAUDE.md integration snippet
-    Prompt {
-        /// Output MCP version instead of CLI version
-        #[arg(long)]
-        mcp: bool,
-    },
+    /// Check if lattice is updated alongside code changes
+    Freshness {
+        /// Maximum allowed age gap between code and lattice changes, in hours (default: 72)
+        #[arg(long, default_value = "72")]
+        threshold: u64,
 
-    /// Push lattice data to a remote API
-    Push {
-        /// API URL (overrides config and LATTICE_API_URL env var)
+        /// Exit with code 2 if lattice is stale (for CI/hooks)
         #[arg(long)]
-        api_url: Option<String>,
-
-        /// API key (overrides config and LATTICE_API_KEY env var)
-        #[arg(long)]
-        api_key: Option<String>,
+        check: bool,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
     },
 
-    /// Show lattice nodes added, modified, or resolved since a git ref
+    /// Check lattice files for structural issues
+    Lint {
+        /// Attempt to auto-fix fixable issues
+        #[arg(long)]
+        fix: bool,
+
+        /// Exit with non-zero status on any issue (for CI)
+        #[arg(long)]
+        strict: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Show changes to sources, theses, requirements since a git ref
     Diff {
         /// Git ref to compare against (default: merge-base with main)
         #[arg(long, conflicts_with = "since_push")]
@@ -462,7 +378,72 @@ enum Commands {
         format: String,
     },
 
-    /// Show available commands (use --json for machine-readable catalog)
+    /// Plan implementation order based on requirement dependencies
+    Plan {
+        /// Requirement IDs to plan (e.g., REQ-CLI-001 REQ-CLI-002)
+        #[arg(required = true)]
+        requirements: Vec<String>,
+    },
+
+    /// Export to narrative, JSON, HTML, or GitHub Pages
+    Export {
+        /// Export format (narrative, json, html, pages)
+        #[arg(short, long, default_value = "narrative")]
+        format: String,
+
+        /// Target audience for narrative (investor, contributor, overview)
+        #[arg(short, long, default_value = "overview")]
+        audience: String,
+
+        /// Document title
+        #[arg(short, long, default_value = "Lattice")]
+        title: String,
+
+        /// Include nodes marked as internal
+        #[arg(long)]
+        include_internal: bool,
+
+        /// Output directory for HTML export
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+
+    // ── Setup ───────────────────────────────────────────────────────
+    /// Initialize a new lattice in the current directory
+    Init {
+        /// Overwrite existing lattice
+        #[arg(short, long)]
+        force: bool,
+
+        /// Also install agent definitions (.claude/agents/)
+        #[arg(long)]
+        agents: bool,
+
+        /// Install Claude Code skill and agent definitions
+        #[arg(long)]
+        skill: bool,
+    },
+
+    /// Self-update to the latest version
+    Update {
+        /// Only check for updates, don't install
+        #[arg(long)]
+        check: bool,
+
+        /// Force update even if already up to date
+        #[arg(long)]
+        force: bool,
+
+        /// Install a specific version (e.g., 0.1.5 or v0.1.5)
+        #[arg(long)]
+        version: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Show commands, concepts, or workflows
     Help {
         /// Output as structured JSON for agent consumption
         #[arg(long)]
@@ -474,6 +455,35 @@ enum Commands {
 
         /// Topic to show: concepts, workflows (omit for command list)
         topic: Option<String>,
+    },
+
+    // ── Integrations (hidden from --help) ───────────────────────────
+    /// Run as MCP server over stdio
+    #[command(hide = true)]
+    Mcp,
+
+    /// Output CLAUDE.md integration snippet
+    #[command(hide = true)]
+    Prompt {
+        /// Output MCP version instead of CLI version
+        #[arg(long)]
+        mcp: bool,
+    },
+
+    /// Push lattice data to a remote API
+    #[command(hide = true)]
+    Push {
+        /// API URL (overrides config and LATTICE_API_URL env var)
+        #[arg(long)]
+        api_url: Option<String>,
+
+        /// API key (overrides config and LATTICE_API_KEY env var)
+        #[arg(long)]
+        api_key: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
     },
 }
 
@@ -3974,19 +3984,68 @@ fn run_command(command: Commands) {
                 // Human-readable help
                 let catalog = build_command_catalog();
                 println!(
-                    "{}\n",
-                    "LATTICE - A knowledge coordination protocol for human-agent collaboration"
-                        .bold()
+                    "{}",
+                    "Lattice manages sources → theses → requirements → implementations".bold()
                 );
-                println!("{}", "COMMANDS:".bold());
+                println!(
+                    "{}\n",
+                    "Connected by version-tracked edges. Run 'lattice help concepts' for details."
+                        .dimmed()
+                );
+
+                // Group commands by section
+                let groups: &[(&str, &[&str])] = &[
+                    (
+                        "KNOWLEDGE GRAPH:",
+                        &[
+                            "add source",
+                            "add thesis",
+                            "add requirement",
+                            "add implementation",
+                            "add edge",
+                            "get",
+                            "list",
+                            "search",
+                            "edit",
+                            "resolve",
+                            "verify",
+                            "refine",
+                            "remove edge",
+                            "replace edge",
+                        ],
+                    ),
+                    (
+                        "HEALTH & ANALYSIS:",
+                        &[
+                            "summary",
+                            "drift",
+                            "freshness",
+                            "lint",
+                            "diff",
+                            "plan",
+                            "export",
+                        ],
+                    ),
+                    ("SETUP:", &["init", "update", "help"]),
+                ];
+
                 if let Some(commands) = catalog["commands"].as_array() {
-                    for cmd in commands {
-                        let name = cmd["name"].as_str().unwrap_or("");
-                        let desc = cmd["description"].as_str().unwrap_or("");
-                        println!("  {:<22} {}", name.cyan(), desc);
+                    for (heading, names) in groups {
+                        println!("{}", heading.bold());
+                        for name in *names {
+                            if let Some(cmd) =
+                                commands.iter().find(|c| c["name"].as_str() == Some(name))
+                            {
+                                let desc = cmd["description"].as_str().unwrap_or("");
+                                // Truncate description at first period for compact display
+                                let short = desc.find(". ").map(|i| &desc[..i + 1]).unwrap_or(desc);
+                                println!("  {:<22} {}", name.cyan(), short);
+                            }
+                        }
+                        println!();
                     }
                 }
-                println!();
+
                 println!("{}", "EXIT CODES:".bold());
                 println!("  {}  Success", "0".cyan());
                 println!("  {}  Error", "1".cyan());
