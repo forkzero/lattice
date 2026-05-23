@@ -63,19 +63,19 @@ enum Commands {
         /// Node type (sources, theses, requirements, implementations)
         node_type: String,
 
-        /// Filter by status
+        /// Filter by workflow status (draft, active, deprecated, superseded)
         #[arg(short, long)]
         status: Option<String>,
 
-        /// Filter by priority (requirements only)
+        /// Filter by priority (P0, P1, P2) — requirements only
         #[arg(short, long)]
         priority: Option<String>,
 
-        /// Show only blocked items
+        /// Show only blocked items (resolution filter)
         #[arg(long)]
         blocked: bool,
 
-        /// Show only deferred items
+        /// Show only deferred items (resolution filter)
         #[arg(long)]
         deferred: bool,
 
@@ -2163,13 +2163,27 @@ fn run_command(command: Commands) {
 
         Commands::List {
             node_type,
-            status: _,
-            priority: _,
+            status,
+            priority,
             blocked,
             deferred,
             format,
         } => {
             let root = get_lattice_root();
+
+            // Validate --status if provided
+            let status_filter = status.as_ref().map(|s| {
+                s.parse::<Status>().unwrap_or_else(|e| {
+                    emit_error(&format, "invalid_status", &e);
+                })
+            });
+
+            // Validate --priority if provided
+            let priority_filter = priority.as_ref().map(|p| {
+                p.parse::<Priority>().unwrap_or_else(|e| {
+                    emit_error(&format, "invalid_priority", &e);
+                })
+            });
 
             let type_name = match node_type.as_str() {
                 "sources" | "theses" | "requirements" | "implementations" => node_type.as_str(),
@@ -2182,21 +2196,34 @@ fn run_command(command: Commands) {
 
             match load_nodes_by_type(&root, type_name) {
                 Ok(nodes) => {
+                    // Apply filters
+                    let filtered: Vec<_> = nodes
+                        .into_iter()
+                        .filter(|n| {
+                            // --status filter (workflow status: draft, active, deprecated, superseded)
+                            if let Some(ref sf) = status_filter
+                                && &n.status != sf
+                            {
+                                return false;
+                            }
+                            // --priority filter
+                            if let Some(ref pf) = priority_filter
+                                && n.priority.as_ref() != Some(pf)
+                            {
+                                return false;
+                            }
+                            // --blocked / --deferred flags (resolution filters)
+                            if blocked || deferred {
+                                return n.resolution.as_ref().is_some_and(|r| {
+                                    (blocked && matches!(r.status, Resolution::Blocked))
+                                        || (deferred && matches!(r.status, Resolution::Deferred))
+                                });
+                            }
+                            true
+                        })
+                        .collect();
+
                     if is_json(&format) {
-                        let filtered: Vec<_> = if blocked || deferred {
-                            nodes
-                                .into_iter()
-                                .filter(|n| {
-                                    n.resolution.as_ref().is_some_and(|r| {
-                                        (blocked && matches!(r.status, Resolution::Blocked))
-                                            || (deferred
-                                                && matches!(r.status, Resolution::Deferred))
-                                    })
-                                })
-                                .collect()
-                        } else {
-                            nodes
-                        };
                         let json_nodes: Vec<_> = filtered
                             .iter()
                             .map(|n| {
@@ -2215,33 +2242,26 @@ fn run_command(command: Commands) {
                             .collect();
                         println!("{}", serde_json::to_string_pretty(&json_nodes).unwrap());
                     } else {
-                        for node in nodes {
-                            if blocked || deferred {
-                                if let Some(ref res) = node.resolution {
-                                    let show = (blocked
-                                        && matches!(res.status, Resolution::Blocked))
-                                        || (deferred && matches!(res.status, Resolution::Deferred));
-                                    if show {
-                                        let status_str =
-                                            format!("[{:?}]", res.status).to_lowercase();
-                                        let reason = res.reason.as_deref().unwrap_or("");
-                                        println!(
-                                            "{} {} - {} {}",
-                                            node.id.cyan(),
-                                            status_str.yellow(),
-                                            node.title,
-                                            reason.dimmed()
-                                        );
-                                    }
-                                }
-                            } else if let Some(ref res) = node.resolution {
+                        for node in filtered {
+                            if let Some(ref res) = node.resolution {
                                 let status_str = format!("[{:?}]", res.status).to_lowercase();
-                                println!(
-                                    "{} {} - {}",
-                                    node.id.cyan(),
-                                    status_str.yellow(),
-                                    node.title
-                                );
+                                if blocked || deferred {
+                                    let reason = res.reason.as_deref().unwrap_or("");
+                                    println!(
+                                        "{} {} - {} {}",
+                                        node.id.cyan(),
+                                        status_str.yellow(),
+                                        node.title,
+                                        reason.dimmed()
+                                    );
+                                } else {
+                                    println!(
+                                        "{} {} - {}",
+                                        node.id.cyan(),
+                                        status_str.yellow(),
+                                        node.title
+                                    );
+                                }
                             } else {
                                 println!("{} - {}", node.id.cyan(), node.title);
                             }
