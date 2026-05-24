@@ -5,15 +5,11 @@ This project uses [Lattice](https://github.com/forkzero/lattice) for knowledge c
 ## Quick Reference
 
 ```bash
-lattice summary              # Status overview (nodes, resolution, drift)
+lattice summary              # Status overview
 lattice health               # Unified PASS/WARN/FAIL health check
-lattice list requirements    # All requirements
-lattice list messages        # All messages
-lattice get REQ-XXX-001      # Full details with edges
-lattice search -q "keyword"  # Text search
-lattice plan REQ-A REQ-B     # Implementation order
-lattice drift                # Check for stale edge bindings
 lattice help concepts        # Node types, edge semantics, versioning
+lattice help workflows       # Common task-oriented command sequences
+lattice help                 # Full grouped command list
 ```
 
 ## When Working on Features
@@ -22,23 +18,6 @@ lattice help concepts        # Node types, edge semantics, versioning
 2. **Reference requirements** in commits: `Implements REQ-XXX-001`
 3. **After completing**: `lattice resolve REQ-XXX-001 --verified`
 4. **Verify**: `lattice drift` to confirm no stale edges
-
-## Node Types
-
-| Type | Purpose | ID Pattern |
-|------|---------|------------|
-| Source | Research/references | `SRC-XXX` |
-| Thesis | Strategic claims (can be `contested`) | `THX-XXX` |
-| Requirement | Specifications | `REQ-XXX-NNN` |
-| Implementation | Code bindings | `IMP-XXX-NNN` |
-| Message | Persona-specific claims | `MSG-XXX-NNN` |
-
-## Key Edge Types
-
-- `supported_by`, `derives_from`, `satisfies`, `depends_on` (traceability)
-- `reveals_gap_in`, `challenges`, `validates` (feedback)
-- `rebuts`, `concedes` (adversarial debate)
-- `grounded_in` (message → thesis)
 
 ## Resolution States
 
