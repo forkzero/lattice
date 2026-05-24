@@ -1,34 +1,28 @@
 # Lattice Integration (MCP)
 
-This project uses [Lattice](https://github.com/forkzero/lattice) for requirements tracking via MCP.
+This project uses [Lattice](https://github.com/forkzero/lattice) for knowledge coordination via MCP. The `.lattice/` directory contains sources, theses, requirements, implementations, and messages connected by version-tracked edges.
 
 ## MCP Tools
 
 | Tool | Purpose |
 |------|---------|
-| `lattice_summary` | Status overview (start here) |
-| `lattice_search` | Find nodes by criteria |
-| `lattice_get` | Full node details |
-| `lattice_list` | List nodes by type |
-| `lattice_resolve` | Mark requirement status |
+| `lattice_summary` | Status overview — nodes, resolution, drift, contested theses |
+| `lattice_search` | Find nodes by criteria (text, priority, resolution, tags) |
+| `lattice_get` | Full node details with edges |
+| `lattice_list` | List nodes by type (sources, theses, requirements, implementations, messages) |
+| `lattice_resolve` | Mark requirement status (verified, blocked, deferred, wontfix) |
 | `lattice_add_requirement` | Create new requirement |
-| `lattice_drift` | Check for stale edges |
+| `lattice_drift` | Check for stale edge bindings |
 
-## Common Searches
+## Node Types
 
-```json
-// Open P0 requirements
-{"resolution": "unresolved", "priority": "P0"}
-
-// All API requirements
-{"id_prefix": "REQ-API"}
-
-// Requirements related to a node
-{"related_to": "REQ-CORE-001"}
-
-// Tagged items
-{"tags": ["mvp", "core"]}
-```
+| Type | ID Pattern | Purpose |
+|------|-----------|---------|
+| Source | `SRC-*` | Research, papers, references |
+| Thesis | `THX-*` | Strategic claims (can be `contested`) |
+| Requirement | `REQ-*` | Testable specifications |
+| Implementation | `IMP-*` | Code that satisfies requirements |
+| Message | `MSG-*` | Persona-specific claims grounded in theses |
 
 ## Workflow
 

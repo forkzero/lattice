@@ -13,20 +13,27 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this document are t
 ## Quick Reference
 
 ```bash
-lattice summary                  # Status overview (counts, drift, health)
-lattice list requirements        # All requirements
-lattice list requirements -s active --format json  # Filtered, JSON output
-lattice get REQ-XXX-001          # Full node details with edges
-lattice plan REQ-A REQ-B         # Implementation order for requirements
+# Health & Analysis
+lattice summary                  # Status overview (counts, drift, messages, contested)
+lattice health                   # Unified PASS/WARN/FAIL verdict
+lattice health --check           # CI gate — exits 2 on FAIL
 lattice drift                    # Check for stale edge bindings
+lattice freshness                # Check if lattice is updated alongside code
+lattice assess                   # Change pressure (contested theses, drift)
 lattice lint                     # Structural issues
+lattice plan REQ-A REQ-B         # Implementation order for requirements
+
+# Query
+lattice list requirements        # All requirements
+lattice list messages            # All messages
+lattice get REQ-XXX-001          # Full node details with edges
 lattice search -q "keyword"      # Text search (defaults to requirements)
+
+# Modify
 lattice edit REQ-XXX --title "..." # Edit node fields (auto-bumps version)
 lattice add edge --from IMP-XXX --type satisfies --to REQ-XXX  # Wire edges
-lattice remove edge --from IMP-XXX --type satisfies --to REQ-XXX  # Remove edges
-lattice replace edge --from IMP-XXX --type satisfies --old-to REQ-OLD --new-to REQ-NEW  # Retarget edges
-lattice update                   # Self-update to latest version
-lattice update --check           # Check for updates without installing
+lattice remove edge --from IMP-XXX --type satisfies --to REQ-XXX
+lattice replace edge --from IMP-XXX --type satisfies --old-to REQ-OLD --new-to REQ-NEW
 ```
 
 ## Editing Rules
@@ -72,21 +79,25 @@ gh issue create --repo forkzero/lattice \
 | Type | ID Pattern | Purpose |
 |------|-----------|---------|
 | Source | `SRC-XXX` | Research, papers, references |
-| Thesis | `THX-XXX` | Strategic claims backed by sources |
+| Thesis | `THX-XXX` | Strategic claims backed by sources (can be `contested`) |
 | Requirement | `REQ-XXX-NNN` | Testable specifications derived from theses |
 | Implementation | `IMP-XXX-NNN` | Code that satisfies requirements |
+| Message | `MSG-XXX-NNN` | Persona-specific claims grounded in theses |
 
 ## Edge Types
 
 | Edge | Direction | Meaning |
 |------|----------|---------|
-| `supports` | Source → Thesis | Evidence backing a claim |
-| `derives` | Thesis → Requirement | Specification from strategy |
+| `supported_by` | Thesis → Source | Evidence backing a claim |
+| `derives_from` | Requirement → Thesis | Specification from strategy |
 | `satisfies` | Implementation → Requirement | Code fulfills spec |
 | `depends_on` | Requirement → Requirement | Dependency ordering |
 | `reveals_gap_in` | Implementation → Requirement/Thesis | Discovered underspecification |
 | `challenges` | Any → Thesis | Contradictory evidence |
 | `validates` | Implementation → Thesis | Confirming evidence |
+| `rebuts` | Thesis → Thesis | Adversarial debate — direct counter-argument |
+| `concedes` | Thesis → Thesis | Partial agreement in debate |
+| `grounded_in` | Message → Thesis | Messaging claim traces to strategic position |
 
 ## Resolution States
 
@@ -116,6 +127,12 @@ lattice add implementation \
   --body "Description of what was implemented" \
   --language rust --files "src/main.rs,src/lib.rs" \
   --test-command "cargo test" --satisfies REQ-FEAT-001 \
+  --created-by "agent:claude"
+
+lattice add message \
+  --id MSG-DEV-001 --title "Zero infrastructure" \
+  --body "File-based YAML, no servers needed" \
+  --persona developer --grounded-in THX-XXX \
   --created-by "agent:claude"
 
 lattice add edge \
