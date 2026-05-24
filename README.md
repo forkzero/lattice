@@ -14,11 +14,11 @@ Your AI agents write code. But do they know *why*? Lattice connects research, st
 ```
 Sources (research, papers, data)
     ↓ supports
-Theses (strategic claims)
-    ↓ derives
+Theses (strategic claims)          ←─ rebuts/concedes (adversarial debate)
+    ↓ derives                       ←─ grounded_in (messages)
 Requirements (testable specifications)
     ↓ satisfied by
-Implementations (code)
+Implementations (code)              ──→ reveals_gap_in (feedback)
 ```
 
 ## The Problem
@@ -38,6 +38,9 @@ AI agents make this worse. They implement requirements without understanding the
 | **Traceability** | Every requirement links to strategic theses. Every thesis links to research. |
 | **Drift detection** | When requirements change, implementations bound to old versions are flagged. |
 | **Bidirectional feedback** | Implementations can `challenge` or `validate` theses. Gaps flow upstream. |
+| **Adversarial debate** | Theses can `rebut` and `concede` to each other. Confidence tracked over time. |
+| **Messaging** | Persona-specific claims `grounded_in` theses. Drift-detected when theses weaken. |
+| **Health checks** | Unified `lattice health` — freshness, change pressure, and code impact in one verdict. |
 | **Agent-native** | MCP server, structured queries, JSON output. Agents can reason about the graph. |
 | **Git-native** | YAML files in `.lattice/`. No database. Branch, merge, version control. |
 
@@ -74,20 +77,28 @@ DRIFT DETECTED:
 | Version-bound edges | | | | | ✓ |
 | Drift detection | | | | | ✓ |
 | Bidirectional feedback | | | | | ✓ |
+| Adversarial debate | | | | | ✓ |
+| Persona messaging | | | | | ✓ |
+| Unified health checks | | | | | ✓ |
 | Git-native | | | ✓ | ✓ | ✓ |
 | MCP server | | | | | ✓ |
 
 ## Core Concepts
 
-**Nodes** — Four artifact types:
-- **Source**: Research (papers, data, citations)
-- **Thesis**: Strategic claims derived from research
-- **Requirement**: Testable specifications derived from theses
-- **Implementation**: Code that satisfies requirements
+**Nodes** — Five artifact types:
+- **Source** (SRC-*): Research (papers, data, citations)
+- **Thesis** (THX-*): Strategic claims derived from research
+- **Requirement** (REQ-*): Testable specifications derived from theses
+- **Implementation** (IMP-*): Code that satisfies requirements
+- **Message** (MSG-*): Persona-specific claims grounded in theses
 
 **Edges** — Typed, version-bound relationships:
-- `supports`, `derives`, `satisfies`, `depends_on`
+- `supported_by`, `derives_from`, `satisfies`, `depends_on` (traceability)
 - `reveals_gap_in`, `challenges`, `validates` (feedback flows upstream)
+- `rebuts`, `concedes` (adversarial debate between theses)
+- `grounded_in` (message → thesis traceability)
+
+**Status** — Theses can be `draft`, `active`, `contested`, `deprecated`, or `superseded`.
 
 **Resolution** — Requirements track status:
 - `verified` (implemented + tested)
@@ -147,15 +158,22 @@ lattice get REQ-AUTH-001     # Full details
 # Search with filters
 lattice search -q "auth"                        # Keyword search (ranked by relevance)
 lattice search -q "auth" --priority P0           # Filter by priority
-lattice search -q "token" --min-score 2.0        # Only title+body matches
 lattice search --tag mvp --resolution unresolved # Unresolved MVP items
-lattice search --semantic -q "authentication"    # Hybrid keyword+semantic search
+
+# Health checks
+lattice health                  # Unified PASS/WARN/FAIL verdict
+lattice health --check          # CI gate — exits 2 on FAIL
+lattice assess                  # Change pressure (contested theses, drift)
+lattice freshness               # Time gap between code and lattice updates
 
 # Export
 lattice export --format json > lattice-data.json
 lattice export --format pages --output _site
-lattice export --format html --output docs/
 lattice export --audience investor
+
+# Learn the domain model
+lattice help concepts           # Node types, edge semantics, versioning
+lattice help workflows          # Common command sequences
 ```
 
 ## Publishing Documentation
@@ -230,7 +248,7 @@ lattice export --audience overview
 
 ## Status
 
-**v0.1.1** — Pages export format, JSON metadata wrapper, duplicate ID guard, git remote config.
+**v0.2.1** — Adversarial debate (rebuts/concedes edges, contested status, confidence history), messages (persona-specific claims grounded in theses), unified health check, change pressure assessment, schema versioning.
 
 See [docs/STRATEGIC_VISION.md](docs/STRATEGIC_VISION.md) for the full vision.
 

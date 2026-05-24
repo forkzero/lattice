@@ -23,7 +23,8 @@ Instructions for Claude Code when working in this repository.
 │   ├── sources/            # Research backing theses
 │   ├── theses/             # Strategic claims
 │   ├── requirements/       # Specifications for Lattice
-│   └── implementations/    # Code bindings
+│   ├── implementations/    # Code bindings
+│   └── messages/           # Persona-specific messaging
 ├── docs/
 │   └── STRATEGIC_VISION.md # Plain English vision document
 ├── Cargo.toml
@@ -68,19 +69,27 @@ make pre-push
 ## Key Concepts
 
 ### Node Types
-- **Source**: Primary research (papers, articles, URLs)
-- **Thesis**: Strategic claims derived from research
-- **Requirement**: Testable specifications derived from theses
-- **Implementation**: Code that satisfies requirements
+- **Source** (SRC-*): Primary research (papers, articles, URLs)
+- **Thesis** (THX-*): Strategic claims derived from research
+- **Requirement** (REQ-*): Testable specifications derived from theses
+- **Implementation** (IMP-*): Code that satisfies requirements
+- **Message** (MSG-*): Persona-specific claims grounded in theses
 
 ### Edge Types
-- `supports`: Source → Thesis
-- `derives`: Thesis → Requirement
-- `satisfies`: Implementation → Requirement
-- `depends_on`: Requirement → Requirement
+- `supported_by`: Thesis → Source (research backing)
+- `derives_from`: Requirement → Thesis (specification from strategy)
+- `satisfies`: Implementation → Requirement (code fulfills spec)
+- `depends_on`: Requirement → Requirement (dependency)
 - `reveals_gap_in`: Implementation → Requirement/Thesis (feedback)
 - `challenges`: Any → Thesis (contradictory evidence)
 - `validates`: Implementation → Thesis (confirming evidence)
+- `rebuts`: Thesis → Thesis (adversarial debate)
+- `concedes`: Thesis → Thesis (partial agreement in debate)
+- `grounded_in`: Message → Thesis (messaging traceability)
+- `extends`, `conflicts_with`, `supersedes`: General-purpose edges
+
+### Thesis Status
+Theses can be `draft`, `active`, `contested`, `deprecated`, or `superseded`. The `contested` status signals a thesis is under active adversarial challenge — requirements downstream of contested theses are flagged by `lattice assess`.
 
 ### Version-Bound Edges
 Edges record the version of both source and target nodes. When a node changes, edges bound to the old version are flagged as "potentially stale" — this enables drift detection.
@@ -91,34 +100,56 @@ The `.lattice/` directory is the source of truth. YAML files organized by node t
 ## CLI Commands
 
 ```bash
-lattice init                    # Initialize lattice
-lattice init --skill            # Initialize + install Claude Code skill + agents
-lattice list <type>             # List nodes (sources, theses, requirements, implementations)
-lattice get <id>                # Get a specific node
-lattice drift                   # Check for version drift
-lattice drift --check           # Exit non-zero if drift detected
-lattice add requirement ...     # Add a requirement
-lattice add thesis ...          # Add a thesis
-lattice add source ...          # Add a source
+# Knowledge Graph
+lattice add source ...          # Add research (papers, articles, data)
+lattice add thesis ...          # Add a strategic claim backed by sources
+lattice add requirement ...     # Add a testable specification
+lattice add implementation ...  # Add code that satisfies requirements
+lattice add message ...         # Add persona-specific messaging grounded in theses
 lattice add edge ...            # Add an edge between nodes
+lattice get <id>                # Get a specific node with full details
+lattice list <type>             # List nodes (sources, theses, requirements, implementations, messages)
+lattice search -q <query>       # Search with filters (text, priority, resolution, tags)
+lattice edit <id> ...           # Edit a node (auto-bumps version)
+lattice resolve <id> --verified # Resolve a requirement
+lattice verify IMP... satisfies REQ...  # Record implementation satisfaction
+lattice refine <req-id> ...     # Create sub-requirement from discovered gap
 lattice remove edge ...         # Remove an edge
-lattice replace edge ...        # Retarget an edge to a new node
+lattice replace edge ...        # Retarget an edge
+
+# Health & Analysis
+lattice summary                 # Status overview (nodes, resolution, drift)
+lattice drift                   # Check for version drift in edge bindings
+lattice freshness               # Check if lattice is updated alongside code
+lattice assess                  # Assess change pressure (contested theses, drift)
+lattice health                  # Unified health check (PASS/WARN/FAIL verdict)
+lattice health --check          # CI gate — exits 2 on FAIL
+lattice lint                    # Check for structural issues
+lattice diff                    # Show changes since a git ref
+lattice plan REQ-001 REQ-002    # Plan implementation order
 lattice export                  # Export narrative (overview)
 lattice export -a investor      # Export for investors
-lattice export -a contributor   # Export for contributors
 lattice export -f json          # Export as JSON
 lattice export -f pages -o _site  # Export for GitHub Pages
-lattice update                    # Self-update to latest version
-lattice update --check            # Check for updates without installing
-lattice update --version 0.1.5   # Install a specific version
+
+# Setup
+lattice init                    # Initialize lattice
+lattice init --skill            # Initialize + install Claude Code skill + agents
+lattice update                  # Self-update to latest version
+lattice help                    # Show grouped command list
+lattice help concepts           # Node types, edge semantics, versioning
+lattice help workflows          # Common task-oriented command sequences
+lattice --json                  # Machine-readable command catalog for LLMs
+lattice --json --compact        # Compact schema (signatures only, no examples)
 ```
 
 ## Self-Describing
 
 This repository uses Lattice to describe itself. The `.lattice/` directory contains:
-- 6 sources (research)
-- 6 theses (strategic claims)
-- 27 requirements (specifications)
+- 19 sources (research)
+- 10 theses (strategic claims)
+- 81 requirements (specifications)
+- 12 implementations (code bindings)
 
 When implementing features, verify against the self-hosted requirements:
 ```bash
