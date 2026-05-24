@@ -199,33 +199,21 @@ pub struct ConfidenceEntry {
 }
 
 /// Thesis node metadata.
+/// Note: `category` is required — this is what distinguishes ThesisMeta from other
+/// variants in the untagged NodeMeta enum during deserialization.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
 pub struct ThesisMeta {
     pub category: ThesisCategory,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub confidence_history: Vec<ConfidenceEntry>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_researched: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub research_scope: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_directive: Option<String>,
-}
-
-impl Default for ThesisMeta {
-    fn default() -> Self {
-        Self {
-            category: ThesisCategory::Technical,
-            confidence: None,
-            confidence_history: Vec::new(),
-            last_researched: None,
-            research_scope: None,
-            agent_directive: None,
-        }
-    }
 }
 
 impl ThesisMeta {

@@ -343,6 +343,17 @@ enum Commands {
         format: String,
     },
 
+    /// Unified health check — freshness, change pressure, and code impact in one verdict
+    Health {
+        /// Exit with code 2 on FAIL, code 0 on PASS/WARN
+        #[arg(long)]
+        check: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
     /// Check lattice files for structural issues
     Lint {
         /// Attempt to auto-fix fixable issues
@@ -1637,7 +1648,22 @@ fn build_command_catalog() -> serde_json::Value {
                     {"command": "lattice assess --check", "explanation": "Exit non-zero if any change pressure exists — use in CI to trigger planning cycles"},
                     {"command": "lattice assess --format json", "explanation": "Machine-readable assessment for automation"}
                 ],
-                "related_commands": ["drift", "freshness", "summary", "plan"]
+                "related_commands": ["drift", "freshness", "health", "summary", "plan"]
+            },
+            {
+                "name": "health",
+                "description": "Unified health check combining freshness, change pressure, and code impact into a single PASS/WARN/FAIL verdict. Use as the single CI gate for lattice health.",
+                "parameters": [
+                    param("--check", "bool", false, "Exit with code 2 on FAIL verdict (for CI/hooks)"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "output_schema_hint": "{ verdict, freshness: { gap_hours }, change_pressure: { contested_theses, drift_items, total }, code_impact: { total_files_changed, tracked_files_changed, bound_files_count } }",
+                "examples": [
+                    {"command": "lattice health", "explanation": "Check overall lattice health — combines freshness, change pressure, and code impact"},
+                    {"command": "lattice health --check", "explanation": "CI gate — exits non-zero if lattice health is FAIL"},
+                    {"command": "lattice health --format json", "explanation": "Machine-readable health report for automation"}
+                ],
+                "related_commands": ["freshness", "assess", "drift", "summary"]
             },
             {
                 "name": "summary",
@@ -1763,6 +1789,7 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Lint { .. } => "lint",
         Commands::Freshness { .. } => "freshness",
         Commands::Assess { .. } => "assess",
+        Commands::Health { .. } => "health",
         Commands::Verify { .. } => "verify",
         Commands::Refine { .. } => "refine",
         Commands::Search { .. } => "search",
@@ -1837,6 +1864,7 @@ fn print_grouped_help() {
                 "drift",
                 "freshness",
                 "assess",
+                "health",
                 "lint",
                 "diff",
                 "plan",
@@ -3145,6 +3173,190 @@ fn run_command(command: Commands) {
                         println!("  - {}", id);
                     }
                 }
+            }
+        }
+
+        Commands::Health { check, format } => {
+            let root = get_lattice_root();
+
+            // 1. Freshness: single git call for lattice commit hash + timestamp
+            let lattice_git = std::process::Command::new("git")
+                .args(["log", "-1", "--format=%H %ct", "--", ".lattice/"])
+                .current_dir(&root)
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .unwrap_or_default();
+            let (lattice_commit, lattice_ts) = {
+                let parts: Vec<&str> = lattice_git.split_whitespace().collect();
+                if parts.len() == 2 {
+                    (parts[0].to_string(), parts[1].parse::<i64>().ok())
+                } else {
+                    (String::new(), None)
+                }
+            };
+            let code_ts = std::process::Command::new("git")
+                .args([
+                    "log",
+                    "-1",
+                    "--format=%ct",
+                    "--",
+                    ".",
+                    ":!.lattice/",
+                    ":!.claude/",
+                    ":!docs/",
+                    ":!README.md",
+                    ":!CLAUDE.md",
+                    ":!LICENSE",
+                ])
+                .current_dir(&root)
+                .output()
+                .ok()
+                .and_then(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .trim()
+                        .parse::<i64>()
+                        .ok()
+                });
+            let freshness_gap_hours = match (lattice_ts, code_ts) {
+                (Some(l), Some(c)) if c > l => (c - l) as u64 / 3600,
+                _ => 0,
+            };
+
+            // 2. Load graph once — derive all metrics from the index
+            let index = build_node_index(&root).unwrap_or_default();
+            let all_nodes: Vec<_> = index.values().collect();
+
+            let contested_count = all_nodes
+                .iter()
+                .filter(|n| n.node_type == NodeType::Thesis && n.status == Status::Contested)
+                .count();
+
+            let mut drift_count = 0;
+            for node in &all_nodes {
+                for edge in node.all_edges() {
+                    if let Some(target) = index.get(&edge.target)
+                        && edge.version_or_default() != target.version
+                    {
+                        drift_count += 1;
+                    }
+                }
+            }
+
+            let change_pressure = contested_count + drift_count;
+
+            // 3. Code impact: files changed since last .lattice/ commit that are bound in implementations
+            let bound_files: std::collections::HashSet<String> = all_nodes
+                .iter()
+                .filter(|n| n.node_type == NodeType::Implementation)
+                .filter_map(|n| {
+                    if let Some(NodeMeta::Implementation(meta)) = &n.meta {
+                        meta.files.as_ref()
+                    } else {
+                        None
+                    }
+                })
+                .flat_map(|files| files.iter().map(|f| f.path.clone()))
+                .collect();
+
+            let (tracked_files_changed, total_files_changed) = if !lattice_commit.is_empty() {
+                let output = std::process::Command::new("git")
+                    .args([
+                        "diff",
+                        "--name-only",
+                        &lattice_commit,
+                        "--",
+                        ".",
+                        ":!.lattice/",
+                    ])
+                    .current_dir(&root)
+                    .output()
+                    .ok()
+                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                    .unwrap_or_default();
+                let changed: Vec<&str> = output.lines().filter(|l| !l.is_empty()).collect();
+                let tracked = changed.iter().filter(|f| bound_files.contains(**f)).count();
+                (tracked, changed.len())
+            } else {
+                (0, 0)
+            };
+
+            // Compute verdict:
+            // FAIL: pressure + code/time signal together, or high pressure alone
+            // WARN: any single signal (code changed, stale, or some pressure)
+            // PASS: nothing flagged
+            let verdict = if (change_pressure > 0
+                && (tracked_files_changed > 0 || freshness_gap_hours > 72))
+                || change_pressure > 3
+            {
+                "FAIL"
+            } else if tracked_files_changed > 0 || freshness_gap_hours > 72 || change_pressure > 0 {
+                "WARN"
+            } else {
+                "PASS"
+            };
+
+            if is_json(&format) {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "verdict": verdict,
+                        "freshness": {
+                            "gap_hours": freshness_gap_hours,
+                        },
+                        "change_pressure": {
+                            "contested_theses": contested_count,
+                            "drift_items": drift_count,
+                            "total": change_pressure,
+                        },
+                        "code_impact": {
+                            "total_files_changed": total_files_changed,
+                            "tracked_files_changed": tracked_files_changed,
+                            "bound_files_count": bound_files.len(),
+                        },
+                    }))
+                    .unwrap()
+                );
+            } else {
+                let verdict_colored = match verdict {
+                    "PASS" => "PASS".green().bold(),
+                    "WARN" => "WARN".yellow().bold(),
+                    _ => "FAIL".red().bold(),
+                };
+                println!("{} {}\n", "HEALTH:".bold(), verdict_colored);
+
+                println!("  {}", "Freshness:".bold());
+                if freshness_gap_hours > 0 {
+                    println!(
+                        "    Lattice is {}h behind code changes",
+                        freshness_gap_hours
+                    );
+                } else {
+                    println!("    {}", "Lattice is up to date".green());
+                }
+                println!();
+
+                println!("  {}", "Change Pressure:".bold());
+                println!("    Contested theses: {}", contested_count);
+                println!("    Drift items: {}", drift_count);
+                println!();
+
+                println!("  {}", "Code Impact:".bold());
+                println!(
+                    "    {} files changed since last lattice update",
+                    total_files_changed
+                );
+                if !bound_files.is_empty() {
+                    println!(
+                        "    {} of {} lattice-tracked files affected",
+                        tracked_files_changed,
+                        bound_files.len()
+                    );
+                }
+            }
+
+            if check && verdict == "FAIL" {
+                process::exit(2);
             }
         }
 
@@ -4590,6 +4802,7 @@ mod tests {
             "lint",
             "freshness",
             "assess",
+            "health",
             "summary",
             "plan",
             "export",
