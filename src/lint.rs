@@ -241,6 +241,7 @@ fn lint_node_file(path: &Path, _lattice_dir: &Path, issues: &mut Vec<LintIssue>)
         NodeType::Thesis => "theses",
         NodeType::Requirement => "requirements",
         NodeType::Implementation => "implementations",
+        NodeType::Message => "messages",
     };
 
     let in_correct_dir = path.components().any(|c| c.as_os_str() == expected_dir);

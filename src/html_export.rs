@@ -498,6 +498,7 @@ mod tests {
                 },
             ],
             implementations: vec![],
+            messages: vec![],
         }
     }
 

@@ -39,6 +39,7 @@ pub struct LatticeData {
     pub theses: Vec<LatticeNode>,
     pub requirements: Vec<LatticeNode>,
     pub implementations: Vec<LatticeNode>,
+    pub messages: Vec<LatticeNode>,
 }
 
 fn is_visible(node: &LatticeNode, include_internal: bool) -> bool {
@@ -554,6 +555,7 @@ mod tests {
                 make_req("REQ-C", "Future Feature", Priority::P2, None),
             ],
             implementations: vec![make_impl("IMP-001", "Core Impl", &["REQ-A"])],
+            messages: vec![],
         }
     }
 
@@ -735,6 +737,7 @@ mod tests {
             theses: vec![],
             requirements: vec![],
             implementations: vec![],
+            messages: vec![],
         };
         let output = export_narrative(&data, &overview_options());
         assert!(output.contains("# TestProject Overview"));

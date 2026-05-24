@@ -3,8 +3,8 @@
 //! Linked requirements: REQ-CORE-004, REQ-CLI-002, REQ-AGENT-002
 
 use crate::types::{
-    EdgeReference, Edges, LatticeNode, NodeMeta, NodeType, Priority, Reliability, Resolution,
-    ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
+    EdgeReference, Edges, LatticeNode, MessageMeta, NodeMeta, NodeType, Priority, Reliability,
+    Resolution, ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -122,6 +122,59 @@ pub struct LatticeConfig {
     pub api_url: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema_version: Option<String>,
+}
+
+/// The current schema version. Bump when .lattice/ format changes.
+pub const CURRENT_SCHEMA_VERSION: &str = "0.2.0";
+
+/// Schema version comparison result.
+pub enum SchemaCheck {
+    /// Schema is current — no action needed.
+    Current,
+    /// Lattice files are older than the binary — migration available.
+    NeedsMigration(String),
+    /// Lattice files are newer than the binary — binary is too old.
+    BinaryTooOld(String),
+}
+
+/// Check if the lattice schema matches the binary version.
+/// Compares major.minor only — patch differences are considered compatible.
+pub fn check_schema_version(root: &Path) -> SchemaCheck {
+    let config = load_config(root);
+    let repo_version = config.schema_version.unwrap_or_default();
+
+    // Missing or empty schema_version means pre-0.2.0
+    if repo_version.is_empty() {
+        return SchemaCheck::NeedsMigration(repo_version);
+    }
+
+    // Parse major.minor from both versions
+    let parse_major_minor = |v: &str| -> Option<(u32, u32)> {
+        let parts: Vec<&str> = v.split('.').collect();
+        if parts.len() >= 2 {
+            Some((parts[0].parse().ok()?, parts[1].parse().ok()?))
+        } else {
+            None
+        }
+    };
+
+    let repo_mm = parse_major_minor(&repo_version);
+    let bin_mm = parse_major_minor(CURRENT_SCHEMA_VERSION);
+
+    match (repo_mm, bin_mm) {
+        (Some((r_maj, r_min)), Some((b_maj, b_min))) => {
+            if (r_maj, r_min) == (b_maj, b_min) {
+                SchemaCheck::Current
+            } else if (r_maj, r_min) > (b_maj, b_min) {
+                SchemaCheck::BinaryTooOld(repo_version)
+            } else {
+                SchemaCheck::NeedsMigration(repo_version)
+            }
+        }
+        _ => SchemaCheck::NeedsMigration(repo_version),
+    }
 }
 
 /// Read config.yaml from a lattice root.
@@ -135,6 +188,7 @@ pub fn load_config(root: &Path) -> LatticeConfig {
 
 fn build_config_yaml(info: &GitRepoInfo) -> String {
     let mut config = String::from("# Lattice configuration\nversion: \"1.0\"\n");
+    config.push_str(&format!("schema_version: \"{}\"\n", CURRENT_SCHEMA_VERSION));
     config.push_str(&format!("project: \"{}\"\n", info.name));
     if !info.description.is_empty() {
         config.push_str(&format!("description: \"{}\"\n", info.description));
@@ -221,7 +275,13 @@ pub fn init_lattice(root: &Path, force: bool) -> Result<Vec<PathBuf>, StorageErr
     let mut created = Vec::new();
 
     // Create directories
-    let dirs = ["sources", "theses", "requirements", "implementations"];
+    let dirs = [
+        "sources",
+        "theses",
+        "requirements",
+        "implementations",
+        "messages",
+    ];
     for dir in &dirs {
         let path = lattice_dir.join(dir);
         fs::create_dir_all(&path)?;
@@ -285,7 +345,13 @@ pub fn load_nodes_by_type(root: &Path, node_type: &str) -> Result<Vec<LatticeNod
 /// Load all nodes from the lattice.
 pub fn load_all_nodes(root: &Path) -> Result<Vec<LatticeNode>, StorageError> {
     let mut all_nodes = Vec::new();
-    for type_name in &["sources", "theses", "requirements", "implementations"] {
+    for type_name in &[
+        "sources",
+        "theses",
+        "requirements",
+        "implementations",
+        "messages",
+    ] {
         let nodes = load_nodes_by_type(root, type_name)?;
         all_nodes.extend(nodes);
     }
@@ -454,6 +520,10 @@ pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, Sto
         meta: Some(NodeMeta::Thesis(ThesisMeta {
             category: options.category,
             confidence: options.confidence,
+            confidence_history: Vec::new(),
+            last_researched: None,
+            research_scope: None,
+            agent_directive: None,
         })),
         edges: Some(edges),
     };
@@ -575,11 +645,75 @@ pub fn add_implementation(
     Ok(file_path)
 }
 
+/// Options for adding a message node.
+pub struct AddMessageOptions {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub persona: String,
+    pub channel: Option<Vec<String>>,
+    pub grounded_in: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    pub status: Status,
+    pub created_by: String,
+}
+
+/// Add a message node to the lattice.
+pub fn add_message(root: &Path, options: AddMessageOptions) -> Result<PathBuf, StorageError> {
+    check_duplicate_id(root, &options.id)?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    let edges = Edges {
+        grounded_in: make_edge_refs(options.grounded_in),
+        ..Default::default()
+    };
+
+    let node = LatticeNode {
+        id: options.id.clone(),
+        node_type: NodeType::Message,
+        title: options.title,
+        body: options.body,
+        status: options.status,
+        version: "1.0.0".to_string(),
+        created_at: now,
+        created_by: options.created_by,
+        requested_by: get_git_user(),
+        priority: None,
+        category: None,
+        tags: options.tags,
+        acceptance: None,
+        visibility: None,
+        resolution: None,
+        meta: Some(NodeMeta::Message(MessageMeta {
+            persona: options.persona,
+            channel: options.channel,
+        })),
+        edges: Some(edges),
+    };
+
+    let slug = options
+        .id
+        .to_lowercase()
+        .trim_start_matches("msg-")
+        .to_string();
+    let file_name = format!("{}.yaml", slugify(&slug, 40));
+    let file_path = root.join(LATTICE_DIR).join("messages").join(&file_name);
+
+    save_node(&file_path, &node)?;
+    Ok(file_path)
+}
+
 /// Find the file path for a node by ID.
 pub fn find_node_path(root: &Path, node_id: &str) -> Result<PathBuf, StorageError> {
     let lattice_dir = root.join(LATTICE_DIR);
 
-    for type_name in &["sources", "theses", "requirements", "implementations"] {
+    for type_name in &[
+        "sources",
+        "theses",
+        "requirements",
+        "implementations",
+        "messages",
+    ] {
         let type_dir = lattice_dir.join(type_name);
         if !type_dir.exists() {
             continue;
@@ -806,6 +940,9 @@ fn re_snapshot_edges(root: &Path, node: &mut LatticeNode) {
     update_versions!(validates);
     update_versions!(conflicts_with);
     update_versions!(supersedes);
+    update_versions!(rebuts);
+    update_versions!(concedes);
+    update_versions!(grounded_in);
 }
 
 /// Acknowledge drift on a node by re-snapshotting all edge target versions.
@@ -1050,6 +1187,9 @@ pub const EDGE_TYPES: &[&str] = &[
     "validates",
     "conflicts_with",
     "supersedes",
+    "rebuts",
+    "concedes",
+    "grounded_in",
 ];
 
 /// Options for adding a standalone edge between two existing nodes.
@@ -1117,6 +1257,9 @@ pub fn add_edge(root: &Path, options: AddEdgeOptions) -> Result<PathBuf, Storage
         "validates" => upsert_edge!(validates),
         "conflicts_with" => upsert_edge!(conflicts_with),
         "supersedes" => upsert_edge!(supersedes),
+        "rebuts" => upsert_edge!(rebuts),
+        "concedes" => upsert_edge!(concedes),
+        "grounded_in" => upsert_edge!(grounded_in),
         _ => unreachable!(),
     }
 
@@ -1188,6 +1331,9 @@ pub fn remove_edge(root: &Path, options: RemoveEdgeOptions) -> Result<PathBuf, S
         "validates" => remove_from!(validates),
         "conflicts_with" => remove_from!(conflicts_with),
         "supersedes" => remove_from!(supersedes),
+        "rebuts" => remove_from!(rebuts),
+        "concedes" => remove_from!(concedes),
+        "grounded_in" => remove_from!(grounded_in),
         _ => unreachable!(),
     }
 
@@ -1266,6 +1412,9 @@ pub fn replace_edge(root: &Path, options: ReplaceEdgeOptions) -> Result<PathBuf,
         "validates" => replace_in!(validates),
         "conflicts_with" => replace_in!(conflicts_with),
         "supersedes" => replace_in!(supersedes),
+        "rebuts" => replace_in!(rebuts),
+        "concedes" => replace_in!(concedes),
+        "grounded_in" => replace_in!(grounded_in),
         _ => unreachable!(),
     }
 
@@ -1360,7 +1509,8 @@ mod tests {
         assert!(root.join(LATTICE_DIR).join("theses").exists());
         assert!(root.join(LATTICE_DIR).join("requirements").exists());
         assert!(root.join(LATTICE_DIR).join("implementations").exists());
-        assert_eq!(created.len(), 5);
+        assert!(root.join(LATTICE_DIR).join("messages").exists());
+        assert_eq!(created.len(), 6);
     }
 
     #[test]

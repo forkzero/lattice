@@ -48,3 +48,4 @@ exports:
 git:
   require_clean_for_verify: true
   auto_commit_on_verify: false
+schema_version: "0.2.0"

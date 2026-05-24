@@ -5,18 +5,21 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use lattice::{
-    AddEdgeOptions, AddImplementationOptions, AddRequirementOptions, AddSourceOptions,
-    AddThesisOptions, Audience, DiffEntry, DriftSeverity, EditNodeOptions, ExportOptions, GapType,
-    HtmlExportOptions, LatticeData, LintSeverity, Plan, Priority, RefineOptions, RemoveEdgeOptions,
-    ReplaceEdgeOptions, Resolution, ResolveOptions, SearchEngine, SearchParams, Status,
-    VerifyOptions, add_edge, add_implementation, add_requirement, add_source, add_thesis,
-    build_node_index, edit_node, export_html, export_narrative, find_drift, find_lattice_root,
-    fix_issues, format_diff_markdown, format_entry_text, generate_plan, get_github_pages_url,
-    init_lattice, lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
+    AddEdgeOptions, AddImplementationOptions, AddMessageOptions, AddRequirementOptions,
+    AddSourceOptions, AddThesisOptions, Audience, CURRENT_SCHEMA_VERSION, DiffEntry, DriftSeverity,
+    EditNodeOptions, ExportOptions, GapType, HtmlExportOptions, LATTICE_DIR, LatticeData,
+    LintSeverity, NodeMeta, NodeType, Plan, Priority, RefineOptions, RemoveEdgeOptions,
+    ReplaceEdgeOptions, Resolution, ResolveOptions, SchemaCheck, SearchEngine, SearchParams,
+    Status, VerifyOptions, add_edge, add_implementation, add_message, add_requirement, add_source,
+    add_thesis, build_node_index, check_schema_version, edit_node, export_html, export_narrative,
+    find_drift, find_lattice_root, find_node_path, fix_issues, format_diff_markdown,
+    format_entry_text, generate_plan, get_git_user, get_github_pages_url, init_lattice,
+    lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
     refine_requirement, remove_edge, replace_edge, resolve_node, split_csv, verify_implementation,
 };
 use serde_json::json;
 use std::env;
+use std::fs;
 use std::process;
 
 #[derive(Parser)]
@@ -329,6 +332,17 @@ enum Commands {
         format: String,
     },
 
+    /// Assess change pressure — how much has shifted and what's affected
+    Assess {
+        /// Exit with code 2 if change pressure exceeds threshold
+        #[arg(long)]
+        check: bool,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
     /// Check lattice files for structural issues
     Lint {
         /// Attempt to auto-fix fixable issues
@@ -482,6 +496,10 @@ enum Commands {
         #[arg(short, long, default_value = "text")]
         format: String,
     },
+
+    /// Migrate existing .lattice/ to v0.2.0 schema
+    #[command(hide = true)]
+    Migrate,
 }
 
 #[derive(Subcommand)]
@@ -668,6 +686,45 @@ enum AddCommands {
         /// Status (draft, active)
         #[arg(long, default_value = "active")]
         status: String,
+
+        /// Author
+        #[arg(long)]
+        created_by: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Add a message (persona-specific claim grounded in theses)
+    Message {
+        /// Message ID (e.g., MSG-DEV-PERF-001)
+        #[arg(long)]
+        id: String,
+
+        /// Message title
+        #[arg(long)]
+        title: String,
+
+        /// Message body (the actual claim or talking point)
+        #[arg(long)]
+        body: String,
+
+        /// Target persona (e.g., developer, investor, operator)
+        #[arg(long)]
+        persona: String,
+
+        /// Comma-separated channels (e.g., docs, landing-page, pitch-deck)
+        #[arg(long)]
+        channel: Option<String>,
+
+        /// Comma-separated thesis IDs this message is grounded in
+        #[arg(long)]
+        grounded_in: Option<String>,
+
+        /// Comma-separated tags
+        #[arg(long)]
+        tags: Option<String>,
 
         /// Author
         #[arg(long)]
@@ -1144,6 +1201,11 @@ fn build_command_catalog() -> serde_json::Value {
                     "prefix": "IMP-",
                     "purpose": "Code that satisfies requirements. Binds files to specifications.",
                     "connects_to": "Satisfies requirements. Can reveal gaps or validate theses."
+                },
+                "message": {
+                    "prefix": "MSG-",
+                    "purpose": "Persona-specific claims grounded in strategic theses. The outward-facing messaging layer.",
+                    "connects_to": "Grounded in theses via 'grounded_in' edges. Drift-detected when theses weaken."
                 }
             },
             "edges": {
@@ -1156,7 +1218,10 @@ fn build_command_catalog() -> serde_json::Value {
                 "challenges": "Evidence contradicts a thesis — signals the thesis may need revision. Direction: any → thesis.",
                 "validates": "Implementation confirms a thesis through working code — positive feedback. Direction: implementation → thesis.",
                 "conflicts_with": "Two nodes make incompatible claims — needs resolution. Direction: any → any.",
-                "supersedes": "Node replaces an older node — the old node is deprecated. Direction: new → old."
+                "supersedes": "Node replaces an older node — the old node is deprecated. Direction: new → old.",
+                "rebuts": "Thesis directly argues against another thesis — structured adversarial debate. Direction: thesis → thesis.",
+                "concedes": "Thesis acknowledges a valid point from an opposing thesis — partial agreement in debate. Direction: thesis → thesis.",
+                "grounded_in": "Message is grounded in a thesis — messaging claim traces back to strategic position. Direction: message → thesis."
             },
             "versions": "All nodes use semver (MAJOR.MINOR.PATCH). Edges record the target node's version at binding time. When a node is edited, its version bumps and edges bound to the old version become 'potentially stale' — this is drift.",
             "id_conventions": "IDs follow the pattern PREFIX-CATEGORY-NNN (e.g. REQ-CORE-001, THX-AGENT-PROTOCOL, SRC-MCP-SPEC). Categories group related nodes (CORE, CLI, API, AGENT, DIST, etc.)."
@@ -1199,6 +1264,17 @@ fn build_command_catalog() -> serde_json::Value {
                 "steps": [
                     "lattice refine <parent-req-id> --gap-type <type> --title '...' --description '...' --implementation <imp-id>",
                     "lattice drift"
+                ]
+            },
+            {
+                "name": "adversarial_debate",
+                "description": "Challenge a thesis with a counter-thesis and track the debate outcome",
+                "steps": [
+                    "lattice get <thesis-id>",
+                    "lattice add thesis --id THX-COUNTER-... --title '...' --body '...' --category technical",
+                    "lattice add edge --from THX-COUNTER-... --type rebuts --to <thesis-id>",
+                    "lattice edit <thesis-id> --status contested",
+                    "lattice assess"
                 ]
             }
         ],
@@ -1355,6 +1431,26 @@ fn build_command_catalog() -> serde_json::Value {
                     {"command": "lattice add implementation --id IMP-NEW --title 'Storage layer' --body 'File-based YAML storage' --satisfies REQ-CORE-001 --files 'src/storage.rs'", "explanation": "Record an implementation with its requirement bindings and source files"}
                 ],
                 "related_commands": ["verify", "resolve", "refine", "add edge"]
+            },
+            {
+                "name": "add message",
+                "description": "Add a message — a persona-specific claim grounded in strategic theses. Create when you need to capture what to say to a specific audience and trace it back to evidence.",
+                "parameters": [
+                    param("--id", "string", true, "Message ID (e.g. MSG-DEV-PERF-001)"),
+                    param("--title", "string", true, "Message title"),
+                    param("--body", "string", true, "The actual claim or talking point"),
+                    param("--persona", "string", true, "Target persona (e.g. developer, investor, operator)"),
+                    param("--channel", "string", false, "Comma-separated channels (e.g. docs, landing-page, pitch-deck)"),
+                    param("--grounded-in", "string", false, "Comma-separated thesis IDs this message is grounded in"),
+                    param("--tags", "string", false, "Comma-separated tags"),
+                    param("--created-by", "string", false, "Author (e.g. human:george)"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "output_schema_hint": "{ id, title, version, status }",
+                "examples": [
+                    {"command": "lattice add message --id MSG-DEV-001 --title 'Zero infrastructure' --body 'File-based YAML, no servers needed' --persona developer --grounded-in THX-FILE-OVER-DB", "explanation": "Add a developer-facing message grounded in a strategic thesis"}
+                ],
+                "related_commands": ["add thesis", "list", "drift"]
             },
             {
                 "name": "add edge",
@@ -1526,7 +1622,22 @@ fn build_command_catalog() -> serde_json::Value {
                     {"command": "lattice freshness --threshold 24 --check", "explanation": "Stricter threshold — flag if lattice hasn't been updated within 24h of code changes"},
                     {"command": "lattice freshness --format json", "explanation": "Machine-readable freshness check for dashboards"}
                 ],
-                "related_commands": ["drift", "lint", "summary"]
+                "related_commands": ["drift", "lint", "summary", "assess"]
+            },
+            {
+                "name": "assess",
+                "description": "Assess change pressure — how many theses are contested, how many requirements are affected, and whether the graph needs a planning cycle.",
+                "parameters": [
+                    param("--check", "bool", false, "Exit with code 2 if change pressure is non-zero (for CI/hooks)"),
+                    param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
+                ],
+                "output_schema_hint": "{ contested_theses, theses_with_confidence_changes, affected_requirements, drift_items, messages, change_pressure }",
+                "examples": [
+                    {"command": "lattice assess", "explanation": "Show change pressure metrics — contested theses, affected requirements, drift"},
+                    {"command": "lattice assess --check", "explanation": "Exit non-zero if any change pressure exists — use in CI to trigger planning cycles"},
+                    {"command": "lattice assess --format json", "explanation": "Machine-readable assessment for automation"}
+                ],
+                "related_commands": ["drift", "freshness", "summary", "plan"]
             },
             {
                 "name": "summary",
@@ -1651,6 +1762,7 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Summary { .. } => "summary",
         Commands::Lint { .. } => "lint",
         Commands::Freshness { .. } => "freshness",
+        Commands::Assess { .. } => "assess",
         Commands::Verify { .. } => "verify",
         Commands::Refine { .. } => "refine",
         Commands::Search { .. } => "search",
@@ -1658,6 +1770,7 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Update { .. } => "update",
         Commands::Prompt { .. } => "prompt",
         Commands::Push { .. } => "push",
+        Commands::Migrate => "migrate",
         Commands::Diff { .. } => "diff",
         Commands::Help { .. } => "help",
     }
@@ -1705,6 +1818,7 @@ fn print_grouped_help() {
                 "add requirement",
                 "add implementation",
                 "add edge",
+                "add message",
                 "get",
                 "list",
                 "search",
@@ -1722,6 +1836,7 @@ fn print_grouped_help() {
                 "summary",
                 "drift",
                 "freshness",
+                "assess",
                 "lint",
                 "diff",
                 "plan",
@@ -1808,6 +1923,45 @@ fn main() {
     };
 
     let command_name = command_to_name(&command);
+
+    // Check schema version (skip for init, migrate, help, update, mcp, prompt)
+    let skip_schema_check = matches!(
+        command_name,
+        "init" | "migrate" | "help" | "update" | "mcp" | "prompt"
+    );
+    if !skip_schema_check {
+        let cwd = std::env::current_dir().unwrap_or_default();
+        if let Some(root) = find_lattice_root(&cwd) {
+            match check_schema_version(&root) {
+                SchemaCheck::Current => {}
+                SchemaCheck::NeedsMigration(old_version) => {
+                    let label = if old_version.is_empty() {
+                        "unknown".to_string()
+                    } else {
+                        old_version
+                    };
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Warning: This lattice uses schema {} (current: {}). Run 'lattice migrate' to update.",
+                            label, CURRENT_SCHEMA_VERSION
+                        )
+                        .yellow()
+                    );
+                }
+                SchemaCheck::BinaryTooOld(repo_version) => {
+                    eprintln!(
+                        "{}",
+                        format!(
+                            "Warning: This lattice uses schema {} but your binary supports {}. Run 'lattice update' to get the latest version.",
+                            repo_version, CURRENT_SCHEMA_VERSION
+                        )
+                        .yellow()
+                    );
+                }
+            }
+        }
+    }
 
     run_command(command);
 
@@ -2065,6 +2219,37 @@ fn run_command(command: Commands) {
                     Err(e) => emit_error(&format, "add_edge_error", &e.to_string()),
                 }
             }
+            AddCommands::Message {
+                id,
+                title,
+                body,
+                persona,
+                channel,
+                grounded_in,
+                tags,
+                created_by,
+                format,
+            } => {
+                let root = get_lattice_root();
+
+                let options = AddMessageOptions {
+                    id: id.clone(),
+                    title,
+                    body,
+                    persona,
+                    channel: split_csv(channel),
+                    grounded_in: split_csv(grounded_in),
+                    tags: split_csv(tags),
+                    status: Status::Active,
+                    created_by: created_by
+                        .unwrap_or_else(|| get_git_user().unwrap_or_else(|| "unknown".to_string())),
+                };
+
+                match add_message(&root, options) {
+                    Ok(path) => emit_created(&format, "message", &id, &path),
+                    Err(e) => emit_error(&format, "add_message_error", &e.to_string()),
+                }
+            }
         },
 
         Commands::Remove { remove_command } => match remove_command {
@@ -2186,7 +2371,9 @@ fn run_command(command: Commands) {
             });
 
             let type_name = match node_type.as_str() {
-                "sources" | "theses" | "requirements" | "implementations" => node_type.as_str(),
+                "sources" | "theses" | "requirements" | "implementations" | "messages" => {
+                    node_type.as_str()
+                }
                 _ => emit_error(
                     &format,
                     "unknown_type",
@@ -2707,11 +2894,14 @@ fn run_command(command: Commands) {
                 let implementations =
                     load_nodes_by_type(&root, "implementations").unwrap_or_default();
 
+                let messages = load_nodes_by_type(&root, "messages").unwrap_or_default();
+
                 let data = LatticeData {
                     sources,
                     theses,
                     requirements,
                     implementations,
+                    messages,
                 };
 
                 let options = HtmlExportOptions {
@@ -2745,12 +2935,14 @@ fn run_command(command: Commands) {
                 let requirements = load_nodes_by_type(&root, "requirements").unwrap_or_default();
                 let implementations =
                     load_nodes_by_type(&root, "implementations").unwrap_or_default();
+                let messages = load_nodes_by_type(&root, "messages").unwrap_or_default();
 
                 let data = LatticeData {
                     sources,
                     theses,
                     requirements,
                     implementations,
+                    messages,
                 };
 
                 let options = ExportOptions {
@@ -2774,6 +2966,13 @@ fn run_command(command: Commands) {
             let theses = load_nodes_by_type(&root, "theses").unwrap_or_default();
             let requirements = load_nodes_by_type(&root, "requirements").unwrap_or_default();
             let implementations = load_nodes_by_type(&root, "implementations").unwrap_or_default();
+            let messages = load_nodes_by_type(&root, "messages").unwrap_or_default();
+
+            // Count contested theses
+            let contested_count = theses
+                .iter()
+                .filter(|t| t.status == Status::Contested)
+                .count();
 
             // Count requirements by resolution status
             let mut unresolved = 0;
@@ -2847,8 +3046,10 @@ fn run_command(command: Commands) {
                         "sources": sources.len(),
                         "theses": theses.len(),
                         "requirements": requirements.len(),
-                        "implementations": implementations.len()
+                        "implementations": implementations.len(),
+                        "messages": messages.len()
                     },
+                    "contested_theses": contested_count,
                     "requirements": {
                         "by_resolution": {
                             "unresolved": unresolved,
@@ -2880,12 +3081,19 @@ fn run_command(command: Commands) {
 
                 println!("{}", "Nodes:".bold());
                 println!(
-                    "  {} sources, {} theses, {} requirements, {} implementations",
+                    "  {} sources, {} theses, {} requirements, {} implementations, {} messages",
                     sources.len(),
                     theses.len(),
                     requirements.len(),
-                    implementations.len()
+                    implementations.len(),
+                    messages.len()
                 );
+                if contested_count > 0 {
+                    println!(
+                        "  {}",
+                        format!("{} contested theses", contested_count).yellow()
+                    );
+                }
                 println!();
 
                 println!("{}", "Requirements by resolution:".bold());
@@ -3175,6 +3383,191 @@ fn run_command(command: Commands) {
                         println!("{}", msg);
                     }
                 }
+            }
+        }
+
+        Commands::Assess { check, format } => {
+            let root = get_lattice_root();
+            let all_nodes = load_all_nodes(&root).unwrap_or_default();
+
+            let contested_theses: Vec<_> = all_nodes
+                .iter()
+                .filter(|n| n.node_type == NodeType::Thesis && n.status == Status::Contested)
+                .collect();
+
+            let theses_with_history: Vec<_> = all_nodes
+                .iter()
+                .filter(|n| {
+                    if let Some(NodeMeta::Thesis(meta)) = &n.meta {
+                        !meta.confidence_history.is_empty()
+                    } else {
+                        false
+                    }
+                })
+                .collect();
+
+            // Find requirements downstream of contested theses
+            let contested_ids: std::collections::HashSet<_> =
+                contested_theses.iter().map(|n| n.id.as_str()).collect();
+            let affected_requirements: Vec<_> = all_nodes
+                .iter()
+                .filter(|n| {
+                    n.node_type == NodeType::Requirement
+                        && n.edges.as_ref().is_some_and(|e| {
+                            e.derives_from.as_ref().is_some_and(|refs| {
+                                refs.iter()
+                                    .any(|r| contested_ids.contains(r.target.as_str()))
+                            })
+                        })
+                })
+                .collect();
+
+            // Use build_node_index to avoid loading all nodes a second time via find_drift
+            let drift_count = build_node_index(&root)
+                .ok()
+                .map(|index| {
+                    let mut count = 0;
+                    for node in index.values() {
+                        for edge in node.all_edges() {
+                            if let Some(target) = index.get(&edge.target)
+                                && edge.version_or_default() != target.version
+                            {
+                                count += 1;
+                            }
+                        }
+                    }
+                    count
+                })
+                .unwrap_or(0);
+
+            let message_count = all_nodes
+                .iter()
+                .filter(|n| n.node_type == NodeType::Message)
+                .count();
+
+            let change_pressure = contested_theses.len()
+                + theses_with_history.len()
+                + affected_requirements.len()
+                + drift_count;
+
+            if is_json(&format) {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "contested_theses": contested_theses.len(),
+                        "theses_with_confidence_changes": theses_with_history.len(),
+                        "affected_requirements": affected_requirements.len(),
+                        "drift_items": drift_count,
+                        "messages": message_count,
+                        "change_pressure": change_pressure,
+                    }))
+                    .unwrap()
+                );
+            } else {
+                println!("{}", "CHANGE PRESSURE ASSESSMENT".bold());
+                println!();
+                println!(
+                    "  {:<36} {}",
+                    "Contested theses:".cyan(),
+                    contested_theses.len()
+                );
+                println!(
+                    "  {:<36} {}",
+                    "Theses with confidence changes:".cyan(),
+                    theses_with_history.len()
+                );
+                println!(
+                    "  {:<36} {}",
+                    "Requirements affected by contested:".cyan(),
+                    affected_requirements.len()
+                );
+                println!("  {:<36} {}", "Drift items:".cyan(), drift_count);
+                println!("  {:<36} {}", "Messages:".cyan(), message_count);
+                println!();
+                if change_pressure > 0 {
+                    println!(
+                        "{}",
+                        format!(
+                            "Change pressure: {} (contested: {}, drift: {})",
+                            change_pressure,
+                            contested_theses.len(),
+                            drift_count
+                        )
+                        .yellow()
+                    );
+                } else {
+                    println!("{}", "Change pressure: 0 — graph is stable".green());
+                }
+            }
+
+            if check && change_pressure > 0 {
+                process::exit(2);
+            }
+        }
+
+        Commands::Migrate => {
+            let root = get_lattice_root();
+
+            // Create messages directory if missing
+            let messages_dir = root.join(LATTICE_DIR).join("messages");
+            if !messages_dir.exists() {
+                fs::create_dir_all(&messages_dir).ok();
+                println!("{}", "Created .lattice/messages/ directory".green());
+            }
+
+            // Migrate theses: add confidence_history if missing
+            let theses = load_nodes_by_type(&root, "theses").unwrap_or_default();
+            let mut migrated = 0;
+            for node in &theses {
+                if let Ok(path) = find_node_path(&root, &node.id) {
+                    let contents = fs::read_to_string(&path).unwrap_or_default();
+                    if !contents.contains("confidence_history") {
+                        // Re-save to include new fields with defaults
+                        let updated = node.clone();
+                        if let Ok(yaml) = serde_yaml::to_string(&updated) {
+                            fs::write(&path, yaml).ok();
+                            migrated += 1;
+                        }
+                    }
+                }
+            }
+
+            if migrated > 0 {
+                println!(
+                    "{}",
+                    format!("Migrated {} thesis files to v0.2.0 schema", migrated).green()
+                );
+            } else {
+                println!("{}", "All theses already at v0.2.0 schema".green());
+            }
+
+            // Update schema_version in config.yaml
+            let config_path = root.join(LATTICE_DIR).join("config.yaml");
+            if let Ok(contents) = fs::read_to_string(&config_path) {
+                let updated = if contents.contains("schema_version:") {
+                    contents
+                        .lines()
+                        .map(|line| {
+                            if line.starts_with("schema_version:") {
+                                format!("schema_version: \"{}\"", CURRENT_SCHEMA_VERSION)
+                            } else {
+                                line.to_string()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                } else {
+                    format!(
+                        "{}\nschema_version: \"{}\"\n",
+                        contents.trim_end(),
+                        CURRENT_SCHEMA_VERSION
+                    )
+                };
+                fs::write(&config_path, updated).ok();
+                println!(
+                    "{}",
+                    format!("Updated schema_version to {}", CURRENT_SCHEMA_VERSION).green()
+                );
             }
         }
 
@@ -4185,6 +4578,7 @@ mod tests {
             "add source",
             "add implementation",
             "add edge",
+            "add message",
             "remove edge",
             "replace edge",
             "resolve",
@@ -4195,6 +4589,7 @@ mod tests {
             "drift",
             "lint",
             "freshness",
+            "assess",
             "summary",
             "plan",
             "export",

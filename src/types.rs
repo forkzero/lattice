@@ -13,6 +13,7 @@ pub enum NodeType {
     Thesis,
     Requirement,
     Implementation,
+    Message,
 }
 
 /// Priority levels for requirements.
@@ -41,6 +42,7 @@ impl std::str::FromStr for Priority {
 pub enum Status {
     Draft,
     Active,
+    Contested,
     Deprecated,
     Superseded,
 }
@@ -51,10 +53,11 @@ impl std::str::FromStr for Status {
         match s.to_lowercase().as_str() {
             "draft" => Ok(Status::Draft),
             "active" => Ok(Status::Active),
+            "contested" => Ok(Status::Contested),
             "deprecated" => Ok(Status::Deprecated),
             "superseded" => Ok(Status::Superseded),
             _ => Err(format!(
-                "Invalid status: {}. Must be draft, active, deprecated, or superseded",
+                "Invalid status: {}. Must be draft, active, contested, deprecated, or superseded",
                 s
             )),
         }
@@ -145,6 +148,12 @@ pub struct Edges {
     pub conflicts_with: Option<Vec<EdgeReference>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supersedes: Option<Vec<EdgeReference>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rebuts: Option<Vec<EdgeReference>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub concedes: Option<Vec<EdgeReference>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grounded_in: Option<Vec<EdgeReference>>,
 }
 
 /// Acceptance test for requirements.
@@ -179,19 +188,58 @@ pub struct SourceMeta {
     pub retrieved_at: Option<String>,
 }
 
+/// A timestamped confidence change for audit trail.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConfidenceEntry {
+    pub value: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    pub updated_by: String,
+    pub updated_at: String,
+}
+
 /// Thesis node metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ThesisMeta {
     pub category: ThesisCategory,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub confidence_history: Vec<ConfidenceEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_researched: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub research_scope: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_directive: Option<String>,
 }
 
-// Custom serialization for f64 to handle equality
+impl Default for ThesisMeta {
+    fn default() -> Self {
+        Self {
+            category: ThesisCategory::Technical,
+            confidence: None,
+            confidence_history: Vec::new(),
+            last_researched: None,
+            research_scope: None,
+            agent_directive: None,
+        }
+    }
+}
+
 impl ThesisMeta {
     pub fn confidence_value(&self) -> f64 {
         self.confidence.unwrap_or(0.8)
     }
+}
+
+/// Message node metadata.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MessageMeta {
+    pub persona: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channel: Option<Vec<String>>,
 }
 
 /// Implementation node metadata.
@@ -249,9 +297,12 @@ pub struct LatticeNode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum NodeMeta {
-    Source(SourceMeta),
+    // Order matters for #[serde(untagged)]: variants with required fields
+    // must come before variants with all-optional fields to avoid false matches.
     Thesis(ThesisMeta),
+    Message(MessageMeta),
     Implementation(ImplementationMeta),
+    Source(SourceMeta),
 }
 
 impl LatticeNode {
@@ -287,6 +338,15 @@ impl LatticeNode {
                 refs.extend(e.iter());
             }
             if let Some(e) = &edges.supersedes {
+                refs.extend(e.iter());
+            }
+            if let Some(e) = &edges.rebuts {
+                refs.extend(e.iter());
+            }
+            if let Some(e) = &edges.concedes {
+                refs.extend(e.iter());
+            }
+            if let Some(e) = &edges.grounded_in {
                 refs.extend(e.iter());
             }
         }

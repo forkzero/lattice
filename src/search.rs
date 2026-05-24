@@ -342,8 +342,9 @@ fn validate_node_type(node_type: &str) -> Result<&'static str, String> {
         "theses" => Ok("theses"),
         "requirements" => Ok("requirements"),
         "implementations" => Ok("implementations"),
+        "messages" => Ok("messages"),
         _ => Err(format!(
-            "Unknown type: {}. Use: sources, theses, requirements, implementations",
+            "Unknown type: {}. Use: sources, theses, requirements, implementations, messages",
             node_type
         )),
     }
