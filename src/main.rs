@@ -349,6 +349,10 @@ enum Commands {
         #[arg(long)]
         check: bool,
 
+        /// Also run lint — any lint issues escalate verdict to FAIL
+        #[arg(long)]
+        strict: bool,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -1859,7 +1863,7 @@ fn print_grouped_help() {
         ),
         ("ANALYSIS:", &["summary", "diff", "plan", "export"]),
         (
-            "CI/CD:",
+            "AUTOMATED CHECKS:",
             &["health", "drift", "freshness", "assess", "lint"],
         ),
         ("SETUP:", &["init", "update", "help"]),
@@ -3167,7 +3171,11 @@ fn run_command(command: Commands) {
             }
         }
 
-        Commands::Health { check, format } => {
+        Commands::Health {
+            check,
+            strict,
+            format,
+        } => {
             let root = get_lattice_root();
 
             // 1. Freshness: single git call for lattice commit hash + timestamp
@@ -3287,27 +3295,41 @@ fn run_command(command: Commands) {
                 "PASS"
             };
 
+            // 4. Lint (strict mode only)
+            let lint_issues = if strict {
+                lint_lattice(&root).issues.len()
+            } else {
+                0
+            };
+
+            // Escalate verdict if lint issues found in strict mode
+            let verdict = if strict && lint_issues > 0 {
+                "FAIL"
+            } else {
+                verdict
+            };
+
             if is_json(&format) {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!({
-                        "verdict": verdict,
-                        "freshness": {
-                            "gap_hours": freshness_gap_hours,
-                        },
-                        "change_pressure": {
-                            "contested_theses": contested_count,
-                            "drift_items": drift_count,
-                            "total": change_pressure,
-                        },
-                        "code_impact": {
-                            "total_files_changed": total_files_changed,
-                            "tracked_files_changed": tracked_files_changed,
-                            "bound_files_count": bound_files.len(),
-                        },
-                    }))
-                    .unwrap()
-                );
+                let mut result = json!({
+                    "verdict": verdict,
+                    "freshness": {
+                        "gap_hours": freshness_gap_hours,
+                    },
+                    "change_pressure": {
+                        "contested_theses": contested_count,
+                        "drift_items": drift_count,
+                        "total": change_pressure,
+                    },
+                    "code_impact": {
+                        "total_files_changed": total_files_changed,
+                        "tracked_files_changed": tracked_files_changed,
+                        "bound_files_count": bound_files.len(),
+                    },
+                });
+                if strict {
+                    result["lint"] = json!({ "issues": lint_issues });
+                }
+                println!("{}", serde_json::to_string_pretty(&result).unwrap());
             } else {
                 let verdict_colored = match verdict {
                     "PASS" => "PASS".green().bold(),
@@ -3343,6 +3365,16 @@ fn run_command(command: Commands) {
                         tracked_files_changed,
                         bound_files.len()
                     );
+                }
+
+                if strict {
+                    println!();
+                    println!("  {}", "Lint:".bold());
+                    if lint_issues > 0 {
+                        println!("    {}", format!("{} issues found", lint_issues).red());
+                    } else {
+                        println!("    {}", "No issues".green());
+                    }
                 }
             }
 
