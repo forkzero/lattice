@@ -1857,19 +1857,10 @@ fn print_grouped_help() {
                 "replace edge",
             ],
         ),
+        ("ANALYSIS:", &["summary", "diff", "plan", "export"]),
         (
-            "HEALTH & ANALYSIS:",
-            &[
-                "summary",
-                "drift",
-                "freshness",
-                "assess",
-                "health",
-                "lint",
-                "diff",
-                "plan",
-                "export",
-            ],
+            "CI/CD:",
+            &["health", "drift", "freshness", "assess", "lint"],
         ),
         ("SETUP:", &["init", "update", "help"]),
     ];
