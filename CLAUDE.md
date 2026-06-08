@@ -161,9 +161,12 @@ cargo run -- get REQ-CORE-001
 
 When told **"checkpoint"** or **"commit and push"**:
 1. `git status` to check changes
-2. `git add` relevant files
-3. Commit with descriptive message + `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
-4. Push to `origin/main`
+2. Create or switch to a short-lived branch — **never commit directly to `main`**
+3. `git add` relevant files
+4. Commit with descriptive message + `Co-Authored-By: ...`
+5. Push the branch and open a PR (`gh pr create`); merge after CI passes
+
+> Releases are the exception — the "Releasing" flow below pushes the version bump to `main` directly.
 
 ## Lattice Integration (Mandatory)
 
