@@ -18,8 +18,12 @@ fn test_help_flag_shows_grouped_output() {
         "Expected KNOWLEDGE GRAPH heading in --help output"
     );
     assert!(
-        stdout.contains("HEALTH & ANALYSIS:"),
-        "Expected HEALTH & ANALYSIS heading in --help output"
+        stdout.contains("ANALYSIS:"),
+        "Expected ANALYSIS heading in --help output"
+    );
+    assert!(
+        stdout.contains("AUTOMATED CHECKS:"),
+        "Expected AUTOMATED CHECKS heading in --help output"
     );
     assert!(
         stdout.contains("SETUP:"),

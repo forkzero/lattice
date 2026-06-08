@@ -20,8 +20,13 @@ test:
 # Alias for consistency with other repos
 test-all: test
 
-# Pre-commit gate: fast checks (format + lint)
+# Pre-commit gate: format + lint + lattice health
 pre-commit: fmt-check lint
+	@if command -v lattice >/dev/null 2>&1 && lattice health --help 2>&1 | grep -q strict; then \
+		lattice health --strict --check; \
+	else \
+		echo "Note: lattice health skipped (install lattice >=0.2.2 to enable)"; \
+	fi
 	@echo "Pre-commit checks passed."
 
 # Pre-push gate: full checks (format + lint + test + build)

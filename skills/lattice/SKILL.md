@@ -10,15 +10,19 @@ You have access to a **Lattice** knowledge graph in this project. The `.lattice/
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this document are to be interpreted as described in RFC 2119.
 
-## Discovery
+## Common Commands
 
 ```bash
-lattice help                    # Grouped command list
-lattice help concepts           # Node types, edge semantics, versioning, ID conventions
-lattice help workflows          # Common task-oriented command sequences
-lattice <command> --help        # Help for any specific command
-lattice --json --compact        # Machine-readable command schema
+lattice summary                 # Status overview (start here)
+lattice list requirements       # List all requirements
+lattice list messages           # List all messages
+lattice get REQ-XXX-001         # Full node details with edges
+lattice search -q "keyword"     # Text search (defaults to requirements)
+lattice health --strict         # Unified health check (PASS/WARN/FAIL)
+lattice drift                   # Check for stale edge bindings
 ```
+
+Run `lattice help` for the full grouped command list, `lattice help concepts` for node/edge reference, or `lattice <command> --help` for any specific command.
 
 ## Editing Rules
 
