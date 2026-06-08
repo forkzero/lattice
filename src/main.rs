@@ -3184,6 +3184,15 @@ fn run_command(command: Commands) {
         } => {
             let root = get_lattice_root();
 
+            // Check if .lattice/ has staged changes (index-aware for pre-commit, #31)
+            let lattice_staged = std::process::Command::new("git")
+                .args(["diff", "--cached", "--quiet", "--", ".lattice/"])
+                .current_dir(&root)
+                .output()
+                .ok()
+                .map(|o| !o.status.success()) // exit 1 = staged changes exist
+                .unwrap_or(false);
+
             // 1. Freshness: single git call for lattice commit hash + timestamp
             let lattice_git = std::process::Command::new("git")
                 .args(["log", "-1", "--format=%H %ct", "--", ".lattice/"])
@@ -3223,9 +3232,14 @@ fn run_command(command: Commands) {
                         .parse::<i64>()
                         .ok()
                 });
-            let freshness_gap_hours = match (lattice_ts, code_ts) {
-                (Some(l), Some(c)) if c > l => (c - l) as u64 / 3600,
-                _ => 0,
+            // If .lattice/ has staged changes, this commit IS the catch-up (#31)
+            let freshness_gap_hours = if lattice_staged {
+                0
+            } else {
+                match (lattice_ts, code_ts) {
+                    (Some(l), Some(c)) if c > l => (c - l) as u64 / 3600,
+                    _ => 0,
+                }
             };
 
             // 2. Load graph once — derive all metrics from the index
@@ -3264,27 +3278,41 @@ fn run_command(command: Commands) {
                 .flat_map(|files| files.iter().map(|f| f.path.clone()))
                 .collect();
 
-            let (tracked_files_changed, total_files_changed) = if !lattice_commit.is_empty() {
-                let output = std::process::Command::new("git")
-                    .args([
-                        "diff",
-                        "--name-only",
-                        &lattice_commit,
-                        "--",
-                        ".",
-                        ":!.lattice/",
-                    ])
-                    .current_dir(&root)
-                    .output()
-                    .ok()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-                    .unwrap_or_default();
-                let changed: Vec<&str> = output.lines().filter(|l| !l.is_empty()).collect();
-                let tracked = changed.iter().filter(|f| bound_files.contains(**f)).count();
-                (tracked, changed.len())
-            } else {
-                (0, 0)
-            };
+            // If lattice is staged, this commit resolves the diff coupling (#31)
+            let (tracked_files_changed, total_files_changed, affected_file_names) =
+                if lattice_staged {
+                    (0, 0, Vec::new())
+                } else if !lattice_commit.is_empty() {
+                    let output = std::process::Command::new("git")
+                        .args([
+                            "diff",
+                            "--name-only",
+                            &lattice_commit,
+                            "--",
+                            ".",
+                            ":!.lattice/",
+                        ])
+                        .current_dir(&root)
+                        .output()
+                        .ok()
+                        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                        .unwrap_or_default();
+                    let changed: Vec<String> = output
+                        .lines()
+                        .filter(|l| !l.is_empty())
+                        .map(|s| s.to_string())
+                        .collect();
+                    let affected: Vec<String> = changed
+                        .iter()
+                        .filter(|f| bound_files.contains(f.as_str()))
+                        .cloned()
+                        .collect();
+                    let tracked = affected.len();
+                    let total = changed.len();
+                    (tracked, total, affected)
+                } else {
+                    (0, 0, Vec::new())
+                };
 
             // 4. Lint (strict mode only)
             let lint_issues = if strict {
@@ -3331,7 +3359,9 @@ fn run_command(command: Commands) {
                         "total_files_changed": total_files_changed,
                         "tracked_files_changed": tracked_files_changed,
                         "bound_files_count": bound_files.len(),
+                        "affected_files": affected_file_names,
                     },
+                    "lattice_staged": lattice_staged,
                 });
                 if strict {
                     result["lint"] = json!({ "issues": lint_issues });
@@ -3346,7 +3376,9 @@ fn run_command(command: Commands) {
                 println!("{} {}\n", "HEALTH:".bold(), verdict_colored);
 
                 println!("  {}", "Freshness:".bold());
-                if freshness_gap_hours > 0 {
+                if lattice_staged {
+                    println!("    {}", "Lattice update staged — credited".green());
+                } else if freshness_gap_hours > 0 {
                     println!(
                         "    Lattice is {}h behind code changes",
                         freshness_gap_hours
@@ -3362,16 +3394,26 @@ fn run_command(command: Commands) {
                 println!();
 
                 println!("  {}", "Code Impact:".bold());
-                println!(
-                    "    {} files changed since last lattice update",
-                    total_files_changed
-                );
-                if !bound_files.is_empty() {
+                if lattice_staged {
                     println!(
-                        "    {} of {} lattice-tracked files affected",
-                        tracked_files_changed,
-                        bound_files.len()
+                        "    {}",
+                        "Lattice update staged — diff coupling cleared".green()
                     );
+                } else {
+                    println!(
+                        "    {} files changed since last lattice update",
+                        total_files_changed
+                    );
+                    if !bound_files.is_empty() {
+                        println!(
+                            "    {} of {} lattice-tracked files affected",
+                            tracked_files_changed,
+                            bound_files.len()
+                        );
+                    }
+                    for f in &affected_file_names {
+                        println!("      {}", f.yellow());
+                    }
                 }
 
                 if strict {
@@ -3488,6 +3530,37 @@ fn run_command(command: Commands) {
             format,
         } => {
             let root = get_lattice_root();
+
+            // Index-aware: if .lattice/ has staged changes, credit this commit (#31)
+            let lattice_staged = std::process::Command::new("git")
+                .args(["diff", "--cached", "--quiet", "--", ".lattice/"])
+                .current_dir(&root)
+                .output()
+                .ok()
+                .map(|o| !o.status.success())
+                .unwrap_or(false);
+
+            if lattice_staged {
+                if is_json(&format) {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&json!({
+                            "stale": false,
+                            "lattice_staged": true,
+                            "gap_hours": 0,
+                            "threshold_hours": threshold,
+                        }))
+                        .unwrap()
+                    );
+                } else {
+                    println!(
+                        "{}",
+                        "Fresh: lattice update staged — credited for this commit".green()
+                    );
+                }
+                return;
+            }
+
             // Get the most recent commit timestamp touching .lattice/ files
             let lattice_ts = std::process::Command::new("git")
                 .args(["log", "-1", "--format=%ct", "--", ".lattice/"])
