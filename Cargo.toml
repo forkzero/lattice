@@ -1,6 +1,6 @@
 [package]
 name = "lattice"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2024"
 description = "A knowledge coordination protocol for human-agent collaboration"
 repository = "https://github.com/forkzero/lattice"
