@@ -1,4 +1,4 @@
-.PHONY: fmt lint test test-all check build clean install docker-e2e pre-commit pre-push
+.PHONY: fmt fmt-check format format-check lint test test-all check build clean install docker-e2e pre-commit pre-push lattice-fresh hooks
 
 # Format code
 fmt:
@@ -7,6 +7,10 @@ fmt:
 # Check formatting without modifying files
 fmt-check:
 	cargo fmt --check
+
+# Cross-repo verb aliases (every forkzero repo exposes format / format-check)
+format: fmt
+format-check: fmt-check
 
 # Run clippy lints
 lint:
@@ -29,9 +33,23 @@ pre-commit: fmt-check lint
 	fi
 	@echo "Pre-commit checks passed."
 
-# Pre-push gate: full checks (format + lint + test + build)
-pre-push: pre-commit test build
+# Lattice staleness gate: hard-fail if .lattice is >72h behind code.
+# Time-based threshold lives at push/CI altitude, NOT pre-commit (see docs/ENGINEERING.md).
+lattice-fresh:
+	@if command -v lattice >/dev/null 2>&1; then \
+		lattice freshness --check || { echo "Lattice is stale (>72h behind code). Update .lattice before pushing."; exit 1; }; \
+	else \
+		echo "Note: lattice freshness skipped (lattice not installed)"; \
+	fi
+
+# Pre-push gate: full checks (format + lint + lattice freshness + test + build)
+pre-push: pre-commit lattice-fresh test build
 	@echo "Pre-push checks passed."
+
+# Install git hooks (Rust repo has no husky — wire core.hooksPath to committed .githooks/)
+hooks:
+	git config core.hooksPath .githooks
+	@echo "Git hooks installed (core.hooksPath=.githooks)."
 
 # Legacy alias
 check: fmt lint test

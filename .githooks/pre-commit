@@ -1,0 +1,3 @@
+#!/bin/sh
+# Forkzero standard pre-commit gate. See docs/ENGINEERING.md in the forkzero workspace.
+make pre-commit

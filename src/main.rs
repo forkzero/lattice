@@ -3280,21 +3280,6 @@ fn run_command(command: Commands) {
                 (0, 0)
             };
 
-            // Compute verdict:
-            // FAIL: pressure + code/time signal together, or high pressure alone
-            // WARN: any single signal (code changed, stale, or some pressure)
-            // PASS: nothing flagged
-            let verdict = if (change_pressure > 0
-                && (tracked_files_changed > 0 || freshness_gap_hours > 72))
-                || change_pressure > 3
-            {
-                "FAIL"
-            } else if tracked_files_changed > 0 || freshness_gap_hours > 72 || change_pressure > 0 {
-                "WARN"
-            } else {
-                "PASS"
-            };
-
             // 4. Lint (strict mode only)
             let lint_issues = if strict {
                 lint_lattice(&root).issues.len()
@@ -3302,11 +3287,27 @@ fn run_command(command: Commands) {
                 0
             };
 
-            // Escalate verdict if lint issues found in strict mode
-            let verdict = if strict && lint_issues > 0 {
+            // Read configurable threshold
+            let config = load_config(&root);
+            let threshold = config.freshness_threshold_hours.unwrap_or(72);
+
+            // Compute verdict:
+            // Strict mode: FAIL on diff-coupled staleness (bound files changed without lattice update)
+            //              and lint issues. Wall-clock staleness alone stays WARN.
+            // Normal mode: FAIL when pressure + signals combine. WARN on any single signal.
+            let verdict = if (strict && (lint_issues > 0 || tracked_files_changed > 0))
+                || (change_pressure > 0
+                    && (tracked_files_changed > 0 || freshness_gap_hours > threshold))
+                || change_pressure > 3
+            {
                 "FAIL"
+            } else if tracked_files_changed > 0
+                || freshness_gap_hours > threshold
+                || change_pressure > 0
+            {
+                "WARN"
             } else {
-                verdict
+                "PASS"
             };
 
             if is_json(&format) {

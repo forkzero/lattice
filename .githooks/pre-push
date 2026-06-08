@@ -1,0 +1,3 @@
+#!/bin/sh
+# Forkzero standard pre-push gate. See docs/ENGINEERING.md in the forkzero workspace.
+make pre-push

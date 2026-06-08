@@ -124,6 +124,8 @@ pub struct LatticeConfig {
     pub api_key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub schema_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freshness_threshold_hours: Option<u64>,
 }
 
 /// The current schema version. Bump when .lattice/ format changes.
