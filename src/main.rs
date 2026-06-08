@@ -1913,11 +1913,17 @@ fn print_grouped_help() {
 }
 
 fn main() {
-    // Intercept top-level --help/-h before clap parses, so subcommand --help
-    // still uses clap's built-in per-command help.
+    // Intercept top-level --help/-h and --version/-V before clap parses,
+    // so subcommand --help still uses clap's built-in per-command help,
+    // and --version can show the passive update notification.
     let args: Vec<String> = std::env::args().collect();
     if args.len() == 2 && (args[1] == "--help" || args[1] == "-h") {
         print_grouped_help();
+        return;
+    }
+    if args.len() == 2 && (args[1] == "--version" || args[1] == "-V") {
+        println!("lattice {}", env!("CARGO_PKG_VERSION"));
+        lattice::update::maybe_notify_update(None);
         return;
     }
 
