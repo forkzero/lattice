@@ -1,11 +1,23 @@
 #!/bin/sh
 # Lattice installer
 # Usage: curl -fsSL https://forkzero.ai/lattice/install.sh | sh
+#
+# Environment variables:
+#   INSTALL_DIR  Override install location (default: ~/.local/bin)
+#   VERSION      Install a specific version (default: latest)
 
 set -e
 
 REPO="forkzero/lattice"
-INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
+
+# Default to ~/.local/bin (user-writable, no sudo needed)
+if [ -z "$INSTALL_DIR" ]; then
+    if [ -w "/usr/local/bin" ]; then
+        INSTALL_DIR="/usr/local/bin"
+    else
+        INSTALL_DIR="${HOME}/.local/bin"
+    fi
+fi
 
 # Detect OS
 OS="$(uname -s)"
@@ -65,6 +77,9 @@ fi
 echo "Extracting..."
 tar -xzf "$ARCHIVE"
 
+# Ensure install directory exists
+mkdir -p "$INSTALL_DIR"
+
 # Install
 BINARY_DIR="lattice-${VERSION}-${TARGET}"
 if [ -w "$INSTALL_DIR" ]; then
@@ -74,6 +89,23 @@ else
     sudo mv "${BINARY_DIR}/lattice" "$INSTALL_DIR/"
 fi
 
+# Check if install dir is in PATH
+case ":$PATH:" in
+    *":${INSTALL_DIR}:"*) ;;
+    *)
+        echo ""
+        echo "Add ${INSTALL_DIR} to your PATH:"
+        SHELL_NAME="$(basename "$SHELL")"
+        case "$SHELL_NAME" in
+            zsh)  echo "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.zshrc && source ~/.zshrc" ;;
+            bash) echo "  echo 'export PATH=\"${INSTALL_DIR}:\$PATH\"' >> ~/.bashrc && source ~/.bashrc" ;;
+            fish) echo "  fish_add_path ${INSTALL_DIR}" ;;
+            *)    echo "  export PATH=\"${INSTALL_DIR}:\$PATH\"" ;;
+        esac
+        echo ""
+        ;;
+esac
+
 # Verify
 if command -v lattice > /dev/null 2>&1; then
     echo ""
@@ -82,8 +114,9 @@ if command -v lattice > /dev/null 2>&1; then
     echo "Get started:"
     echo "  lattice init          # Initialize a lattice"
     echo "  lattice --help        # Show all commands"
+    echo "  lattice help concepts # Learn the domain model"
 else
     echo ""
     echo "Installed to ${INSTALL_DIR}/lattice"
-    echo "Add ${INSTALL_DIR} to your PATH if not already present."
+    echo "Make sure ${INSTALL_DIR} is in your PATH."
 fi

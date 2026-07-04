@@ -4445,7 +4445,9 @@ fn run_command(command: Commands) {
                             (
                                 format!("Permission denied — cannot write to {}", exe),
                                 if cfg!(unix) {
-                                    Some("Run with sudo: sudo lattice update")
+                                    Some(
+                                        "Reinstall to ~/.local/bin for sudo-free updates:\n  INSTALL_DIR=~/.local/bin curl -fsSL https://forkzero.ai/lattice/install.sh | sh\nOr run: sudo lattice update",
+                                    )
                                 } else {
                                     None
                                 },
