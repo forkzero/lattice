@@ -1291,6 +1291,18 @@ fn build_command_catalog() -> serde_json::Value {
                     "lattice edit <thesis-id> --status contested",
                     "lattice assess"
                 ]
+            },
+            {
+                "name": "resolve_code_impact",
+                "description": "Clear a health FAIL caused by code changes to lattice-tracked files without a corresponding lattice update",
+                "steps": [
+                    "lattice health --format json",
+                    "lattice get <affected-implementation-id>",
+                    "lattice verify <IMP-id> satisfies <REQ-id> --tests-pass",
+                    "lattice edit <IMP-id> --files 'updated-file-list'",
+                    "git add .lattice/",
+                    "lattice health --strict --check"
+                ]
             }
         ],
         "commands": [
@@ -1904,6 +1916,10 @@ fn print_grouped_help() {
     println!(
         "  {:<22} Common task-oriented command sequences",
         "lattice help workflows".cyan()
+    );
+    println!(
+        "  {:<22} Health dimensions, clearing a FAIL, configuration",
+        "lattice help health".cyan()
     );
     println!();
     println!(
@@ -3427,6 +3443,26 @@ fn run_command(command: Commands) {
                 }
             }
 
+            // Print remediation hint on FAIL (text mode only)
+            if verdict == "FAIL" && !is_json(&format) {
+                println!();
+                if tracked_files_changed > 0 && !lattice_staged {
+                    println!(
+                        "  {}",
+                        "Tip: Re-verify bound implementations (lattice verify/edit),".dimmed()
+                    );
+                    println!(
+                        "  {}",
+                        "  then stage .lattice/ alongside your code: git add .lattice/".dimmed()
+                    );
+                } else if lint_issues > 0 {
+                    println!(
+                        "  {}",
+                        "Tip: Run 'lattice lint --fix' to auto-fix, or address manually.".dimmed()
+                    );
+                }
+            }
+
             if check && verdict == "FAIL" {
                 process::exit(2);
             }
@@ -4789,12 +4825,68 @@ fn run_command(command: Commands) {
                             }
                         }
                     }
+                    "health" => {
+                        println!("{}\n", "LATTICE HEALTH".bold());
+                        println!(
+                            "{} produces a single PASS/WARN/FAIL verdict from three signals:\n",
+                            "lattice health".cyan()
+                        );
+
+                        println!("  {}", "1. Freshness".bold());
+                        println!(
+                            "     Time gap between the last code commit and the last .lattice/ commit."
+                        );
+                        println!(
+                            "     WARN when gap exceeds threshold (default 72h, configurable in config.yaml)."
+                        );
+                        println!("     Cleared by committing any .lattice/ change.\n");
+
+                        println!("  {}", "2. Change Pressure".bold());
+                        println!("     Contested theses + version drift in edge bindings.");
+                        println!(
+                            "     Indicates the graph is under stress and may need a planning cycle.\n"
+                        );
+
+                        println!("  {}", "3. Code Impact".bold());
+                        println!(
+                            "     Files changed since the last .lattice/ commit that are bound in"
+                        );
+                        println!("     implementation nodes (lattice-tracked files).");
+                        println!(
+                            "     This is the diff-coupled signal: you changed code the lattice knows"
+                        );
+                        println!("     about, but haven't updated the lattice to reflect it.\n");
+
+                        println!("{}", "CLEARING A FAIL:".bold());
+                        println!(
+                            "  1. Re-verify bound implementations: lattice verify/edit the affected nodes"
+                        );
+                        println!("  2. Stage .lattice/ alongside your code: git add .lattice/");
+                        println!(
+                            "  3. The gate credits staged .lattice/ changes — no --no-verify needed\n"
+                        );
+
+                        println!("{}", "FLAGS:".bold());
+                        println!(
+                            "  {:<20} Also run lint; lint issues escalate to FAIL",
+                            "--strict".cyan()
+                        );
+                        println!("  {:<20} Exit 2 on FAIL (for CI/hooks)", "--check".cyan());
+                        println!("  {:<20} Output as JSON", "--format json".cyan());
+                        println!();
+
+                        println!("{}", "CONFIGURATION:".bold());
+                        println!(
+                            "  freshness_threshold_hours in .lattice/config.yaml (default: 72)"
+                        );
+                    }
                     other => {
                         eprintln!(
-                            "Unknown help topic: {}. Available topics: {}, {}",
+                            "Unknown help topic: {}. Available topics: {}, {}, {}",
                             other.red(),
                             "concepts".cyan(),
-                            "workflows".cyan()
+                            "workflows".cyan(),
+                            "health".cyan()
                         );
                         std::process::exit(1);
                     }
