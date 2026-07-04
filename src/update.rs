@@ -374,15 +374,16 @@ fn write_check_state(path: &std::path::Path, state: &UpdateCheckState) {
         .and_then(|json| std::fs::write(path, json).ok());
 }
 
-fn print_update_notice(latest: &Version) {
+fn print_update_notice(current: &Version, latest: &Version) {
+    eprintln!();
     eprintln!(
-        "{}",
-        format!(
-            "A new version of lattice is available (v{}). Run 'lattice update' to install.",
-            latest
-        )
-        .dimmed()
+        "  {} {} → {}",
+        "Update available:".yellow().bold(),
+        format!("v{}", current).dimmed(),
+        format!("v{}", latest).green().bold()
     );
+    eprintln!("  Run {} to install", "lattice update".cyan());
+    eprintln!();
 }
 
 /// Print a one-line update notice to stderr if a newer version is available.
@@ -420,7 +421,7 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
             if let Ok(latest) = Version::parse(&state.latest_version)
                 && latest > current
             {
-                print_update_notice(&latest);
+                print_update_notice(&current, &latest);
             }
             return;
         }
@@ -449,7 +450,7 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
                 },
             );
             if latest > current {
-                print_update_notice(&latest);
+                print_update_notice(&current, &latest);
             }
         }
         Err(_) => {
