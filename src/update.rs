@@ -402,25 +402,121 @@ fn is_auto_update_enabled() -> bool {
     false
 }
 
-/// Attempt a silent auto-update. Returns true if update succeeded.
-fn run_silent_auto_update() -> bool {
-    let rt = match tokio::runtime::Runtime::new() {
-        Ok(rt) => rt,
-        Err(_) => return false,
+/// Stage an auto-update for next launch. Downloads to ~/.lattice/staged-update
+/// instead of replacing the running binary. The staged binary is applied on
+/// the next invocation via `apply_staged_update()`.
+fn stage_auto_update(rt: &tokio::runtime::Runtime, latest: &Version) {
+    let home = match std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let stage_dir = std::path::PathBuf::from(&home).join(".lattice");
+    let _ = std::fs::create_dir_all(&stage_dir);
+    let stage_path = stage_dir.join("staged-update");
+    let version_path = stage_dir.join("staged-version");
+
+    let client = match build_client_with_timeout(std::time::Duration::from_secs(30)) {
+        Ok(c) => c,
+        Err(_) => return,
     };
 
-    let options = UpdateOptions {
-        check_only: false,
-        force: false,
-        target_version: None,
-    };
+    let target = TARGET_TRIPLE;
+    let archive_filename = archive_name(&latest.to_string(), target);
+    let base_url = format!(
+        "https://github.com/{}/releases/download/v{}",
+        GITHUB_REPO, latest
+    );
+    let archive_url = format!("{}/{}", base_url, archive_filename);
+    let checksums_url = format!("{}/checksums.txt", base_url);
 
-    match rt.block_on(run_update(options)) {
-        Ok(UpdateResult::Updated { from, to }) => {
-            eprintln!("  {} v{} → v{}", "Auto-updated:".green().bold(), from, to);
-            true
+    let result: Result<(), Box<dyn std::error::Error>> = (|| {
+        let (archive_data, checksums_data) = rt.block_on(async {
+            let a = download_bytes(&client, &archive_url).await?;
+            let c = download_bytes(&client, &checksums_url).await?;
+            Ok::<_, UpdateError>((a, c))
+        })?;
+
+        let checksums_text = String::from_utf8_lossy(&checksums_data);
+        let expected_hash = parse_checksum(&checksums_text, &archive_filename)
+            .ok_or("Checksum not found for archive")?;
+        verify_checksum(&archive_data, &expected_hash)?;
+
+        let tmp_dir = tempfile::tempdir()?;
+        let binary_path = extract_binary(&archive_data, tmp_dir.path())?;
+        std::fs::copy(&binary_path, &stage_path)?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&stage_path, std::fs::Permissions::from_mode(0o755))?;
         }
-        _ => false,
+
+        std::fs::write(&version_path, latest.to_string())?;
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => {
+            eprintln!(
+                "  {} v{} staged — will apply on next run",
+                "Auto-update:".green().bold(),
+                latest
+            );
+        }
+        Err(e) => {
+            eprintln!(
+                "  {} {}",
+                "Auto-update failed:".yellow(),
+                e.to_string().dimmed()
+            );
+        }
+    }
+}
+
+/// Apply a previously staged update by replacing the current binary.
+/// Called early in main() before any commands run.
+pub fn apply_staged_update() {
+    let home = match std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")) {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+    let stage_path = std::path::PathBuf::from(&home)
+        .join(".lattice")
+        .join("staged-update");
+    let version_path = std::path::PathBuf::from(&home)
+        .join(".lattice")
+        .join("staged-version");
+
+    if !stage_path.exists() {
+        return;
+    }
+
+    // Skip in dev builds
+    if !is_installed_binary() {
+        let _ = std::fs::remove_file(&stage_path);
+        let _ = std::fs::remove_file(&version_path);
+        return;
+    }
+
+    let version = std::fs::read_to_string(&version_path).unwrap_or_default();
+
+    match self_replace::self_replace(&stage_path) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&stage_path);
+            let _ = std::fs::remove_file(&version_path);
+            if !version.is_empty() {
+                eprintln!("  {} v{}", "Auto-updated to".green().bold(), version.trim());
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "  {} {}",
+                "Auto-update apply failed:".yellow(),
+                e.to_string().dimmed()
+            );
+            let _ = std::fs::remove_file(&stage_path);
+            let _ = std::fs::remove_file(&version_path);
+        }
     }
 }
 
@@ -467,18 +563,27 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
     let current = current_version();
     let now = chrono::Utc::now();
 
-    let auto_update = is_auto_update_enabled();
+    // Helper: stage auto-update or show notice
+    let handle_update = |rt: &tokio::runtime::Runtime, latest: &Version| {
+        if is_auto_update_enabled() {
+            stage_auto_update(rt, latest);
+        } else {
+            print_update_notice(&current, latest);
+        }
+    };
 
     // Check cache first
     if let Some(state) = read_check_state(&cache_path) {
         let age = now.signed_duration_since(state.last_checked);
         if age < chrono::Duration::hours(24) {
-            // Cache is fresh — auto-update or show notice if newer version exists
             if let Ok(latest) = Version::parse(&state.latest_version)
                 && latest > current
             {
-                if auto_update {
-                    run_silent_auto_update();
+                // Only create runtime if we need to stage an update
+                if is_auto_update_enabled() {
+                    if let Ok(rt) = tokio::runtime::Runtime::new() {
+                        stage_auto_update(&rt, &latest);
+                    }
                 } else {
                     print_update_notice(&current, &latest);
                 }
@@ -510,11 +615,7 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
                 },
             );
             if latest > current {
-                if auto_update {
-                    run_silent_auto_update();
-                } else {
-                    print_update_notice(&current, &latest);
-                }
+                handle_update(&rt, &latest);
             }
         }
         Err(_) => {

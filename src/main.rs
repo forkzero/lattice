@@ -1929,6 +1929,9 @@ fn print_grouped_help() {
 }
 
 fn main() {
+    // Apply any staged auto-update before anything else
+    lattice::update::apply_staged_update();
+
     // Intercept top-level --help/-h and --version/-V before clap parses,
     // so subcommand --help still uses clap's built-in per-command help,
     // and --version can show the passive update notification.
