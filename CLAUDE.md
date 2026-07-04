@@ -136,6 +136,9 @@ lattice export -f pages -o _site  # Export for GitHub Pages
 lattice init                    # Initialize lattice
 lattice init --skill            # Initialize + install Claude Code skill + agents
 lattice update                  # Self-update to latest version
+lattice update --check          # Check for updates without installing
+# Auto-update: set auto_update: true in ~/.lattice/config.yaml
+# Or per-session: LATTICE_AUTO_UPDATE=1
 lattice help                    # Show grouped command list
 lattice help concepts           # Node types, edge semantics, versioning
 lattice help workflows          # Common task-oriented command sequences

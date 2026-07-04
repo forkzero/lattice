@@ -374,6 +374,56 @@ fn write_check_state(path: &std::path::Path, state: &UpdateCheckState) {
         .and_then(|json| std::fs::write(path, json).ok());
 }
 
+/// Check if auto-update is enabled via env var or user config.
+///
+/// Priority: LATTICE_AUTO_UPDATE env var > ~/.lattice/config.yaml > default (false)
+fn is_auto_update_enabled() -> bool {
+    // Env var takes priority
+    if let Ok(val) = std::env::var("LATTICE_AUTO_UPDATE") {
+        return val == "1" || val.eq_ignore_ascii_case("true");
+    }
+
+    // Check user config at ~/.lattice/config.yaml
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
+    if let Some(home) = home {
+        let config_path = std::path::PathBuf::from(home)
+            .join(".lattice")
+            .join("config.yaml");
+        if let Ok(contents) = std::fs::read_to_string(&config_path)
+            && let Ok(config) = serde_yaml::from_str::<serde_yaml::Value>(&contents)
+            && let Some(auto) = config.get("auto_update")
+        {
+            return auto.as_bool().unwrap_or(false);
+        }
+    }
+
+    false
+}
+
+/// Attempt a silent auto-update. Returns true if update succeeded.
+fn run_silent_auto_update() -> bool {
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(_) => return false,
+    };
+
+    let options = UpdateOptions {
+        check_only: false,
+        force: false,
+        target_version: None,
+    };
+
+    match rt.block_on(run_update(options)) {
+        Ok(UpdateResult::Updated { from, to }) => {
+            eprintln!("  {} v{} → v{}", "Auto-updated:".green().bold(), from, to);
+            true
+        }
+        _ => false,
+    }
+}
+
 fn print_update_notice(current: &Version, latest: &Version) {
     eprintln!();
     eprintln!(
@@ -382,7 +432,11 @@ fn print_update_notice(current: &Version, latest: &Version) {
         format!("v{}", current).dimmed(),
         format!("v{}", latest).green().bold()
     );
-    eprintln!("  Run {} to install", "lattice update".cyan());
+    eprintln!(
+        "  Run {} to install, or enable {} in ~/.lattice/config.yaml",
+        "lattice update".cyan(),
+        "auto_update: true".cyan()
+    );
     eprintln!();
 }
 
@@ -413,15 +467,21 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
     let current = current_version();
     let now = chrono::Utc::now();
 
+    let auto_update = is_auto_update_enabled();
+
     // Check cache first
     if let Some(state) = read_check_state(&cache_path) {
         let age = now.signed_duration_since(state.last_checked);
         if age < chrono::Duration::hours(24) {
-            // Cache is fresh — show notice if newer version exists
+            // Cache is fresh — auto-update or show notice if newer version exists
             if let Ok(latest) = Version::parse(&state.latest_version)
                 && latest > current
             {
-                print_update_notice(&current, &latest);
+                if auto_update {
+                    run_silent_auto_update();
+                } else {
+                    print_update_notice(&current, &latest);
+                }
             }
             return;
         }
@@ -450,7 +510,11 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
                 },
             );
             if latest > current {
-                print_update_notice(&current, &latest);
+                if auto_update {
+                    run_silent_auto_update();
+                } else {
+                    print_update_notice(&current, &latest);
+                }
             }
         }
         Err(_) => {
@@ -600,5 +664,41 @@ abc123def456  lattice-0.1.7-aarch64-apple-darwin.tar.gz
         write_check_state(&path, &state);
         let loaded = read_check_state(&path).unwrap();
         assert_eq!(loaded.latest_version, "0.2.0");
+    }
+
+    #[test]
+    fn test_auto_update_config_parsing_enabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_dir = dir.path().join(".lattice");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join("config.yaml"), "auto_update: true\n").unwrap();
+
+        let contents = std::fs::read_to_string(config_dir.join("config.yaml")).unwrap();
+        let config: serde_yaml::Value = serde_yaml::from_str(&contents).unwrap();
+        assert!(config.get("auto_update").unwrap().as_bool().unwrap());
+    }
+
+    #[test]
+    fn test_auto_update_config_parsing_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_dir = dir.path().join(".lattice");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join("config.yaml"), "auto_update: false\n").unwrap();
+
+        let contents = std::fs::read_to_string(config_dir.join("config.yaml")).unwrap();
+        let config: serde_yaml::Value = serde_yaml::from_str(&contents).unwrap();
+        assert!(!config.get("auto_update").unwrap().as_bool().unwrap());
+    }
+
+    #[test]
+    fn test_auto_update_config_missing_field() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_dir = dir.path().join(".lattice");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        std::fs::write(config_dir.join("config.yaml"), "version: \"1.0\"\n").unwrap();
+
+        let contents = std::fs::read_to_string(config_dir.join("config.yaml")).unwrap();
+        let config: serde_yaml::Value = serde_yaml::from_str(&contents).unwrap();
+        assert!(config.get("auto_update").is_none());
     }
 }
