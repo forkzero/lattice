@@ -113,12 +113,28 @@ DRIFT DETECTED:
 curl -fsSL https://forkzero.ai/lattice/install.sh | sh
 ```
 
+Installs to `~/.local/bin` (no sudo required). Falls back to `/usr/local/bin` when writable (Docker, CI).
+
 **Windows (PowerShell):**
 ```powershell
 irm https://forkzero.ai/lattice/install.ps1 | iex
 ```
 
 Or download from [GitHub Releases](https://github.com/forkzero/lattice/releases).
+
+### Updating
+
+```bash
+lattice update              # Update to latest
+lattice update --check      # Check without installing
+```
+
+Enable auto-update in `~/.lattice/config.yaml`:
+```yaml
+auto_update: true
+```
+
+Or per-session: `LATTICE_AUTO_UPDATE=1`
 
 <details>
 <summary>Platform-specific binaries</summary>
@@ -248,7 +264,7 @@ lattice export --audience overview
 
 ## Status
 
-**v0.2.1** — Adversarial debate (rebuts/concedes edges, contested status, confidence history), messages (persona-specific claims grounded in theses), unified health check, change pressure assessment, schema versioning.
+**v0.2.6** — Adversarial debate, persona messaging, unified health check with code impact tracking, auto-update, sudo-free installs.
 
 See [docs/STRATEGIC_VISION.md](docs/STRATEGIC_VISION.md) for the full vision.
 
