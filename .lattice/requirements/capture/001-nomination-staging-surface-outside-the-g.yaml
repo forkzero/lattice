@@ -1,0 +1,15 @@
+id: REQ-CAPTURE-001
+type: requirement
+title: Nomination staging surface outside the graph
+body: AI-generated capture nominations are written to a staging surface outside .lattice/ (for example a lattice-inbox file), never directly into the graph. The staging surface supports review — accept, edit, or reject — and only approved nominations enter the graph through the lattice CLI. This is the foundational primitive the nominator and gate depend on.
+status: active
+version: 1.0.0
+created_at: 2026-07-17T23:11:27.481440641+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P1
+category: CAPTURE
+edges:
+  derives_from:
+  - target: THX-MILESTONE-NOMINATION
+    version: 1.0.0

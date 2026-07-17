@@ -1,0 +1,15 @@
+id: REQ-CAPTURE-005
+type: requirement
+title: Nominate-not-commit guardrail
+body: The capture system may only propose. It must never create, edit, or remove graph nodes or edges unattended. Every graph mutation requires explicit human or agent approval through the lattice CLI. This invariant is what lets passive evaluation run continuously without diluting a curated graph.
+status: active
+version: 1.0.0
+created_at: 2026-07-17T23:11:27.560755675+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P0
+category: CAPTURE
+edges:
+  derives_from:
+  - target: THX-MILESTONE-NOMINATION
+    version: 1.0.0

@@ -1,0 +1,20 @@
+id: REQ-CAPTURE-003
+type: requirement
+title: pre-commit lattice-worthiness nominator
+body: On pre-commit, when the relevance prefilter trips, an AI evaluates the staged diff and commit message against the current graph and emits typed nominations (new requirement, reveals_gap_in, challenges, validates) to the staging surface. The nominator must never block the commit and may run asynchronously if the model call is slow. Output is high-precision, capped at roughly three per commit, and returning nothing is a valid and common result.
+status: active
+version: 1.0.0
+created_at: 2026-07-17T23:11:27.599613578+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P1
+category: CAPTURE
+edges:
+  derives_from:
+  - target: THX-MILESTONE-NOMINATION
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CAPTURE-001
+    version: 1.0.0
+  - target: REQ-CAPTURE-002
+    version: 1.0.0
