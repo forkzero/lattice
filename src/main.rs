@@ -168,13 +168,17 @@ enum Commands {
         #[arg(long)]
         body: Option<String>,
 
-        /// New status (draft, active, deprecated, superseded)
+        /// New status (draft, active, contested, deprecated, superseded)
         #[arg(long)]
         status: Option<String>,
 
         /// New priority (P0, P1, P2) — requirements only
         #[arg(long)]
         priority: Option<String>,
+
+        /// New confidence (0.0-1.0) — theses only
+        #[arg(long)]
+        confidence: Option<f64>,
 
         /// Comma-separated tags (replaces existing)
         #[arg(long)]
@@ -832,23 +836,10 @@ fn parse_priority(s: &str) -> Priority {
 }
 
 fn parse_status(s: &str) -> Status {
-    match s.to_lowercase().as_str() {
-        "draft" => Status::Draft,
-        "active" => Status::Active,
-        "deprecated" => Status::Deprecated,
-        "superseded" => Status::Superseded,
-        _ => {
-            eprintln!(
-                "{}",
-                format!(
-                    "Invalid status: {}. Must be draft, active, deprecated, or superseded",
-                    s
-                )
-                .red()
-            );
-            process::exit(1);
-        }
-    }
+    s.parse::<Status>().unwrap_or_else(|e| {
+        eprintln!("{}", e.red());
+        process::exit(1);
+    })
 }
 
 fn parse_reliability(s: &str) -> lattice::types::Reliability {
@@ -969,15 +960,58 @@ fn install_agent_definitions(root: &std::path::Path) -> Result<Vec<std::path::Pa
     Ok(created)
 }
 
+fn skill_content() -> String {
+    include_str!("../skills/lattice/SKILL.md").replace("LATTICE_VERSION", env!("CARGO_PKG_VERSION"))
+}
+
 fn install_skill_definitions(root: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
     let skill_dir = root.join(".claude").join("skills").join("lattice");
     std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
 
     let skill_path = skill_dir.join("SKILL.md");
-    std::fs::write(&skill_path, include_str!("../skills/lattice/SKILL.md"))
-        .map_err(|e| e.to_string())?;
+    std::fs::write(&skill_path, skill_content()).map_err(|e| e.to_string())?;
 
     Ok(vec![skill_path])
+}
+
+/// Auto-update the installed SKILL.md if it has a version line older than the binary.
+/// Skips if no skill is installed or if the version line was removed (user opted out).
+fn maybe_update_skill(root: &std::path::Path) {
+    let skill_path = root
+        .join(".claude")
+        .join("skills")
+        .join("lattice")
+        .join("SKILL.md");
+    if !skill_path.exists() {
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&skill_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // Look for version line in frontmatter
+    let version_line = content.lines().find(|l| l.starts_with("version:"));
+    let installed_version = match version_line {
+        Some(line) => line.trim_start_matches("version:").trim().to_string(),
+        None => return, // No version line = user opted out of auto-updates
+    };
+
+    let current_version = env!("CARGO_PKG_VERSION");
+    if installed_version == current_version {
+        return; // Already current
+    }
+
+    // Regenerate
+    if std::fs::write(&skill_path, skill_content()).is_ok() {
+        eprintln!(
+            "  {} SKILL.md {} → {}",
+            "Updated:".green().bold(),
+            installed_version.dimmed(),
+            current_version.green()
+        );
+    }
 }
 
 fn detect_claude_code(root: &std::path::Path) -> bool {
@@ -1932,6 +1966,11 @@ fn main() {
     // Apply any staged auto-update before anything else
     lattice::update::apply_staged_update();
 
+    // Auto-update skill if installed and outdated
+    if let Some(root) = find_lattice_root(&std::env::current_dir().unwrap_or_default()) {
+        maybe_update_skill(&root);
+    }
+
     // Intercept top-level --help/-h and --version/-V before clap parses,
     // so subcommand --help still uses clap's built-in per-command help,
     // and --version can show the passive update notification.
@@ -2575,6 +2614,7 @@ fn run_command(command: Commands) {
             body,
             status,
             priority,
+            confidence,
             tags,
             category,
             files,
@@ -2593,6 +2633,7 @@ fn run_command(command: Commands) {
                 body,
                 status,
                 priority,
+                confidence,
                 tags,
                 category,
                 files,
