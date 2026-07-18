@@ -3,8 +3,8 @@
 //! Linked requirements: REQ-CORE-004, REQ-CLI-002, REQ-AGENT-002
 
 use crate::types::{
-    EdgeReference, Edges, LatticeNode, MessageMeta, NodeMeta, NodeType, Priority, Reliability,
-    Resolution, ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
+    ConfidenceEntry, EdgeReference, Edges, LatticeNode, MessageMeta, NodeMeta, NodeType, Priority,
+    Reliability, Resolution, ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -773,6 +773,7 @@ pub struct EditNodeOptions {
     pub body: Option<String>,
     pub status: Option<Status>,
     pub priority: Option<Priority>,
+    pub confidence: Option<f64>,
     pub tags: Option<Vec<String>>,
     pub category: Option<String>,
     pub files: Option<Vec<String>>,
@@ -824,6 +825,27 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
         if node.priority.as_ref() != Some(&new_priority) {
             node.priority = Some(new_priority);
             changed = true;
+        }
+    }
+    if let Some(new_confidence) = options.confidence {
+        if node.node_type != NodeType::Thesis {
+            return Err(StorageError::InvalidField(
+                "Confidence can only be set on thesis nodes".to_string(),
+            ));
+        }
+        if let Some(NodeMeta::Thesis(ref mut meta)) = node.meta {
+            let old_confidence = meta.confidence_value();
+            if (new_confidence - old_confidence).abs() > f64::EPSILON {
+                // Record history entry before updating
+                meta.confidence_history.push(ConfidenceEntry {
+                    value: new_confidence,
+                    reason: None,
+                    updated_by: get_git_user().unwrap_or_else(|| "unknown".to_string()),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                });
+                meta.confidence = Some(new_confidence);
+                changed = true;
+            }
         }
     }
     if let Some(tags) = options.tags
@@ -2307,6 +2329,7 @@ mod tests {
                 body: Some("New body".to_string()),
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2352,6 +2375,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: Some(vec!["alpha".to_string(), "beta".to_string()]),
                 category: Some("NEW".to_string()),
                 files: None,
@@ -2400,6 +2424,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2443,6 +2468,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: Some(crate::types::Priority::P0),
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2485,6 +2511,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: Some(crate::types::Priority::P0),
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2530,6 +2557,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: Some(vec!["src/new.rs".to_string(), "src/lib.rs".to_string()]),
@@ -2577,6 +2605,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2623,6 +2652,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: Some(vec!["src/foo.rs".to_string()]),
@@ -3084,6 +3114,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -3106,6 +3137,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -3169,6 +3201,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,

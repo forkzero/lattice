@@ -1,5 +1,7 @@
 ---
 name: lattice
+# Auto-updated by lattice when version changes. Remove this version line to disable auto-updates.
+version: LATTICE_VERSION
 description: "Lattice knowledge graph integration. Use when working in a project with a .lattice/ directory — for requirements, theses, sources, implementations, messages, drift detection, or lattice CLI commands."
 allowed-tools: Bash(lattice *), Bash(./target/release/lattice *), Bash(./target/debug/lattice *), Bash(gh issue *), Read, Grep, Glob
 ---
@@ -61,6 +63,15 @@ gh issue create --repo forkzero/lattice \
 ### If Gaps Are Found
 - `lattice refine REQ-XXX --gap-type missing_requirement --title "..." --description "..."` to create sub-requirements
 - `lattice add edge --from IMP-XXX --type reveals_gap_in --to REQ-XXX --rationale "..."` to record feedback
+
+### Challenging Theses
+When evidence contradicts a strategic claim, agents SHOULD challenge it:
+1. `lattice add thesis --id THX-COUNTER-... --title "..." --body "..." --category technical` — create a counter-thesis
+2. `lattice add edge --from THX-COUNTER-... --type rebuts --to THX-ORIGINAL` — link the challenge
+3. `lattice edit THX-ORIGINAL --status contested --confidence <lower value>` — mark as under debate
+4. `lattice assess` — check change pressure on downstream requirements
+
+Run `lattice help workflows` for the full `adversarial_debate` and `resolve_code_impact` sequences.
 
 ## JSON Output
 
