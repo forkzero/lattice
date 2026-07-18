@@ -18,9 +18,9 @@ pub mod types;
 pub mod update;
 
 pub use capture::{
-    BindingMatch, Inbox, Nomination, NominationKind, PrefilterResult, add_nomination, binding_map,
-    changed_files_since, inbox_path, load_inbox, prefilter, remove_nomination, save_inbox,
-    staged_files,
+    BindingMatch, HookOutcome, Inbox, Nomination, NominationKind, PrefilterResult, accept,
+    add_nomination, changed_files_since, inbox_path, install_hooks, load_inbox, prefilter,
+    remove_nomination, save_inbox, scan_bundle, staged_files,
 };
 pub use diff::{
     ChangeType, DiffEntry, DiffError, DiffResult, compute_changed_fields, format_diff_markdown,
