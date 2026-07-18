@@ -15,7 +15,8 @@ use lattice::{
     find_drift, find_lattice_root, find_node_path, fix_issues, format_diff_markdown,
     format_entry_text, generate_plan, get_git_user, get_github_pages_url, init_lattice,
     lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
-    refine_requirement, remove_edge, replace_edge, resolve_node, split_csv, verify_implementation,
+    refine_requirement, remove_edge, replace_edge, resolve_node, run_git_lines, split_csv,
+    verify_implementation,
 };
 use serde_json::json;
 use std::env;
@@ -3694,25 +3695,17 @@ fn run_command(command: Commands) {
                 if lattice_staged {
                     (0, 0, Vec::new())
                 } else if !lattice_commit.is_empty() {
-                    let output = std::process::Command::new("git")
-                        .args([
+                    let changed = run_git_lines(
+                        &root,
+                        &[
                             "diff",
                             "--name-only",
                             &lattice_commit,
                             "--",
                             ".",
                             ":!.lattice/",
-                        ])
-                        .current_dir(&root)
-                        .output()
-                        .ok()
-                        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-                        .unwrap_or_default();
-                    let changed: Vec<String> = output
-                        .lines()
-                        .filter(|l| !l.is_empty())
-                        .map(|s| s.to_string())
-                        .collect();
+                        ],
+                    );
                     let affected: Vec<String> = changed
                         .iter()
                         .filter(|f| bound_files.contains(f.as_str()))

@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
+use crate::diff::run_git_lines;
 use crate::storage::{AddEdgeOptions, AddRequirementOptions, add_edge, add_requirement};
 use crate::types::{LatticeNode, NodeIndex, NodeMeta, NodeType, Priority, Status};
 
@@ -292,29 +293,12 @@ pub fn prefilter(nodes: &[&LatticeNode], changed_files: &[String]) -> PrefilterR
 
 /// Files staged for commit (`git diff --cached --name-only`).
 pub fn staged_files(root: &Path) -> Vec<String> {
-    git_name_only(root, &["diff", "--cached", "--name-only"])
+    run_git_lines(root, &["diff", "--cached", "--name-only"])
 }
 
 /// Files changed since a git ref (`git diff --name-only <ref>`).
 pub fn changed_files_since(root: &Path, git_ref: &str) -> Vec<String> {
-    git_name_only(root, &["diff", "--name-only", git_ref])
-}
-
-fn git_name_only(root: &Path, args: &[&str]) -> Vec<String> {
-    Command::new("git")
-        .args(args)
-        .current_dir(root)
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .filter(|l| !l.trim().is_empty())
-                .map(|s| s.to_string())
-                .collect()
-        })
-        .unwrap_or_default()
+    run_git_lines(root, &["diff", "--name-only", git_ref])
 }
 
 /// The agent-facing nomination bundle for a `scan` (REQ-CAPTURE-003).

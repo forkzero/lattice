@@ -79,6 +79,28 @@ pub fn git_head_sha() -> Result<String, DiffError> {
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// Run `git <args>` in `dir` and return its stdout as non-empty lines.
+///
+/// Best-effort change detection: a spawn failure, non-zero exit, or empty
+/// output all yield an empty vec, so callers treat "git couldn't tell us" and
+/// "nothing changed" the same. Shared by `capture` and `health`.
+pub fn run_git_lines(dir: &Path, args: &[&str]) -> Vec<String> {
+    Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| {
+            String::from_utf8_lossy(&o.stdout)
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|s| s.to_string())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Compare two nodes field-by-field using serde_json and return the names of changed fields.
 pub fn compute_changed_fields(old: &LatticeNode, new: &LatticeNode) -> Vec<String> {
     let old_val = match serde_json::to_value(old) {

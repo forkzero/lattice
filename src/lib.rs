@@ -24,7 +24,7 @@ pub use capture::{
 };
 pub use diff::{
     ChangeType, DiffEntry, DiffError, DiffResult, compute_changed_fields, format_diff_markdown,
-    format_entry_text, git_head_sha, lattice_diff,
+    format_entry_text, git_head_sha, lattice_diff, run_git_lines,
 };
 pub use export::{Audience, ExportOptions, LatticeData, export_narrative};
 pub use graph::{
