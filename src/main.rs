@@ -434,6 +434,12 @@ enum Commands {
         output: Option<String>,
     },
 
+    /// Milestone knowledge capture — prefilter, nomination inbox, pre-push gate
+    Capture {
+        #[command(subcommand)]
+        capture_command: CaptureCommands,
+    },
+
     // ── Setup ───────────────────────────────────────────────────────
     /// Initialize a new lattice in the current directory
     Init {
@@ -748,6 +754,122 @@ enum AddCommands {
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum CaptureCommands {
+    /// Run the deterministic relevance prefilter and emit a nomination bundle
+    Scan {
+        /// Use staged changes (git diff --cached) — for pre-commit hooks
+        #[arg(long, conflicts_with = "since")]
+        staged: bool,
+
+        /// Compare against a git ref instead of the staged index
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Add a nomination to the staging inbox (does not touch the graph)
+    Add {
+        /// Kind: new-requirement, reveals-gap-in, challenges, validates
+        #[arg(long)]
+        kind: String,
+
+        /// Short title
+        #[arg(long)]
+        title: String,
+
+        /// Body / rationale for the proposed change
+        #[arg(long)]
+        body: String,
+
+        /// Target node id (edge kinds), or derives-from thesis (new-requirement)
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Proposed priority for a new-requirement (P0, P1, P2)
+        #[arg(long)]
+        priority: Option<String>,
+
+        /// Proposed category for a new-requirement
+        #[arg(long)]
+        category: Option<String>,
+
+        /// Why this nomination exists
+        #[arg(long)]
+        rationale: Option<String>,
+
+        /// Provenance (e.g. pre-commit, a commit sha)
+        #[arg(long)]
+        source: Option<String>,
+
+        /// Author (e.g. agent:claude)
+        #[arg(long, default_value = "agent:claude")]
+        created_by: String,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// List pending nominations in the inbox
+    List {
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Show a single nomination
+    Show {
+        /// Nomination id (e.g. NOM-001)
+        id: String,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Accept a nomination — materialize it into the graph and clear it
+    Accept {
+        /// Nomination id (e.g. NOM-001)
+        id: String,
+
+        /// Requirement id to assign (required for new-requirement)
+        #[arg(long)]
+        id_assign: Option<String>,
+
+        /// Source node id for edge kinds (edge goes FROM this node TO the target)
+        #[arg(long)]
+        from: Option<String>,
+
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Reject a nomination — drop it from the inbox
+    Reject {
+        /// Nomination id (e.g. NOM-001)
+        id: String,
+    },
+
+    /// Pre-push review — surface unreviewed nominations and drift
+    Gate {
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+
+    /// Install git pre-commit and pre-push hooks that call capture
+    InstallHooks {
+        /// Overwrite existing hooks not managed by lattice
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -1815,7 +1937,385 @@ fn command_to_name(cmd: &Commands) -> &'static str {
         Commands::Push { .. } => "push",
         Commands::Migrate => "migrate",
         Commands::Diff { .. } => "diff",
+        Commands::Capture { .. } => "capture",
         Commands::Help { .. } => "help",
+    }
+}
+
+/// Dispatch `lattice capture` subcommands (milestone knowledge capture).
+fn handle_capture(cmd: CaptureCommands) {
+    use lattice::capture::{
+        Nomination, NominationKind, add_nomination, changed_files_since, load_inbox, prefilter,
+        remove_nomination, staged_files,
+    };
+
+    let root = get_lattice_root();
+
+    match cmd {
+        CaptureCommands::Scan {
+            staged,
+            since,
+            format,
+        } => {
+            let changed = if let Some(git_ref) = &since {
+                changed_files_since(&root, git_ref)
+            } else if staged {
+                staged_files(&root)
+            } else {
+                // Default to staged if anything is staged, else working-tree vs HEAD.
+                let s = staged_files(&root);
+                if s.is_empty() {
+                    changed_files_since(&root, "HEAD")
+                } else {
+                    s
+                }
+            };
+
+            let index = build_node_index(&root).unwrap_or_default();
+            let nodes: Vec<_> = index.values().collect();
+            let result = prefilter(&nodes, &changed);
+
+            if format == "json" {
+                // Enrich matched requirements with title/body for the agent bundle.
+                let reqs: Vec<serde_json::Value> = result
+                    .requirement_ids()
+                    .iter()
+                    .map(|id| match index.get(id) {
+                        Some(n) => json!({"id": id, "title": n.title, "body": n.body}),
+                        None => json!({"id": id}),
+                    })
+                    .collect();
+                let bundle = json!({
+                    "tripped": result.tripped(),
+                    "changed_files": result.changed_files,
+                    "matches": result.matches,
+                    "requirements": reqs,
+                    "instructions": "For each affected requirement, judge whether this change is lattice-worthy: does it satisfy, contradict (challenges), reveal a gap in (reveals-gap-in), or validate a tracked node, or warrant a new requirement? Emit at most 3 high-confidence nominations via 'lattice capture add'. Returning none is valid.",
+                });
+                println!("{}", serde_json::to_string_pretty(&bundle).unwrap());
+                return;
+            }
+
+            if !result.tripped() {
+                println!(
+                    "{}",
+                    "No tracked surface changed — nothing to nominate.".dimmed()
+                );
+                return;
+            }
+            println!("{}", "Change touches tracked surface:".bold());
+            for m in &result.matches {
+                let reqs = if m.requirements.is_empty() {
+                    "(no satisfies edges)".to_string()
+                } else {
+                    m.requirements.join(", ")
+                };
+                println!("  {} → {} [{}]", m.file.cyan(), m.implementation, reqs);
+            }
+            println!(
+                "\n{}",
+                "AI: evaluate against the graph and propose with 'lattice capture add'; a human accepts.".dimmed()
+            );
+        }
+
+        CaptureCommands::Add {
+            kind,
+            title,
+            body,
+            target,
+            priority,
+            category,
+            rationale,
+            source,
+            created_by,
+            format,
+        } => {
+            let kind = match NominationKind::parse(&kind) {
+                Ok(k) => k,
+                Err(e) => emit_error(&format, "invalid_kind", &e),
+            };
+            let now = chrono::Utc::now().to_rfc3339();
+            let nom = Nomination {
+                id: String::new(),
+                kind,
+                title,
+                body,
+                target,
+                priority,
+                category,
+                rationale,
+                source,
+                created_at: now,
+                created_by,
+            };
+            match add_nomination(&root, nom) {
+                Ok(stored) => {
+                    if format == "json" {
+                        println!("{}", serde_json::to_string_pretty(&stored).unwrap());
+                    } else {
+                        println!(
+                            "{} {} ({})",
+                            "Nominated".green(),
+                            stored.id.bold(),
+                            stored.kind.as_str()
+                        );
+                        println!(
+                            "  Review with 'lattice capture list'; accept with 'lattice capture accept {}'.",
+                            stored.id
+                        );
+                    }
+                }
+                Err(e) => emit_error(&format, "inbox_error", &e),
+            }
+        }
+
+        CaptureCommands::List { format } => {
+            let inbox = load_inbox(&root).unwrap_or_default();
+            if format == "json" {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&inbox.nominations).unwrap()
+                );
+                return;
+            }
+            if inbox.nominations.is_empty() {
+                println!("{}", "Inbox empty — no pending nominations.".dimmed());
+                return;
+            }
+            println!("{} pending nomination(s):", inbox.nominations.len());
+            for n in &inbox.nominations {
+                let tgt = n
+                    .target
+                    .as_deref()
+                    .map(|t| format!(" → {}", t))
+                    .unwrap_or_default();
+                println!(
+                    "  {} [{}] {}{}",
+                    n.id.bold(),
+                    n.kind.as_str().cyan(),
+                    n.title,
+                    tgt
+                );
+            }
+        }
+
+        CaptureCommands::Show { id, format } => {
+            let inbox = load_inbox(&root).unwrap_or_default();
+            match inbox.get(&id) {
+                Some(n) => {
+                    if format == "json" {
+                        println!("{}", serde_json::to_string_pretty(n).unwrap());
+                    } else {
+                        println!("{} [{}]", n.id.bold(), n.kind.as_str().cyan());
+                        println!("{}", n.title.bold());
+                        println!("{}", n.body);
+                        if let Some(t) = &n.target {
+                            println!("target: {}", t);
+                        }
+                        if let Some(r) = &n.rationale {
+                            println!("rationale: {}", r);
+                        }
+                        if let Some(s) = &n.source {
+                            println!("source: {}", s);
+                        }
+                        println!("by {} at {}", n.created_by, n.created_at);
+                    }
+                }
+                None => emit_error(&format, "not_found", &format!("No nomination '{}'", id)),
+            }
+        }
+
+        CaptureCommands::Accept {
+            id,
+            id_assign,
+            from,
+            format,
+        } => {
+            let inbox = load_inbox(&root).unwrap_or_default();
+            let Some(nom) = inbox.get(&id).cloned() else {
+                emit_error(&format, "not_found", &format!("No nomination '{}'", id));
+            };
+
+            let result: Result<String, String> = match nom.kind {
+                NominationKind::NewRequirement => {
+                    let Some(req_id) = id_assign else {
+                        emit_error(
+                            &format,
+                            "missing_id",
+                            "new-requirement needs --id-assign REQ-XXX to materialize",
+                        );
+                    };
+                    let priority = parse_priority(nom.priority.as_deref().unwrap_or("P1"));
+                    let category = nom
+                        .category
+                        .clone()
+                        .unwrap_or_else(|| "CAPTURE".to_string());
+                    let opts = AddRequirementOptions {
+                        id: req_id.clone(),
+                        title: nom.title.clone(),
+                        body: nom.body.clone(),
+                        priority,
+                        category,
+                        tags: None,
+                        derives_from: nom.target.clone().map(|t| vec![t]),
+                        depends_on: None,
+                        status: Status::Active,
+                        created_by: nom.created_by.clone(),
+                    };
+                    add_requirement(&root, opts)
+                        .map(|_| format!("Created requirement {}", req_id))
+                        .map_err(|e| e.to_string())
+                }
+                _ => {
+                    let edge_type = nom.kind.edge_type().unwrap();
+                    let Some(from_id) = from else {
+                        emit_error(
+                            &format,
+                            "missing_from",
+                            &format!("{} needs --from <ID> (the source node)", nom.kind.as_str()),
+                        );
+                    };
+                    let Some(to_id) = nom.target.clone() else {
+                        emit_error(
+                            &format,
+                            "missing_target",
+                            "edge nomination has no target node",
+                        );
+                    };
+                    add_edge(
+                        &root,
+                        AddEdgeOptions {
+                            from_id: from_id.clone(),
+                            edge_type: edge_type.to_string(),
+                            to_id: to_id.clone(),
+                            rationale: nom.rationale.clone().or(Some(nom.body.clone())),
+                        },
+                    )
+                    .map(|_| format!("Added edge {} --[{}]--> {}", from_id, edge_type, to_id))
+                    .map_err(|e| e.to_string())
+                }
+            };
+
+            match result {
+                Ok(msg) => {
+                    let _ = remove_nomination(&root, &nom.id);
+                    if format == "json" {
+                        println!("{}", json!({"accepted": nom.id, "result": msg}));
+                    } else {
+                        println!("{} {}", "Accepted".green(), nom.id.bold());
+                        println!("  {}", msg);
+                    }
+                }
+                Err(e) => emit_error(&format, "accept_failed", &e),
+            }
+        }
+
+        CaptureCommands::Reject { id } => match remove_nomination(&root, &id) {
+            Ok(Some(n)) => println!("{} {}", "Rejected".yellow(), n.id.bold()),
+            Ok(None) => {
+                eprintln!("{}", format!("No nomination '{}'", id).red());
+                process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("{}", e.red());
+                process::exit(1);
+            }
+        },
+
+        CaptureCommands::Gate { format } => {
+            let inbox = load_inbox(&root).unwrap_or_default();
+            let drift = find_drift(&root).unwrap_or_default();
+            let pending = inbox.nominations.len();
+            let drift_count = drift.len();
+
+            if format == "json" {
+                println!(
+                    "{}",
+                    json!({"pending_nominations": pending, "drift_items": drift_count})
+                );
+                return;
+            }
+            println!("{}", "Pre-push review:".bold());
+            println!("  Pending nominations: {}", pending);
+            println!("  Drift items:         {}", drift_count);
+            if pending > 0 {
+                println!(
+                    "\n{}",
+                    "Review with 'lattice capture list' — accept, reject, or defer before pushing."
+                        .dimmed()
+                );
+            }
+            if drift_count > 0 {
+                println!(
+                    "{}",
+                    "Run 'lattice drift' to inspect version drift.".dimmed()
+                );
+            }
+        }
+
+        CaptureCommands::InstallHooks { force } => {
+            install_capture_hooks(&root, force);
+        }
+    }
+}
+
+/// Write git pre-commit and pre-push hooks that invoke capture (REQ-CAPTURE-003, 004).
+fn install_capture_hooks(root: &std::path::Path, force: bool) {
+    let marker = "# lattice-capture";
+    let hooks_dir = std::process::Command::new("git")
+        .args(["rev-parse", "--git-path", "hooks"])
+        .current_dir(root)
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .map(|s| root.join(s))
+        .unwrap_or_else(|| root.join(".git").join("hooks"));
+
+    if let Err(e) = std::fs::create_dir_all(&hooks_dir) {
+        eprintln!("{}", format!("Could not create hooks dir: {}", e).red());
+        process::exit(1);
+    }
+
+    let pre_commit = format!(
+        "#!/bin/sh\n{marker} pre-commit nominator (REQ-CAPTURE-003)\n\
+         # Non-blocking: surfaces tracked-surface changes; never fails the commit.\n\
+         lattice capture scan --staged || true\nexit 0\n"
+    );
+    let pre_push = format!(
+        "#!/bin/sh\n{marker} pre-push gate (REQ-CAPTURE-004)\n\
+         if ! lattice health --check; then\n\
+         \x20 echo 'lattice: health check failed — push blocked (run: lattice health)' >&2\n\
+         \x20 exit 1\nfi\nlattice capture gate || true\nexit 0\n"
+    );
+
+    for (name, contents) in [("pre-commit", pre_commit), ("pre-push", pre_push)] {
+        let path = hooks_dir.join(name);
+        if path.exists() {
+            let existing = std::fs::read_to_string(&path).unwrap_or_default();
+            if !existing.contains(marker) && !force {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "{} exists and is not managed by lattice — rerun with --force to overwrite.",
+                        path.display()
+                    )
+                    .yellow()
+                );
+                continue;
+            }
+        }
+        if let Err(e) = std::fs::write(&path, &contents) {
+            eprintln!("{}", format!("Failed to write {}: {}", name, e).red());
+            continue;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
+        }
+        println!("{} {}", "Installed".green(), path.display());
     }
 }
 
@@ -4751,6 +5251,8 @@ fn run_command(command: Commands) {
                 Err(e) => emit_error(&format, "diff_error", &e.to_string()),
             }
         }
+
+        Commands::Capture { capture_command } => handle_capture(capture_command),
 
         Commands::Help {
             json,

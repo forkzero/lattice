@@ -9,6 +9,10 @@ created_by: agent:claude
 requested_by: Claude <noreply@anthropic.com>
 priority: P1
 category: CAPTURE
+resolution:
+  status: verified
+  resolved_at: 2026-07-18T00:03:09.369924719+00:00
+  resolved_by: agent:claude-2026-07-18
 edges:
   derives_from:
   - target: THX-MILESTONE-NOMINATION

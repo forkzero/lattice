@@ -1,0 +1,18 @@
+id: IMP-CAPTURE-003
+type: implementation
+title: pre-commit nominator scan and hook
+body: handle_capture Scan in src/main.rs emits the deterministic nomination bundle (prefilter + affected requirements + agent instructions); install_capture_hooks writes a non-blocking pre-commit hook that runs 'lattice capture scan --staged'.
+status: active
+version: 1.0.0
+created_at: 2026-07-18T00:03:03.674996693+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  language: rust
+  files:
+  - path: src/main.rs
+  test_command: 'cargo test --lib capture::'
+edges:
+  satisfies:
+  - target: REQ-CAPTURE-003
+    version: 1.0.0

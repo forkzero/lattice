@@ -1,0 +1,18 @@
+id: IMP-CAPTURE-004
+type: implementation
+title: pre-push gate and nomination review
+body: handle_capture Gate in src/main.rs surfaces pending nominations and drift; install_capture_hooks writes a pre-push hook that runs 'lattice health --check' as the hard gate then 'lattice capture gate' for review.
+status: active
+version: 1.0.0
+created_at: 2026-07-18T00:03:03.727306612+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  language: rust
+  files:
+  - path: src/main.rs
+  test_command: 'cargo test --lib capture::'
+edges:
+  satisfies:
+  - target: REQ-CAPTURE-004
+    version: 1.0.0

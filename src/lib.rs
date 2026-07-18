@@ -4,6 +4,7 @@
 //! interconnected knowledge nodes (sources, theses, requirements, implementations)
 //! with version-bound edges and drift detection.
 
+pub mod capture;
 pub mod diff;
 pub mod export;
 pub mod graph;
@@ -16,6 +17,11 @@ pub mod storage;
 pub mod types;
 pub mod update;
 
+pub use capture::{
+    BindingMatch, Inbox, Nomination, NominationKind, PrefilterResult, add_nomination, binding_map,
+    changed_files_since, inbox_path, load_inbox, prefilter, remove_nomination, save_inbox,
+    staged_files,
+};
 pub use diff::{
     ChangeType, DiffEntry, DiffError, DiffResult, compute_changed_fields, format_diff_markdown,
     format_entry_text, git_head_sha, lattice_diff,
