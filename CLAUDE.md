@@ -127,6 +127,15 @@ lattice health --check          # CI gate — exits 2 on FAIL
 lattice lint                    # Check for structural issues
 lattice diff                    # Show changes since a git ref
 lattice plan REQ-001 REQ-002    # Plan implementation order
+
+# Milestone Capture (nomination, not auto-commit)
+lattice capture scan --staged   # Prefilter staged diff against bindings; emit nomination bundle
+lattice capture add --kind challenges --title ... --body ... --target THX-...  # Stage a nomination
+lattice capture list            # Review pending nominations (inbox lives outside .lattice/)
+lattice capture accept NOM-001 --from IMP-...   # Materialize a nomination into the graph
+lattice capture reject NOM-001  # Drop a nomination
+lattice capture gate            # Pre-push review — surface nominations + drift
+lattice capture install-hooks   # Install git pre-commit/pre-push hooks
 lattice export                  # Export narrative (overview)
 lattice export -a investor      # Export for investors
 lattice export -f json          # Export as JSON
