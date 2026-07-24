@@ -1,0 +1,30 @@
+id: REQ-CAPTURE-003-A
+type: requirement
+title: Deduplicate nominations against existing nodes before surfacing
+body: |-
+  The nominator can propose a new-requirement (or edge) that restates a node already in the graph. Knowledge-graph-generation practice treats entity resolution as a required post-processing stage (Cypher equality, node-similarity, LLM dedup); the capture pipeline currently has no equivalent, so duplicate nominations reach the reviewer unflagged.
+
+  ## Proposed Resolution
+
+  At 'capture add' time, score the nomination's title+body against existing nodes (deterministic token-overlap now; semantic search when vector-search is enabled) and attach likely-duplicate node IDs to the nomination so list/show surface them for the reviewer to resolve.
+
+  ---
+  _Gap type: missing_requirement_
+status: draft
+version: 1.0.0
+created_at: 2026-07-24T22:20:12.692347203+00:00
+created_by: agent:claude-2026-07-24
+requested_by: Claude <noreply@anthropic.com>
+priority: P1
+category: CAPTURE
+tags:
+- refinement
+- missing_requirement
+resolution:
+  status: verified
+  resolved_at: 2026-07-24T22:23:29.584189048+00:00
+  resolved_by: agent:claude-2026-07-24
+edges:
+  derives_from:
+  - target: THX-MILESTONE-NOMINATION
+    version: 1.0.0

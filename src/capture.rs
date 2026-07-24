@@ -16,7 +16,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -103,6 +103,10 @@ pub struct Nomination {
     /// Provenance, e.g. `pre-commit` or a commit sha — how the nomination arose.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Existing node IDs this nomination may duplicate (entity resolution,
+    /// REQ-CAPTURE-003-A). Surfaced for the reviewer; never auto-resolved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub possible_duplicates: Option<Vec<String>>,
     pub created_at: String,
     pub created_by: String,
 }
@@ -323,6 +327,50 @@ pub fn scan_bundle(index: &NodeIndex, result: &PrefilterResult) -> Value {
         "requirements": requirements,
         "instructions": "For each affected requirement, judge whether this change is lattice-worthy: does it satisfy, contradict (challenges), reveal a gap in (reveals-gap-in), or validate a tracked node, or warrant a new requirement? Emit at most 3 high-confidence nominations via 'lattice capture add'. Returning none is valid.",
     })
+}
+
+/// Existing node IDs whose title+body most resemble the given text, by
+/// token-overlap (Jaccard) above a threshold — a deterministic first-pass
+/// entity resolution so likely-duplicate nominations are flagged for the
+/// reviewer rather than silently added (REQ-CAPTURE-003-A). Semantic dedup is a
+/// natural upgrade wherever the vector index is available.
+pub fn find_duplicates(index: &NodeIndex, title: &str, body: &str) -> Vec<String> {
+    const THRESHOLD: f32 = 0.25;
+    const LIMIT: usize = 3;
+    let query = token_set(&format!("{title} {body}"));
+    if query.is_empty() {
+        return Vec::new();
+    }
+    let mut scored: Vec<(f32, &str)> = index
+        .values()
+        .filter_map(|n| {
+            let score = jaccard(&query, &token_set(&format!("{} {}", n.title, n.body)));
+            (score >= THRESHOLD).then_some((score, n.id.as_str()))
+        })
+        .collect();
+    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    scored
+        .into_iter()
+        .take(LIMIT)
+        .map(|(_, id)| id.to_string())
+        .collect()
+}
+
+/// Alphanumeric words of length >= 3, lowercased — the token unit for dedup.
+fn token_set(text: &str) -> HashSet<String> {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.len() >= 3)
+        .map(str::to_lowercase)
+        .collect()
+}
+
+/// Jaccard similarity of two token sets (0.0 when either is empty).
+fn jaccard(a: &HashSet<String>, b: &HashSet<String>) -> f32 {
+    if a.is_empty() || b.is_empty() {
+        return 0.0;
+    }
+    let inter = a.intersection(b).count() as f32;
+    inter / a.union(b).count() as f32
 }
 
 /// Materialize a nomination into the graph (REQ-CAPTURE-001) — the only path
@@ -553,6 +601,7 @@ mod tests {
             category: None,
             rationale: None,
             source: None,
+            possible_duplicates: None,
             created_at: "now".to_string(),
             created_by: "test".to_string(),
         });
@@ -573,6 +622,7 @@ mod tests {
             category: None,
             rationale: None,
             source: Some("pre-commit".to_string()),
+            possible_duplicates: None,
             created_at: "now".to_string(),
             created_by: "agent:test".to_string(),
         };
@@ -623,6 +673,7 @@ mod tests {
             category: None,
             rationale: None,
             source: None,
+            possible_duplicates: None,
             created_at: "now".to_string(),
             created_by: "test".to_string(),
         }
@@ -638,6 +689,32 @@ mod tests {
         let edge = nomination(NominationKind::Challenges, Some("THX-X"));
         let err = accept(&root, &edge, None, None).unwrap_err();
         assert!(err.contains("--from"), "got: {err}");
+    }
+
+    #[test]
+    fn find_duplicates_flags_similar_nodes_and_ignores_unrelated() {
+        let mut req = impl_node("REQ-CORE-001", &[], &[]);
+        req.node_type = NodeType::Requirement;
+        req.title = "Version-bound edges enable drift detection".to_string();
+        req.body =
+            "Edges record the version of source and target so stale bindings surface.".to_string();
+        let mut other = impl_node("REQ-CLI-009", &[], &[]);
+        other.node_type = NodeType::Requirement;
+        other.title = "Colorized terminal output".to_string();
+        other.body = "The CLI prints results with ANSI colors for readability.".to_string();
+        let mut index = NodeIndex::new();
+        index.insert(req.id.clone(), req);
+        index.insert(other.id.clone(), other);
+
+        let dups = find_duplicates(
+            &index,
+            "Edges should be version bound for drift detection",
+            "Record source and target version so stale edge bindings surface as drift.",
+        );
+        assert_eq!(dups, vec!["REQ-CORE-001"]);
+
+        let none = find_duplicates(&index, "Add YAML export format", "Emit nodes as YAML.");
+        assert!(none.is_empty(), "unrelated text should not match: {none:?}");
     }
 
     #[test]

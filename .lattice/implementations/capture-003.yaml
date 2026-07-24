@@ -16,3 +16,7 @@ edges:
   satisfies:
   - target: REQ-CAPTURE-003
     version: 1.0.0
+  reveals_gap_in:
+  - target: REQ-CAPTURE-003
+    version: 1.0.0
+    rationale: 'missing_requirement: Deduplicate nominations against existing nodes before surfacing'

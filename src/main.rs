@@ -1951,8 +1951,8 @@ fn command_to_name(cmd: &Commands) -> &'static str {
 fn handle_capture(cmd: CaptureCommands) {
     use lattice::capture::{
         HookOutcome, Nomination, NominationKind, accept, add_nomination, changed_files_since,
-        install_hooks, load_inbox, prefilter, remove_nomination, save_inbox, scan_bundle,
-        staged_files,
+        find_duplicates, install_hooks, load_inbox, prefilter, remove_nomination, save_inbox,
+        scan_bundle, staged_files,
     };
 
     let root = get_lattice_root();
@@ -2025,6 +2025,9 @@ fn handle_capture(cmd: CaptureCommands) {
                 Ok(k) => k,
                 Err(e) => emit_error(&format, "invalid_kind", &e),
             };
+            // Entity resolution: flag existing nodes this may duplicate (REQ-CAPTURE-003-A).
+            let index = build_node_index(&root).unwrap_or_default();
+            let dups = find_duplicates(&index, &title, &body);
             let now = chrono::Utc::now().to_rfc3339();
             let nom = Nomination {
                 id: String::new(),
@@ -2036,6 +2039,7 @@ fn handle_capture(cmd: CaptureCommands) {
                 category,
                 rationale,
                 source,
+                possible_duplicates: (!dups.is_empty()).then(|| dups.clone()),
                 created_at: now,
                 created_by,
             };
@@ -2050,6 +2054,13 @@ fn handle_capture(cmd: CaptureCommands) {
                             stored.id.bold(),
                             stored.kind.as_str()
                         );
+                        if !dups.is_empty() {
+                            println!(
+                                "  {} possible duplicate(s): {}",
+                                "⚠".yellow(),
+                                dups.join(", ").yellow()
+                            );
+                        }
                         println!(
                             "  Review with 'lattice capture list'; accept with 'lattice capture accept {}'.",
                             stored.id
@@ -2080,12 +2091,22 @@ fn handle_capture(cmd: CaptureCommands) {
                     .as_deref()
                     .map(|t| format!(" → {}", t))
                     .unwrap_or_default();
+                let dup = n
+                    .possible_duplicates
+                    .as_ref()
+                    .map(|d| {
+                        format!("  {} maybe dup: {}", "⚠".yellow(), d.join(", "))
+                            .yellow()
+                            .to_string()
+                    })
+                    .unwrap_or_default();
                 println!(
-                    "  {} [{}] {}{}",
+                    "  {} [{}] {}{}{}",
                     n.id.bold(),
                     n.kind.as_str().cyan(),
                     n.title,
-                    tgt
+                    tgt,
+                    dup
                 );
             }
         }
@@ -2108,6 +2129,12 @@ fn handle_capture(cmd: CaptureCommands) {
                         }
                         if let Some(s) = &n.source {
                             println!("source: {}", s);
+                        }
+                        if let Some(d) = &n.possible_duplicates {
+                            println!(
+                                "{}",
+                                format!("possible duplicates: {}", d.join(", ")).yellow()
+                            );
                         }
                         println!("by {} at {}", n.created_by, n.created_at);
                     }

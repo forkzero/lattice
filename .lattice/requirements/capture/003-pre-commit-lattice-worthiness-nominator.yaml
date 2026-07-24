@@ -22,3 +22,6 @@ edges:
     version: 1.0.0
   - target: REQ-CAPTURE-002
     version: 1.0.0
+  - target: REQ-CAPTURE-003-A
+    version: 1.0.0
+    rationale: 'Refinement: missing_requirement'
