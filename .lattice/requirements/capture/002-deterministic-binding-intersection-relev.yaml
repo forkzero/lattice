@@ -1,0 +1,19 @@
+id: REQ-CAPTURE-002
+type: requirement
+title: Deterministic binding-intersection relevance prefilter
+body: Before any model call, capture checks whether the staged diff intersects any implementation bind target (file:function). No intersection means no nomination and no LLM call. Intersection escalates to the nominator and passes the specific bound requirement and implementation IDs as context. This keeps evaluation cheap and high-precision and leverages the graph mapping that a flat memory store lacks.
+status: active
+version: 1.0.0
+created_at: 2026-07-17T23:11:27.521456476+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P0
+category: CAPTURE
+resolution:
+  status: verified
+  resolved_at: 2026-07-18T00:03:09.301540877+00:00
+  resolved_by: agent:claude-2026-07-18
+edges:
+  derives_from:
+  - target: THX-MILESTONE-NOMINATION
+    version: 1.0.0

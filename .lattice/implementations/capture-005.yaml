@@ -1,0 +1,19 @@
+id: IMP-CAPTURE-005
+type: implementation
+title: Nominate-not-commit guardrail
+body: 'Guardrail enforced structurally: capture writes only to the staging inbox outside .lattice/ (src/capture.rs add_nomination/save_inbox); the graph is mutated only by the explicit ''lattice capture accept'' path in src/main.rs, which routes through the existing add_requirement/add_edge CLI. Covered by the inbox_roundtrip_and_guardrail_stays_outside_lattice test.'
+status: active
+version: 1.0.0
+created_at: 2026-07-18T00:03:03.776112001+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  language: rust
+  files:
+  - path: src/capture.rs
+  - path: src/main.rs
+  test_command: 'cargo test --lib capture::'
+edges:
+  satisfies:
+  - target: REQ-CAPTURE-005
+    version: 1.0.0
