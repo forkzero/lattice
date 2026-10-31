@@ -159,6 +159,9 @@ pub fn lint_lattice(root: &Path) -> LintReport {
         check_orphan_nodes(&index, &mut issues);
     }
 
+    // Check installed skill version
+    check_skill_version(root, &mut issues);
+
     LintReport { issues }
 }
 
@@ -409,6 +412,51 @@ fn check_orphan_nodes(index: &crate::types::NodeIndex, issues: &mut Vec<LintIssu
             ),
             fixable: Fixable::No,
         });
+    }
+}
+
+fn check_skill_version(root: &Path, issues: &mut Vec<LintIssue>) {
+    let skill_path = root
+        .join(".claude")
+        .join("skills")
+        .join("lattice")
+        .join("SKILL.md");
+    if !skill_path.exists() {
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&skill_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    let version_line = content.lines().find(|l| l.starts_with("version:"));
+    match version_line {
+        None => {
+            issues.push(LintIssue {
+                file: skill_path,
+                node_id: None,
+                severity: LintSeverity::Warning,
+                message: "SKILL.md has no version line — it will not auto-update. Run `lattice init --skill` to refresh.".to_string(),
+                fixable: Fixable::No,
+            });
+        }
+        Some(line) => {
+            let installed = line.trim_start_matches("version:").trim();
+            let current = env!("CARGO_PKG_VERSION");
+            if installed != current {
+                issues.push(LintIssue {
+                    file: skill_path,
+                    node_id: None,
+                    severity: LintSeverity::Warning,
+                    message: format!(
+                        "SKILL.md version ({}) differs from lattice binary ({}). Run `lattice init --skill` to refresh.",
+                        installed, current
+                    ),
+                    fixable: Fixable::No,
+                });
+            }
+        }
     }
 }
 
