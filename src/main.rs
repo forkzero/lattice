@@ -2097,6 +2097,26 @@ fn run_command(command: Commands) {
                         println!();
                         println!("{}", "Lattice initialized.".green().bold());
                         println!();
+                        println!(
+                            "{}",
+                            "Note: .lattice/ is tracked in git by default.".yellow()
+                        );
+                        println!(
+                            "{}",
+                            "  → Every source, thesis, and requirement body is visible to anyone who can read this repo."
+                                .dimmed()
+                        );
+                        println!(
+                            "{}",
+                            "  → For public repos, keep sensitive specifics (credentials, PII, financial detail)"
+                                .dimmed()
+                        );
+                        println!(
+                            "{}",
+                            "    out of node bodies, or use a private repo for sensitive theses/requirements."
+                                .dimmed()
+                        );
+                        println!();
                         println!("Next steps:");
                         println!("  lattice seed              # Bootstrap from vision");
                         println!("  lattice add requirement   # Add a requirement manually");
