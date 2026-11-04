@@ -7,8 +7,8 @@ use crate::graph::{build_node_index, find_drift};
 use crate::search::SearchEngine;
 use crate::storage::{
     AddImplementationOptions, AddRequirementOptions, GapType, RefineOptions, ResolveOptions,
-    add_implementation, add_requirement, find_lattice_root, load_nodes_by_type, refine_requirement,
-    resolve_node,
+    add_implementation, add_requirement, find_lattice_root, get_git_user, load_config,
+    load_nodes_by_type, refine_requirement, resolve_node,
 };
 use crate::types::{Priority, Resolution, Status};
 use rmcp::ServiceExt;
@@ -41,6 +41,10 @@ impl LatticeServer {
         let cwd = std::env::current_dir().map_err(|e| e.to_string())?;
         let root = find_lattice_root(&cwd).ok_or("Not in a lattice directory")?;
         Ok(Self::new(root))
+    }
+
+    fn resolve_requested_by(&self) -> Option<String> {
+        load_config(&self.root).requested_by.or_else(get_git_user)
     }
 
     /// Get the lattice summary
@@ -284,6 +288,7 @@ impl LatticeServer {
             depends_on: params.depends_on,
             status: Status::Active,
             created_by,
+            requested_by: self.resolve_requested_by(),
         };
 
         let path = add_requirement(&self.root, options).map_err(|e| e.to_string())?;
@@ -308,6 +313,7 @@ impl LatticeServer {
             proposed: params.proposed,
             implementation_id: params.implementation,
             created_by,
+            requested_by: self.resolve_requested_by(),
         };
 
         let result = refine_requirement(&self.root, options).map_err(|e| e.to_string())?;
@@ -453,6 +459,7 @@ impl LatticeServer {
             satisfies: params.satisfies,
             status: Status::Active,
             created_by,
+            requested_by: self.resolve_requested_by(),
         };
 
         let path = add_implementation(&self.root, options).map_err(|e| e.to_string())?;

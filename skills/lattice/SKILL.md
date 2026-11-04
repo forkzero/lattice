@@ -33,13 +33,24 @@ The CLI handles timestamps, version bumps, edge wiring, and ID validation.
 
 If the CLI does not support a required operation, agents MAY edit `.lattice/` YAML files directly, but MUST run `lattice lint` immediately after to verify correctness.
 
-If a CLI gap is found, agents SHOULD file an issue on `forkzero/lattice`:
-```bash
-gh issue create --repo forkzero/lattice \
-  --title "CLI gap: <what's missing>" \
-  --body "Encountered while working on <context>. Had to edit YAML directly because <reason>." \
-  --label "cli-gap"
-```
+## When the CLI Gets in the Way
+
+If a command does not do what its help says, succeeds silently when it should fail, needs a workaround, or leaves you unsure of the right sequence, file an issue before working around it:
+
+- CLI behaviour or missing flag:
+  ```bash
+  gh issue create --repo forkzero/lattice --label cli-gap \
+    --title "CLI gap: <what>" \
+    --body "<command run, what happened, what you expected, workaround used>"
+  ```
+- Unclear best practice or workflow:
+  ```bash
+  gh issue create --repo forkzero/lattice \
+    --title "Lattice practice: <question>" \
+    --body "<context and question>"
+  ```
+
+Tell the user each time you file one.
 
 ## Workflow
 

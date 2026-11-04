@@ -12,9 +12,11 @@ meta:
   files:
   - path: src/mcp.rs
   test_command: cargo test
+  verified_at: 2026-11-04T03:50:32.564997+00:00
 edges:
   satisfies:
   - target: REQ-API-003
     version: 2.0.0
   - target: REQ-API-004
     version: 2.0.0
+    rationale: tests pass
