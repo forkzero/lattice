@@ -281,6 +281,10 @@ enum Commands {
         #[arg(long, alias = "discovered-by")]
         implementation: Option<String>,
 
+        /// Who requested this (overrides config/git; "none" to omit)
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -565,6 +569,10 @@ enum AddCommands {
         #[arg(long)]
         created_by: Option<String>,
 
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -604,6 +612,10 @@ enum AddCommands {
         #[arg(long)]
         created_by: Option<String>,
 
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -642,6 +654,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -710,6 +726,10 @@ enum AddCommands {
         #[arg(long)]
         created_by: Option<String>,
 
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -748,6 +768,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -880,6 +904,18 @@ fn parse_thesis_category(s: &str) -> lattice::types::ThesisCategory {
             );
             process::exit(1);
         }
+    }
+}
+
+/// Resolve `requested_by`: CLI flag > config > git user. "none" omits the field.
+fn resolve_requested_by(flag: Option<String>, config: &lattice::LatticeConfig) -> Option<String> {
+    match flag.as_deref() {
+        Some("none") => None,
+        Some(value) => Some(value.to_string()),
+        None => config
+            .requested_by
+            .clone()
+            .or_else(lattice::storage::get_git_user),
     }
 }
 
@@ -1430,6 +1466,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--depends-on", "string", false, "Comma-separated requirement IDs"),
                     param("--status", "string", false, "Status: draft, active (default: active)"),
                     param("--created-by", "string", false, "Author (e.g. human:george)"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1449,6 +1486,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--confidence", "float", false, "Confidence level 0.0-1.0"),
                     param("--tags", "string", false, "Comma-separated tags"),
                     param("--supported-by", "string", false, "Comma-separated source IDs"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1467,6 +1505,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--url", "string", false, "Source URL"),
                     param("--source-type", "string", false, "Type: paper, article, report, data"),
                     param("--tags", "string", false, "Comma-separated tags"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1485,6 +1524,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--satisfies", "string", false, "Comma-separated requirement IDs"),
                     param("--files", "string", false, "Comma-separated file paths"),
                     param("--tags", "string", false, "Comma-separated tags"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1505,6 +1545,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--grounded-in", "string", false, "Comma-separated thesis IDs this message is grounded in"),
                     param("--tags", "string", false, "Comma-separated tags"),
                     param("--created-by", "string", false, "Author (e.g. human:george)"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1628,6 +1669,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--description", "string", true, "What is underspecified and why"),
                     param("--proposed / --proposal", "string", false, "Proposed resolution (alias: --proposal)"),
                     param("--implementation / --discovered-by", "string", false, "Implementation ID that discovered this gap (alias: --discovered-by)"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, parent, gap_type, title }",
@@ -2155,9 +2197,11 @@ fn run_command(command: Commands) {
                 depends_on,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let priority = parse_priority(&priority);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| {
@@ -2175,6 +2219,7 @@ fn run_command(command: Commands) {
                     depends_on: split_csv(depends_on),
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_requirement(&root, options) {
@@ -2192,9 +2237,11 @@ fn run_command(command: Commands) {
                 supported_by,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let category = parse_thesis_category(&category);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| "unknown".to_string());
@@ -2208,6 +2255,7 @@ fn run_command(command: Commands) {
                     supported_by: split_csv(supported_by),
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_thesis(&root, options) {
@@ -2225,9 +2273,11 @@ fn run_command(command: Commands) {
                 reliability,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let reliability = parse_reliability(&reliability);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| "unknown".to_string());
@@ -2241,6 +2291,7 @@ fn run_command(command: Commands) {
                     reliability,
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_source(&root, options) {
@@ -2259,9 +2310,11 @@ fn run_command(command: Commands) {
                 satisfies,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| {
                     format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"))
@@ -2277,6 +2330,7 @@ fn run_command(command: Commands) {
                     satisfies: split_csv(satisfies),
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_implementation(&root, options) {
@@ -2335,9 +2389,11 @@ fn run_command(command: Commands) {
                 grounded_in,
                 tags,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
 
                 let options = AddMessageOptions {
                     id: id.clone(),
@@ -2350,6 +2406,7 @@ fn run_command(command: Commands) {
                     status: Status::Active,
                     created_by: created_by
                         .unwrap_or_else(|| get_git_user().unwrap_or_else(|| "unknown".to_string())),
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_message(&root, options) {
@@ -4039,6 +4096,7 @@ fn run_command(command: Commands) {
             description,
             proposed,
             implementation,
+            requested_by,
             format,
         } => {
             let root = get_lattice_root();
@@ -4048,6 +4106,7 @@ fn run_command(command: Commands) {
                 Err(e) => emit_error(&format, "invalid_gap_type", &e),
             };
 
+            let config = load_config(&root);
             let options = RefineOptions {
                 parent_id: parent.clone(),
                 gap_type: gap,
@@ -4056,6 +4115,7 @@ fn run_command(command: Commands) {
                 proposed,
                 implementation_id: implementation,
                 created_by: format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d")),
+                requested_by: resolve_requested_by(requested_by, &config),
             };
 
             match refine_requirement(&root, options) {

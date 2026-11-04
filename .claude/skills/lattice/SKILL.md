@@ -1,7 +1,7 @@
 ---
 name: lattice
 # Auto-updated by lattice when version changes. Remove this version line to disable auto-updates.
-version: 0.2.8
+version: 0.2.9
 description: "Lattice knowledge graph integration. Use when working in a project with a .lattice/ directory — for requirements, theses, sources, implementations, messages, drift detection, or lattice CLI commands."
 allowed-tools: Bash(lattice *), Bash(./target/release/lattice *), Bash(./target/debug/lattice *), Bash(gh issue *), Read, Grep, Glob
 ---
