@@ -1,0 +1,23 @@
+id: THX-OWNERSHIP-WEDGE
+type: thesis
+title: Owned, Version-Aware Context Is the Defensible Wedge Against Hosted Context Platforms
+body: 'As incumbents (e.g. Notion) build hosted, governed context systems for human-agent collaboration, Lattice''s defensible differentiation is twofold. First, context ownership: the graph lives in the team''s own Git, not a vendor cloud, fulfilling the own-the-context principle that hosted platforms undercut by requiring you to slurp everything into them. Second, version-aware drift detection: the structural mechanism for curing context rot that hosted platforms name as the central problem but address only aspirationally. Lattice is also native to software and code teams, where the agent factory already operates in Git. The wedge is not breadth of collaboration features (mobile, notifications, company-wide permissions) but ownership plus epistemic integrity.'
+status: active
+version: 1.0.0
+created_at: 2026-11-21T23:14:43.546401449+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  category: competitive
+  confidence: 0.7
+edges:
+  supported_by:
+  - target: SRC-NOTION-NEW-SHAPE
+    version: 1.0.0
+  extends:
+  - target: THX-CONTEXT-INFRA
+    version: 1.0.0
+    rationale: 'Applies the context-infrastructure thesis competitively: ownership is the wedge when incumbents also build context systems.'
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+    rationale: Drift detection (version-awareness) is the structural cure for context rot that hosted platforms lack — the second half of the wedge.
