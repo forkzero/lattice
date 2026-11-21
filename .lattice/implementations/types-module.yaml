@@ -14,7 +14,8 @@ meta:
     functions:
     - LatticeNode::all_edges
     - EdgeReference::version_or_default
-  verified_at: 2026-11-04T03:50:33.649651+00:00
+    sha256: b5e84a376241051c0cdf7a457701c99e69d47be8554a939287dff53794841271
+  verified_at: 2026-11-21T14:58:23.958445+00:00
 edges:
   satisfies:
   - target: REQ-CORE-001

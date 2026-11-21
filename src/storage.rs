@@ -617,6 +617,7 @@ pub fn add_implementation(
             .map(|p| crate::types::FileRef {
                 path: p,
                 functions: None,
+                sha256: None,
             })
             .collect()
     });
@@ -913,11 +914,20 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
         };
 
         if let Some(file_paths) = options.files {
+            let existing: std::collections::HashMap<&str, &crate::types::FileRef> = impl_meta
+                .files
+                .as_ref()
+                .map(|fs| fs.iter().map(|f| (f.path.as_str(), f)).collect())
+                .unwrap_or_default();
             let new_files: Vec<crate::types::FileRef> = file_paths
                 .into_iter()
-                .map(|p| crate::types::FileRef {
-                    path: p,
-                    functions: None,
+                .map(|p| {
+                    let prev = existing.get(p.as_str());
+                    crate::types::FileRef {
+                        functions: prev.and_then(|f| f.functions.clone()),
+                        sha256: prev.and_then(|f| f.sha256.clone()),
+                        path: p,
+                    }
                 })
                 .collect();
             if impl_meta.files.as_ref() != Some(&new_files) {
@@ -1551,10 +1561,24 @@ pub fn verify_implementation(root: &Path, options: VerifyOptions) -> Result<Path
     // Always update verified_at so re-verification produces a diff
     if let Some(NodeMeta::Implementation(ref mut meta)) = impl_node.meta {
         meta.verified_at = Some(chrono::Utc::now().to_rfc3339());
+
+        // Record content hashes for all bound files (#55)
+        if let Some(ref mut file_refs) = meta.files {
+            for file_ref in file_refs.iter_mut() {
+                let file_path = root.join(&file_ref.path);
+                file_ref.sha256 = compute_file_sha256(&file_path);
+            }
+        }
     }
 
     save_node(&impl_path, &impl_node)?;
     Ok(impl_path)
+}
+
+pub fn compute_file_sha256(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let data = std::fs::read(path).ok()?;
+    Some(format!("{:x}", Sha256::digest(&data)))
 }
 
 #[cfg(test)]

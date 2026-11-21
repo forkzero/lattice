@@ -11,10 +11,10 @@ use lattice::{
     LintSeverity, NodeMeta, NodeType, Plan, Priority, RefineOptions, RemoveEdgeOptions,
     ReplaceEdgeOptions, Resolution, ResolveOptions, SchemaCheck, SearchEngine, SearchParams,
     Status, VerifyOptions, add_edge, add_implementation, add_message, add_requirement, add_source,
-    add_thesis, build_node_index, check_schema_version, edit_node, export_html, export_narrative,
-    find_drift, find_lattice_root, find_node_path, fix_issues, format_diff_markdown,
-    format_entry_text, generate_plan, get_git_user, get_github_pages_url, init_lattice,
-    lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
+    add_thesis, build_node_index, check_schema_version, compute_file_sha256, edit_node,
+    export_html, export_narrative, find_drift, find_lattice_root, find_node_path, fix_issues,
+    format_diff_markdown, format_entry_text, generate_plan, get_git_user, get_github_pages_url,
+    init_lattice, lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
     refine_requirement, remove_edge, replace_edge, resolve_node, split_csv, verify_implementation,
 };
 use serde_json::json;
@@ -227,7 +227,7 @@ enum Commands {
         format: String,
     },
 
-    /// Record that an implementation satisfies a requirement
+    /// Record that an implementation satisfies a requirement. Without --tests-pass, acts as a WIP attestation (records file hashes, clears Code Impact)
     Verify {
         /// Implementation ID (e.g., IMP-STORAGE-001)
         implementation: String,
@@ -1381,6 +1381,19 @@ fn build_command_catalog() -> serde_json::Value {
                     "lattice edit <IMP-id> --files 'updated-file-list'",
                     "git add .lattice/",
                     "lattice health --strict --check"
+                ]
+            },
+            {
+                "name": "tdd_red_green",
+                "description": "TDD workflow: commit failing tests (red) then passing implementation (green) while keeping the lattice honest",
+                "steps": [
+                    "# Red commit — tests written but failing:",
+                    "lattice verify <IMP-id> satisfies <REQ-id>",
+                    "# (no --tests-pass: records file hashes as WIP attestation, clears Code Impact)",
+                    "git add .lattice/ && git commit -m 'Red: add tests for REQ-...'",
+                    "# Green commit — implementation makes tests pass:",
+                    "lattice verify <IMP-id> satisfies <REQ-id> --tests-pass",
+                    "git add .lattice/ && git commit -m 'Green: implement REQ-...'"
                 ]
             }
         ],
@@ -3443,25 +3456,35 @@ fn run_command(command: Commands) {
 
             let change_pressure = contested_count + drift_count;
 
-            // 3. Code impact: files changed since last .lattice/ commit that are bound in implementations
-            let bound_files: std::collections::HashSet<String> = all_nodes
+            // 3. Code impact: compare bound file hashes against stored hashes (#54, #55)
+            //    A file is "affected" when its current content hash differs from
+            //    the hash recorded at the last `lattice verify`.
+            let repo_root = &root;
+
+            // Build map: file path → all stored sha256 values (from implementation meta.files)
+            // A file may appear in multiple implementations; we keep all hashes
+            // so we can flag the file as affected if ANY binding is stale.
+            let mut bound_file_hashes: std::collections::HashMap<String, Vec<Option<String>>> =
+                std::collections::HashMap::new();
+            for node in all_nodes
                 .iter()
                 .filter(|n| n.node_type == NodeType::Implementation)
-                .filter_map(|n| {
-                    if let Some(NodeMeta::Implementation(meta)) = &n.meta {
-                        meta.files.as_ref()
-                    } else {
-                        None
+            {
+                if let Some(NodeMeta::Implementation(meta)) = &node.meta
+                    && let Some(files) = &meta.files
+                {
+                    for f in files {
+                        bound_file_hashes
+                            .entry(f.path.clone())
+                            .or_default()
+                            .push(f.sha256.clone());
                     }
-                })
-                .flat_map(|files| files.iter().map(|f| f.path.clone()))
-                .collect();
+                }
+            }
 
-            // If lattice is staged, this commit resolves the diff coupling (#31)
+            // Check which bound files have changed content
             let (tracked_files_changed, total_files_changed, affected_file_names) =
-                if lattice_staged {
-                    (0, 0, Vec::new())
-                } else if !lattice_commit.is_empty() {
+                if !lattice_commit.is_empty() {
                     let output = std::process::Command::new("git")
                         .args([
                             "diff",
@@ -3481,17 +3504,32 @@ fn run_command(command: Commands) {
                         .filter(|l| !l.is_empty())
                         .map(|s| s.to_string())
                         .collect();
+                    let total = changed.len();
+
+                    // A bound file is affected if ANY implementation binding it
+                    // has a stale or missing hash.
                     let affected: Vec<String> = changed
                         .iter()
-                        .filter(|f| bound_files.contains(f.as_str()))
+                        .filter(|f| {
+                            bound_file_hashes.get(f.as_str()).is_some_and(|hashes| {
+                                let current = compute_file_sha256(&repo_root.join(f));
+                                hashes.iter().any(|stored| match stored {
+                                    Some(hash) => current.as_deref() != Some(hash.as_str()),
+                                    None => true,
+                                })
+                            })
+                        })
                         .cloned()
                         .collect();
                     let tracked = affected.len();
-                    let total = changed.len();
                     (tracked, total, affected)
                 } else {
                     (0, 0, Vec::new())
                 };
+
+            // Lattice staged still credits as "diff coupling cleared" for display,
+            // but only when no affected files remain after hash comparison
+            let lattice_staged_credit = lattice_staged && tracked_files_changed == 0;
 
             // 4. Lint (strict mode only)
             let lint_issues = if strict {
@@ -3537,7 +3575,7 @@ fn run_command(command: Commands) {
                     "code_impact": {
                         "total_files_changed": total_files_changed,
                         "tracked_files_changed": tracked_files_changed,
-                        "bound_files_count": bound_files.len(),
+                        "bound_files_count": bound_file_hashes.len(),
                         "affected_files": affected_file_names,
                     },
                     "lattice_staged": lattice_staged,
@@ -3573,7 +3611,7 @@ fn run_command(command: Commands) {
                 println!();
 
                 println!("  {}", "Code Impact:".bold());
-                if lattice_staged {
+                if lattice_staged_credit {
                     println!(
                         "    {}",
                         "Lattice update staged — diff coupling cleared".green()
@@ -3583,11 +3621,11 @@ fn run_command(command: Commands) {
                         "    {} files changed since last lattice update",
                         total_files_changed
                     );
-                    if !bound_files.is_empty() {
+                    if !bound_file_hashes.is_empty() {
                         println!(
                             "    {} of {} lattice-tracked files affected",
                             tracked_files_changed,
-                            bound_files.len()
+                            bound_file_hashes.len()
                         );
                     }
                     for f in &affected_file_names {
@@ -3609,7 +3647,7 @@ fn run_command(command: Commands) {
             // Print remediation hint on FAIL (text mode only)
             if verdict == "FAIL" && !is_json(&format) {
                 println!();
-                if tracked_files_changed > 0 && !lattice_staged {
+                if tracked_files_changed > 0 && !lattice_staged_credit {
                     println!(
                         "  {}",
                         "Tip: Re-verify bound implementations (lattice verify/edit),".dimmed()

@@ -11,12 +11,17 @@ meta:
   language: rust
   files:
   - path: src/search.rs
+    sha256: 0fdc03d4847fd7243de272c62b29caff4b4a6d3cfc96234faf9c82d0970ee7e5
   - path: src/main.rs
+    sha256: d527d7e48ad96d8e2f01488e5441f81a868e2e10f76858f51004f8fd306f460a
   - path: src/mcp.rs
+    sha256: bc67283af8b738e92b0dc201c485d9a45214cddb4a3f1e47abb052b7a80a0502
   test_command: cargo test
+  verified_at: 2026-11-21T14:58:22.606149+00:00
 edges:
   satisfies:
   - target: REQ-API-007
     version: 1.0.0
+    rationale: tests pass
   - target: REQ-API-008
     version: 1.0.0

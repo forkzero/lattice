@@ -173,6 +173,8 @@ pub struct FileRef {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub functions: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 /// Source node metadata.
