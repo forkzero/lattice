@@ -3001,6 +3001,7 @@ fn run_command(command: Commands) {
                 // Use explicit --base-url or derive from git remote
                 let pages_base = base_url
                     .map(|u| u.trim_end_matches('/').to_string())
+                    .filter(|u| !u.is_empty())
                     .or_else(get_github_pages_url)
                     .unwrap_or_else(|| {
                         eprintln!(
@@ -3014,17 +3015,12 @@ fn run_command(command: Commands) {
                 let json_url = format!("{}/lattice-data.json", pages_base);
                 let encoded_json_url: String = json_url
                     .bytes()
-                    .flat_map(|b| match b {
-                        b'A'..=b'Z'
-                        | b'a'..=b'z'
-                        | b'0'..=b'9'
-                        | b'-'
-                        | b'_'
-                        | b'.'
-                        | b'~'
-                        | b':'
-                        | b'/' => vec![b as char],
-                        _ => format!("%{:02X}", b).chars().collect(),
+                    .flat_map(|b| {
+                        if b.is_ascii_alphanumeric() || b"-_.~:/".contains(&b) {
+                            vec![b as char]
+                        } else {
+                            format!("%{:02X}", b).chars().collect()
+                        }
                     })
                     .collect();
                 let reader_url = format!("https://forkzero.ai/reader?url={}", encoded_json_url);

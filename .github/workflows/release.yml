@@ -215,9 +215,12 @@ jobs:
 
       - name: Verify unauthenticated version detection
         run: |
-          DETECTED=$(curl -fsSL "https://api.github.com/repos/${{ github.repository }}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
-          echo "Detected version: ${DETECTED}"
-          test -n "$DETECTED" || { echo "Warning: unauthenticated version detection failed (GitHub API rate limit)"; }
+          DETECTED=$(curl -sSL "https://api.github.com/repos/${{ github.repository }}/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+          if [ -n "$DETECTED" ]; then
+            echo "Detected version: ${DETECTED}"
+          else
+            echo "Warning: unauthenticated version detection failed (likely GitHub API rate limit)"
+          fi
 
       - name: Run e2e tests
         run: bash tests/docker/e2e-test.sh
