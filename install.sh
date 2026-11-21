@@ -3,8 +3,9 @@
 # Usage: curl -fsSL https://forkzero.ai/lattice/install.sh | sh
 #
 # Environment variables:
-#   INSTALL_DIR  Override install location (default: ~/.local/bin)
-#   VERSION      Install a specific version (default: latest)
+#   INSTALL_DIR    Override install location (default: ~/.local/bin)
+#   VERSION        Install a specific version (default: latest)
+#   GITHUB_TOKEN   Authenticate GitHub API requests (avoids rate limits)
 
 set -e
 
@@ -37,10 +38,23 @@ esac
 
 TARGET="${ARCH}-${OS}"
 
+# Build auth header if GITHUB_TOKEN is available (raises rate limit from 60 to 5000/hr)
+AUTH_HEADER=""
+if [ -n "$GITHUB_TOKEN" ]; then
+    AUTH_HEADER="Authorization: token $GITHUB_TOKEN"
+fi
+
 # Get latest version
 if [ -z "$VERSION" ]; then
-    VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    if [ -n "$AUTH_HEADER" ]; then
+        VERSION=$(curl -fsSL -H "$AUTH_HEADER" "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    else
+        VERSION=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+    fi
 fi
+
+# Strip leading 'v' if present (e.g. VERSION=v0.2.11 → 0.2.11)
+VERSION=$(echo "$VERSION" | sed 's/^v//')
 
 if [ -z "$VERSION" ]; then
     echo "Failed to detect latest version"
