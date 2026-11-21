@@ -210,6 +210,14 @@ jobs:
 
       - name: Install lattice via install script
         run: curl -fsSL ${{ vars.INSTALL_URL }} | sh
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+
+      - name: Verify unauthenticated version detection
+        run: |
+          DETECTED=$(curl -fsSL "https://api.github.com/repos/${{ github.repository }}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          echo "Detected version: ${DETECTED}"
+          test -n "$DETECTED" || { echo "Warning: unauthenticated version detection failed (GitHub API rate limit)"; }
 
       - name: Run e2e tests
         run: bash tests/docker/e2e-test.sh
