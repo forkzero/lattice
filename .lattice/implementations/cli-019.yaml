@@ -10,10 +10,16 @@ requested_by: George Moon <george.moon@gmail.com>
 meta:
   files:
   - path: src/diff.rs
+    sha256: fbfc0f0c62ff8c68ecc5e7262c9b3ec01eddfd15481dce068d95df0c894a449b
   - path: src/main.rs
+    sha256: d527d7e48ad96d8e2f01488e5441f81a868e2e10f76858f51004f8fd306f460a
   - path: src/lib.rs
+    sha256: 7ae8befa902655837b902a9c886f06e340a493e0a86355007bd52a8c713757b0
   - path: tests/diff_test.rs
+    sha256: 44b067b9f45c49c4f53d4c415d99c20de95d5204b7d42b3f28c6f388148edb84
+  verified_at: 2026-11-21T14:58:21.916848+00:00
 edges:
   satisfies:
   - target: REQ-CLI-019
     version: 1.0.0
+    rationale: tests pass

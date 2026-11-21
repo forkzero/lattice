@@ -3,8 +3,8 @@
 //! Linked requirements: REQ-CORE-004, REQ-CLI-002, REQ-AGENT-002
 
 use crate::types::{
-    EdgeReference, Edges, LatticeNode, MessageMeta, NodeMeta, NodeType, Priority, Reliability,
-    Resolution, ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
+    ConfidenceEntry, EdgeReference, Edges, LatticeNode, MessageMeta, NodeMeta, NodeType, Priority,
+    Reliability, Resolution, ResolutionInfo, SourceMeta, Status, ThesisCategory, ThesisMeta,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -126,6 +126,8 @@ pub struct LatticeConfig {
     pub schema_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub freshness_threshold_hours: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_by: Option<String>,
 }
 
 /// The current schema version. Bump when .lattice/ format changes.
@@ -372,6 +374,7 @@ pub struct AddRequirementOptions {
     pub depends_on: Option<Vec<String>>,
     pub status: Status,
     pub created_by: String,
+    pub requested_by: Option<String>,
 }
 
 /// Options for adding a thesis.
@@ -384,6 +387,7 @@ pub struct AddThesisOptions {
     pub supported_by: Option<Vec<String>>,
     pub status: Status,
     pub created_by: String,
+    pub requested_by: Option<String>,
 }
 
 /// Options for adding an implementation.
@@ -397,6 +401,7 @@ pub struct AddImplementationOptions {
     pub satisfies: Option<Vec<String>>,
     pub status: Status,
     pub created_by: String,
+    pub requested_by: Option<String>,
 }
 
 /// Options for adding a source.
@@ -409,6 +414,7 @@ pub struct AddSourceOptions {
     pub reliability: Reliability,
     pub status: Status,
     pub created_by: String,
+    pub requested_by: Option<String>,
 }
 
 /// Check that a node ID doesn't already exist in the lattice. Returns an error if it does.
@@ -422,13 +428,20 @@ fn check_duplicate_id(root: &Path, id: &str) -> Result<(), StorageError> {
     Ok(())
 }
 
-fn make_edge_refs(targets: Option<Vec<String>>) -> Option<Vec<EdgeReference>> {
+fn make_edge_refs(root: &Path, targets: Option<Vec<String>>) -> Option<Vec<EdgeReference>> {
     targets.map(|t| {
         t.into_iter()
-            .map(|target| EdgeReference {
-                target,
-                version: Some("1.0.0".to_string()),
-                rationale: None,
+            .map(|target| {
+                let version = find_node_path(root, &target)
+                    .ok()
+                    .and_then(|p| load_node(&p).ok())
+                    .map(|n| n.version)
+                    .unwrap_or_else(|| "1.0.0".to_string());
+                EdgeReference {
+                    target,
+                    version: Some(version),
+                    rationale: None,
+                }
             })
             .collect()
     })
@@ -454,8 +467,8 @@ pub fn add_requirement(
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
-        derives_from: make_edge_refs(options.derives_from),
-        depends_on: make_edge_refs(options.depends_on),
+        derives_from: make_edge_refs(root, options.derives_from),
+        depends_on: make_edge_refs(root, options.depends_on),
         ..Default::default()
     };
 
@@ -468,7 +481,7 @@ pub fn add_requirement(
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
-        requested_by: get_git_user(),
+        requested_by: options.requested_by,
         priority: Some(options.priority),
         category: Some(options.category.clone()),
         tags: options.tags,
@@ -499,7 +512,7 @@ pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, Sto
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
-        supported_by: make_edge_refs(options.supported_by),
+        supported_by: make_edge_refs(root, options.supported_by),
         ..Default::default()
     };
 
@@ -512,7 +525,7 @@ pub fn add_thesis(root: &Path, options: AddThesisOptions) -> Result<PathBuf, Sto
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
-        requested_by: get_git_user(),
+        requested_by: options.requested_by,
         priority: None,
         category: None,
         tags: None,
@@ -557,7 +570,7 @@ pub fn add_source(root: &Path, options: AddSourceOptions) -> Result<PathBuf, Sto
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
-        requested_by: get_git_user(),
+        requested_by: options.requested_by,
         priority: None,
         category: None,
         tags: None,
@@ -594,7 +607,7 @@ pub fn add_implementation(
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
-        satisfies: make_edge_refs(options.satisfies),
+        satisfies: make_edge_refs(root, options.satisfies),
         ..Default::default()
     };
 
@@ -604,6 +617,7 @@ pub fn add_implementation(
             .map(|p| crate::types::FileRef {
                 path: p,
                 functions: None,
+                sha256: None,
             })
             .collect()
     });
@@ -617,7 +631,7 @@ pub fn add_implementation(
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
-        requested_by: get_git_user(),
+        requested_by: options.requested_by,
         priority: None,
         category: None,
         tags: None,
@@ -628,6 +642,7 @@ pub fn add_implementation(
             language: options.language,
             files,
             test_command: options.test_command,
+            verified_at: None,
         })),
         edges: Some(edges),
     };
@@ -658,6 +673,7 @@ pub struct AddMessageOptions {
     pub tags: Option<Vec<String>>,
     pub status: Status,
     pub created_by: String,
+    pub requested_by: Option<String>,
 }
 
 /// Add a message node to the lattice.
@@ -666,7 +682,7 @@ pub fn add_message(root: &Path, options: AddMessageOptions) -> Result<PathBuf, S
     let now = chrono::Utc::now().to_rfc3339();
 
     let edges = Edges {
-        grounded_in: make_edge_refs(options.grounded_in),
+        grounded_in: make_edge_refs(root, options.grounded_in),
         ..Default::default()
     };
 
@@ -679,7 +695,7 @@ pub fn add_message(root: &Path, options: AddMessageOptions) -> Result<PathBuf, S
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
-        requested_by: get_git_user(),
+        requested_by: options.requested_by,
         priority: None,
         category: None,
         tags: options.tags,
@@ -773,6 +789,7 @@ pub struct EditNodeOptions {
     pub body: Option<String>,
     pub status: Option<Status>,
     pub priority: Option<Priority>,
+    pub confidence: Option<f64>,
     pub tags: Option<Vec<String>>,
     pub category: Option<String>,
     pub files: Option<Vec<String>>,
@@ -826,6 +843,27 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
             changed = true;
         }
     }
+    if let Some(new_confidence) = options.confidence {
+        if node.node_type != NodeType::Thesis {
+            return Err(StorageError::InvalidField(
+                "Confidence can only be set on thesis nodes".to_string(),
+            ));
+        }
+        if let Some(NodeMeta::Thesis(ref mut meta)) = node.meta {
+            let old_confidence = meta.confidence_value();
+            if (new_confidence - old_confidence).abs() > f64::EPSILON {
+                // Record history entry before updating
+                meta.confidence_history.push(ConfidenceEntry {
+                    value: new_confidence,
+                    reason: None,
+                    updated_by: get_git_user().unwrap_or_else(|| "unknown".to_string()),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                });
+                meta.confidence = Some(new_confidence);
+                changed = true;
+            }
+        }
+    }
     if let Some(tags) = options.tags
         && node.tags.as_ref() != Some(&tags)
     {
@@ -863,6 +901,7 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
                         language: None,
                         files: None,
                         test_command: None,
+                        verified_at: None,
                     },
                 )
             }
@@ -870,15 +909,25 @@ pub fn edit_node(root: &Path, options: EditNodeOptions) -> Result<PathBuf, Stora
                 language: None,
                 files: None,
                 test_command: None,
+                verified_at: None,
             },
         };
 
         if let Some(file_paths) = options.files {
+            let existing: std::collections::HashMap<&str, &crate::types::FileRef> = impl_meta
+                .files
+                .as_ref()
+                .map(|fs| fs.iter().map(|f| (f.path.as_str(), f)).collect())
+                .unwrap_or_default();
             let new_files: Vec<crate::types::FileRef> = file_paths
                 .into_iter()
-                .map(|p| crate::types::FileRef {
-                    path: p,
-                    functions: None,
+                .map(|p| {
+                    let prev = existing.get(p.as_str());
+                    crate::types::FileRef {
+                        functions: prev.and_then(|f| f.functions.clone()),
+                        sha256: prev.and_then(|f| f.sha256.clone()),
+                        path: p,
+                    }
                 })
                 .collect();
             if impl_meta.files.as_ref() != Some(&new_files) {
@@ -963,9 +1012,28 @@ pub fn acknowledge_drift(root: &Path, node_id: &str) -> Result<PathBuf, StorageE
         )));
     }
 
+    // Check if any edges are actually drifted before acknowledging
+    let drifted = has_drifted_edges(root, &node);
+    if !drifted {
+        return Err(StorageError::EdgeNotFound(format!(
+            "Node '{}' has no drifted edges. Run `lattice drift` to see which nodes have drift.",
+            node_id
+        )));
+    }
+
     re_snapshot_edges(root, &mut node);
     save_node(&path, &node)?;
     Ok(path)
+}
+
+/// Check whether a node has any edges whose pinned version differs from the target's current version.
+fn has_drifted_edges(root: &Path, node: &LatticeNode) -> bool {
+    node.all_edges().iter().any(|edge| {
+        find_node_path(root, &edge.target)
+            .ok()
+            .and_then(|p| load_node(&p).ok())
+            .is_some_and(|t| edge.version_or_default() != t.version)
+    })
 }
 
 /// Gap type for requirement refinement.
@@ -1013,6 +1081,7 @@ pub struct RefineOptions {
     pub proposed: Option<String>,
     pub implementation_id: Option<String>,
     pub created_by: String,
+    pub requested_by: Option<String>,
 }
 
 /// Result of a refinement operation.
@@ -1082,7 +1151,7 @@ pub fn refine_requirement(
         version: "1.0.0".to_string(),
         created_at: now,
         created_by: options.created_by,
-        requested_by: get_git_user(),
+        requested_by: options.requested_by,
         priority: Some(priority),
         category: Some(category.clone()),
         tags: Some(vec!["refinement".to_string(), options.gap_type.to_string()]),
@@ -1489,8 +1558,27 @@ pub fn verify_implementation(root: &Path, options: VerifyOptions) -> Result<Path
         edges.satisfies = Some(vec![new_edge]);
     }
 
+    // Always update verified_at so re-verification produces a diff
+    if let Some(NodeMeta::Implementation(ref mut meta)) = impl_node.meta {
+        meta.verified_at = Some(chrono::Utc::now().to_rfc3339());
+
+        // Record content hashes for all bound files (#55)
+        if let Some(ref mut file_refs) = meta.files {
+            for file_ref in file_refs.iter_mut() {
+                let file_path = root.join(&file_ref.path);
+                file_ref.sha256 = compute_file_sha256(&file_path);
+            }
+        }
+    }
+
     save_node(&impl_path, &impl_node)?;
     Ok(impl_path)
+}
+
+pub fn compute_file_sha256(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let data = std::fs::read(path).ok()?;
+    Some(format!("{:x}", Sha256::digest(&data)))
 }
 
 #[cfg(test)]
@@ -1724,6 +1812,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
 
         let path = add_requirement(root, options).unwrap();
@@ -1751,6 +1840,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, options).unwrap();
 
@@ -1765,6 +1855,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         let result = add_requirement(root, duplicate);
         assert!(result.is_err());
@@ -1788,6 +1879,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, options).unwrap();
 
@@ -1832,6 +1924,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, parent_opts).unwrap();
 
@@ -1844,6 +1937,7 @@ mod tests {
             proposed: Some("Use JSON with error code field".to_string()),
             implementation_id: None,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         let result = refine_requirement(root, refine_opts).unwrap();
 
@@ -1889,6 +1983,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, parent_opts).unwrap();
 
@@ -1900,6 +1995,7 @@ mod tests {
             proposed: Some("Use hyphens, not underscores".to_string()),
             implementation_id: None,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         let result = refine_requirement(root, refine_opts).unwrap();
 
@@ -1925,6 +2021,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, parent_opts).unwrap();
 
@@ -1939,6 +2036,7 @@ mod tests {
             satisfies: Some(vec!["REQ-GAP-001".to_string()]),
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -1951,6 +2049,7 @@ mod tests {
             proposed: None,
             implementation_id: Some("IMP-GAP-001".to_string()),
             created_by: "test".to_string(),
+            requested_by: None,
         };
         let result = refine_requirement(root, refine_opts).unwrap();
 
@@ -1980,6 +2079,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, parent_opts).unwrap();
 
@@ -1994,6 +2094,7 @@ mod tests {
                 proposed: Some("Answer".to_string()),
                 implementation_id: None,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2010,6 +2111,7 @@ mod tests {
                 proposed: None,
                 implementation_id: None,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2086,6 +2188,7 @@ mod tests {
                 proposed: None,
                 implementation_id: None,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         );
         assert!(result.is_err());
@@ -2109,6 +2212,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, req_opts).unwrap();
 
@@ -2122,6 +2226,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2161,6 +2266,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, req_opts).unwrap();
 
@@ -2174,6 +2280,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2261,6 +2368,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2295,6 +2403,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2307,6 +2416,7 @@ mod tests {
                 body: Some("New body".to_string()),
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2340,6 +2450,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2352,6 +2463,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: Some(vec!["alpha".to_string(), "beta".to_string()]),
                 category: Some("NEW".to_string()),
                 files: None,
@@ -2388,6 +2500,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2400,6 +2513,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2431,6 +2545,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2443,6 +2558,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: Some(crate::types::Priority::P0),
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2473,6 +2589,7 @@ mod tests {
                 reliability: Reliability::Unverified,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2485,6 +2602,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: Some(crate::types::Priority::P0),
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2518,6 +2636,7 @@ mod tests {
                 satisfies: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2530,6 +2649,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: Some(vec!["src/new.rs".to_string(), "src/lib.rs".to_string()]),
@@ -2565,6 +2685,7 @@ mod tests {
                 satisfies: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2577,6 +2698,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -2611,6 +2733,7 @@ mod tests {
                 reliability: Reliability::Unverified,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -2623,6 +2746,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: Some(vec!["src/foo.rs".to_string()]),
@@ -2655,6 +2779,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, req_opts).unwrap();
 
@@ -2668,6 +2793,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2714,6 +2840,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2750,6 +2877,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2791,6 +2919,7 @@ mod tests {
                     depends_on: None,
                     status: crate::types::Status::Active,
                     created_by: "test".to_string(),
+                    requested_by: None,
                 },
             )
             .unwrap();
@@ -2806,6 +2935,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2860,6 +2990,7 @@ mod tests {
                     depends_on: None,
                     status: crate::types::Status::Active,
                     created_by: "test".to_string(),
+                    requested_by: None,
                 },
             )
             .unwrap();
@@ -2875,6 +3006,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2928,6 +3060,7 @@ mod tests {
                     depends_on: None,
                     status: crate::types::Status::Active,
                     created_by: "test".to_string(),
+                    requested_by: None,
                 },
             )
             .unwrap();
@@ -2943,6 +3076,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -2993,6 +3127,7 @@ mod tests {
             depends_on: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_requirement(root, req_opts).unwrap();
 
@@ -3006,6 +3141,7 @@ mod tests {
             satisfies: None,
             status: crate::types::Status::Active,
             created_by: "test".to_string(),
+            requested_by: None,
         };
         add_implementation(root, impl_opts).unwrap();
 
@@ -3048,6 +3184,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -3065,6 +3202,7 @@ mod tests {
                 depends_on: Some(vec!["REQ-SNAP-001".to_string()]),
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -3084,6 +3222,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -3106,6 +3245,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -3139,6 +3279,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -3156,6 +3297,7 @@ mod tests {
                 depends_on: Some(vec!["REQ-ACK-001".to_string()]),
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();
@@ -3169,6 +3311,7 @@ mod tests {
                 body: None,
                 status: None,
                 priority: None,
+                confidence: None,
                 tags: None,
                 category: None,
                 files: None,
@@ -3215,6 +3358,7 @@ mod tests {
                 depends_on: None,
                 status: crate::types::Status::Active,
                 created_by: "test".to_string(),
+                requested_by: None,
             },
         )
         .unwrap();

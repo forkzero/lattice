@@ -1,0 +1,17 @@
+id: IMP-LINT-002
+type: implementation
+title: Skill version lint check
+body: check_skill_version in lint.rs warns when installed SKILL.md lacks a version line, pointing users to lattice init --skill to refresh
+status: active
+version: 1.0.0
+created_at: 2026-10-31T20:13:31.686852+00:00
+created_by: claude
+requested_by: George Moon <george.moon@gmail.com>
+meta:
+  files:
+  - path: src/lint.rs
+  test_command: cargo test
+edges:
+  satisfies:
+  - target: REQ-AGENT-011
+    version: 1.0.0

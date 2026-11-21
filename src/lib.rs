@@ -45,9 +45,10 @@ pub use storage::{
     GapType, LATTICE_DIR, LatticeConfig, RefineOptions, RefineResult, RemoveEdgeOptions,
     ReplaceEdgeOptions, ResolveOptions, SchemaCheck, VerifyOptions, acknowledge_drift, add_edge,
     add_implementation, add_message, add_requirement, add_source, add_thesis, check_schema_version,
-    edit_node, find_lattice_root, find_node_path, get_git_remote_url, get_git_user,
-    get_github_pages_url, init_lattice, load_all_nodes, load_config, load_nodes_by_type,
-    refine_requirement, remove_edge, replace_edge, resolve_node, verify_implementation,
+    compute_file_sha256, edit_node, find_lattice_root, find_node_path, get_git_remote_url,
+    get_git_user, get_github_pages_url, init_lattice, load_all_nodes, load_config,
+    load_nodes_by_type, refine_requirement, remove_edge, replace_edge, resolve_node,
+    verify_implementation,
 };
 pub use types::{
     ConfidenceEntry, LatticeNode, MessageMeta, NodeIndex, NodeMeta, NodeType, Priority, Resolution,

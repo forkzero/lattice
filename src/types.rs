@@ -173,6 +173,8 @@ pub struct FileRef {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub functions: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 /// Source node metadata.
@@ -239,6 +241,8 @@ pub struct ImplementationMeta {
     pub files: Option<Vec<FileRef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub test_command: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verified_at: Option<String>,
 }
 
 /// A generic lattice node that can be any type.

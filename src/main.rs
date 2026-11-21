@@ -11,10 +11,10 @@ use lattice::{
     LintSeverity, NodeMeta, NodeType, Plan, Priority, RefineOptions, RemoveEdgeOptions,
     ReplaceEdgeOptions, Resolution, ResolveOptions, SchemaCheck, SearchEngine, SearchParams,
     Status, VerifyOptions, add_edge, add_implementation, add_message, add_requirement, add_source,
-    add_thesis, build_node_index, check_schema_version, edit_node, export_html, export_narrative,
-    find_drift, find_lattice_root, find_node_path, fix_issues, format_diff_markdown,
-    format_entry_text, generate_plan, get_git_user, get_github_pages_url, init_lattice,
-    lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
+    add_thesis, build_node_index, check_schema_version, compute_file_sha256, edit_node,
+    export_html, export_narrative, find_drift, find_lattice_root, find_node_path, fix_issues,
+    format_diff_markdown, format_entry_text, generate_plan, get_git_user, get_github_pages_url,
+    init_lattice, lattice_diff, lint_lattice, load_all_nodes, load_config, load_nodes_by_type,
     refine_requirement, remove_edge, replace_edge, resolve_node, run_git_lines, split_csv,
     verify_implementation,
 };
@@ -156,7 +156,7 @@ enum Commands {
         format: String,
     },
 
-    /// Edit a source, thesis, requirement, or implementation
+    /// Edit a node. Any field change bumps the patch version; nodes with edges bound to this one will show drift (see `lattice drift`)
     Edit {
         /// Node ID (e.g., REQ-CORE-001, IMP-DIST-001)
         id: String,
@@ -169,13 +169,17 @@ enum Commands {
         #[arg(long)]
         body: Option<String>,
 
-        /// New status (draft, active, deprecated, superseded)
+        /// New status (draft, active, contested, deprecated, superseded)
         #[arg(long)]
         status: Option<String>,
 
         /// New priority (P0, P1, P2) — requirements only
         #[arg(long)]
         priority: Option<String>,
+
+        /// New confidence (0.0-1.0) — theses only
+        #[arg(long)]
+        confidence: Option<f64>,
 
         /// Comma-separated tags (replaces existing)
         #[arg(long)]
@@ -224,7 +228,7 @@ enum Commands {
         format: String,
     },
 
-    /// Record that an implementation satisfies a requirement
+    /// Record that an implementation satisfies a requirement. Without --tests-pass, acts as a WIP attestation (records file hashes, clears Code Impact)
     Verify {
         /// Implementation ID (e.g., IMP-STORAGE-001)
         implementation: String,
@@ -240,11 +244,11 @@ enum Commands {
         #[arg(long)]
         tests_pass: bool,
 
-        /// Record coverage percentage (0.0-1.0)
+        /// Record coverage percentage (0.0-1.0); overwrites previous value
         #[arg(long)]
         coverage: Option<f64>,
 
-        /// Comma-separated file paths as evidence
+        /// Comma-separated file paths as evidence (stored separately from implementation's files; overwrites previous evidence)
         #[arg(long)]
         files: Option<String>,
 
@@ -277,6 +281,10 @@ enum Commands {
         /// Implementation ID that discovered this gap
         #[arg(long, alias = "discovered-by")]
         implementation: Option<String>,
+
+        /// Who requested this (overrides config/git; "none" to omit)
+        #[arg(long)]
+        requested_by: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -433,6 +441,10 @@ enum Commands {
         /// Output directory for HTML export
         #[arg(short, long)]
         output: Option<String>,
+
+        /// Base URL for pages export (overrides auto-detected GitHub Pages URL)
+        #[arg(long)]
+        base_url: Option<String>,
     },
 
     /// Milestone knowledge capture — prefilter, nomination inbox, pre-push gate
@@ -457,7 +469,7 @@ enum Commands {
         skill: bool,
     },
 
-    /// Self-update to the latest version
+    /// Self-update lattice to the latest version. To change a node, use `lattice edit`
     Update {
         /// Only check for updates, don't install
         #[arg(long)]
@@ -474,6 +486,10 @@ enum Commands {
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
+
+        /// Trailing arguments (caught to detect misuse like `lattice update REQ-X`)
+        #[arg(trailing_var_arg = true, hide = true)]
+        rest: Vec<String>,
     },
 
     /// Show commands, concepts, or workflows
@@ -568,6 +584,10 @@ enum AddCommands {
         #[arg(long)]
         created_by: Option<String>,
 
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -607,6 +627,10 @@ enum AddCommands {
         #[arg(long)]
         created_by: Option<String>,
 
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -645,6 +669,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -713,6 +741,10 @@ enum AddCommands {
         #[arg(long)]
         created_by: Option<String>,
 
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
+
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
@@ -751,6 +783,10 @@ enum AddCommands {
         /// Author
         #[arg(long)]
         created_by: Option<String>,
+
+        /// Who requested this node (default: git user). Use "none" to omit.
+        #[arg(long)]
+        requested_by: Option<String>,
 
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
@@ -959,23 +995,10 @@ fn parse_priority(s: &str) -> Priority {
 }
 
 fn parse_status(s: &str) -> Status {
-    match s.to_lowercase().as_str() {
-        "draft" => Status::Draft,
-        "active" => Status::Active,
-        "deprecated" => Status::Deprecated,
-        "superseded" => Status::Superseded,
-        _ => {
-            eprintln!(
-                "{}",
-                format!(
-                    "Invalid status: {}. Must be draft, active, deprecated, or superseded",
-                    s
-                )
-                .red()
-            );
-            process::exit(1);
-        }
-    }
+    s.parse::<Status>().unwrap_or_else(|e| {
+        eprintln!("{}", e.red());
+        process::exit(1);
+    })
 }
 
 fn parse_reliability(s: &str) -> lattice::types::Reliability {
@@ -1016,6 +1039,18 @@ fn parse_thesis_category(s: &str) -> lattice::types::ThesisCategory {
             );
             process::exit(1);
         }
+    }
+}
+
+/// Resolve `requested_by`: CLI flag > config > git user. "none" omits the field.
+fn resolve_requested_by(flag: Option<String>, config: &lattice::LatticeConfig) -> Option<String> {
+    match flag.as_deref() {
+        Some("none") => None,
+        Some(value) => Some(value.to_string()),
+        None => config
+            .requested_by
+            .clone()
+            .or_else(lattice::storage::get_git_user),
     }
 }
 
@@ -1096,15 +1131,58 @@ fn install_agent_definitions(root: &std::path::Path) -> Result<Vec<std::path::Pa
     Ok(created)
 }
 
+fn skill_content() -> String {
+    include_str!("../skills/lattice/SKILL.md").replace("LATTICE_VERSION", env!("CARGO_PKG_VERSION"))
+}
+
 fn install_skill_definitions(root: &std::path::Path) -> Result<Vec<std::path::PathBuf>, String> {
     let skill_dir = root.join(".claude").join("skills").join("lattice");
     std::fs::create_dir_all(&skill_dir).map_err(|e| e.to_string())?;
 
     let skill_path = skill_dir.join("SKILL.md");
-    std::fs::write(&skill_path, include_str!("../skills/lattice/SKILL.md"))
-        .map_err(|e| e.to_string())?;
+    std::fs::write(&skill_path, skill_content()).map_err(|e| e.to_string())?;
 
     Ok(vec![skill_path])
+}
+
+/// Auto-update the installed SKILL.md if it has a version line older than the binary.
+/// Skips if no skill is installed or if the version line was removed (user opted out).
+fn maybe_update_skill(root: &std::path::Path) {
+    let skill_path = root
+        .join(".claude")
+        .join("skills")
+        .join("lattice")
+        .join("SKILL.md");
+    if !skill_path.exists() {
+        return;
+    }
+
+    let content = match std::fs::read_to_string(&skill_path) {
+        Ok(c) => c,
+        Err(_) => return,
+    };
+
+    // Look for version line in frontmatter
+    let version_line = content.lines().find(|l| l.starts_with("version:"));
+    let installed_version = match version_line {
+        Some(line) => line.trim_start_matches("version:").trim().to_string(),
+        None => return, // No version line = user opted out of auto-updates
+    };
+
+    let current_version = env!("CARGO_PKG_VERSION");
+    if installed_version == current_version {
+        return; // Already current
+    }
+
+    // Regenerate
+    if std::fs::write(&skill_path, skill_content()).is_ok() {
+        eprintln!(
+            "  {} SKILL.md {} → {}",
+            "Updated:".green().bold(),
+            installed_version.dimmed(),
+            current_version.green()
+        );
+    }
 }
 
 fn detect_claude_code(root: &std::path::Path) -> bool {
@@ -1366,6 +1444,7 @@ fn build_command_catalog() -> serde_json::Value {
                 "grounded_in": "Message is grounded in a thesis — messaging claim traces back to strategic position. Direction: message → thesis."
             },
             "versions": "All nodes use semver (MAJOR.MINOR.PATCH). Edges record the target node's version at binding time. When a node is edited, its version bumps and edges bound to the old version become 'potentially stale' — this is drift.",
+            "code_impact": "Implementation nodes bind source files via meta.files. When `lattice health` runs, it compares files changed since the last .lattice/ commit against these bindings. Changed tracked files that haven't been re-verified trigger a Code Impact warning. Clear it by running `lattice verify` or `lattice edit` on the affected implementation, then staging .lattice/ alongside your code.",
             "id_conventions": "IDs follow the pattern PREFIX-CATEGORY-NNN (e.g. REQ-CORE-001, THX-AGENT-PROTOCOL, SRC-MCP-SPEC). Categories group related nodes (CORE, CLI, API, AGENT, DIST, etc.)."
         },
         "workflows": [
@@ -1429,6 +1508,19 @@ fn build_command_catalog() -> serde_json::Value {
                     "lattice edit <IMP-id> --files 'updated-file-list'",
                     "git add .lattice/",
                     "lattice health --strict --check"
+                ]
+            },
+            {
+                "name": "tdd_red_green",
+                "description": "TDD workflow: commit failing tests (red) then passing implementation (green) while keeping the lattice honest",
+                "steps": [
+                    "# Red commit — tests written but failing:",
+                    "lattice verify <IMP-id> satisfies <REQ-id>",
+                    "# (no --tests-pass: records file hashes as WIP attestation, clears Code Impact)",
+                    "git add .lattice/ && git commit -m 'Red: add tests for REQ-...'",
+                    "# Green commit — implementation makes tests pass:",
+                    "lattice verify <IMP-id> satisfies <REQ-id> --tests-pass",
+                    "git add .lattice/ && git commit -m 'Green: implement REQ-...'"
                 ]
             }
         ],
@@ -1523,6 +1615,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--depends-on", "string", false, "Comma-separated requirement IDs"),
                     param("--status", "string", false, "Status: draft, active (default: active)"),
                     param("--created-by", "string", false, "Author (e.g. human:george)"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1542,6 +1635,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--confidence", "float", false, "Confidence level 0.0-1.0"),
                     param("--tags", "string", false, "Comma-separated tags"),
                     param("--supported-by", "string", false, "Comma-separated source IDs"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1560,6 +1654,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--url", "string", false, "Source URL"),
                     param("--source-type", "string", false, "Type: paper, article, report, data"),
                     param("--tags", "string", false, "Comma-separated tags"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1578,6 +1673,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--satisfies", "string", false, "Comma-separated requirement IDs"),
                     param("--files", "string", false, "Comma-separated file paths"),
                     param("--tags", "string", false, "Comma-separated tags"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1598,6 +1694,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--grounded-in", "string", false, "Comma-separated thesis IDs this message is grounded in"),
                     param("--tags", "string", false, "Comma-separated tags"),
                     param("--created-by", "string", false, "Author (e.g. human:george)"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, title, version, status }",
@@ -1721,6 +1818,7 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--description", "string", true, "What is underspecified and why"),
                     param("--proposed / --proposal", "string", false, "Proposed resolution (alias: --proposal)"),
                     param("--implementation / --discovered-by", "string", false, "Implementation ID that discovered this gap (alias: --discovered-by)"),
+                    param("--requested-by", "string", false, "Who requested this node (default: git user). Use 'none' to omit."),
                     param_s("--format", "-f", "string", false, "Output format: text, json (default: text)")
                 ],
                 "output_schema_hint": "{ id, parent, gap_type, title }",
@@ -1857,7 +1955,8 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--audience", "string", false, "Target audience: investor, contributor, overview (default: overview)"),
                     param("--title", "string", false, "Document title (default: Lattice)"),
                     param("--include-internal", "bool", false, "Include nodes marked as internal"),
-                    param("--output", "string", false, "Output directory for HTML/pages export")
+                    param("--output", "string", false, "Output directory for HTML/pages export"),
+                    param("--base-url", "string", false, "Base URL for pages export (overrides auto-detected GitHub Pages URL)")
                 ],
                 "examples": [
                     {"command": "lattice export", "explanation": "Generate a narrative overview of the lattice for general audiences"},
@@ -2352,6 +2451,11 @@ fn main() {
     // Apply any staged auto-update before anything else
     lattice::update::apply_staged_update();
 
+    // Auto-update skill if installed and outdated
+    if let Some(root) = find_lattice_root(&std::env::current_dir().unwrap_or_default()) {
+        maybe_update_skill(&root);
+    }
+
     // Intercept top-level --help/-h and --version/-V before clap parses,
     // so subcommand --help still uses clap's built-in per-command help,
     // and --version can show the passive update notification.
@@ -2448,6 +2552,26 @@ fn run_command(command: Commands) {
             let lattice_exists = cwd.join(".lattice").exists();
             let install_agents = agents || skill;
 
+            // Warn if a parent directory has .lattice/ (prevents silent shadowing)
+            if !lattice_exists && let Some(parent_root) = find_lattice_root(&cwd) {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Warning: a parent directory already has a lattice at {}",
+                        parent_root.join(".lattice").display()
+                    )
+                    .yellow()
+                );
+                eprintln!(
+                    "{}",
+                    "  Other commands will use that lattice unless you create one here.".dimmed()
+                );
+                eprintln!(
+                    "{}",
+                    "  Proceeding to initialize in the current directory.\n".dimmed()
+                );
+            }
+
             // If --skill or --agents on an existing lattice, install standalone
             if install_agents && lattice_exists && !force {
                 install_extras(&cwd, skill, true);
@@ -2477,6 +2601,26 @@ fn run_command(command: Commands) {
 
                         println!();
                         println!("{}", "Lattice initialized.".green().bold());
+                        println!();
+                        println!(
+                            "{}",
+                            "Note: .lattice/ is tracked in git by default.".yellow()
+                        );
+                        println!(
+                            "{}",
+                            "  → Every source, thesis, and requirement body is visible to anyone who can read this repo."
+                                .dimmed()
+                        );
+                        println!(
+                            "{}",
+                            "  → For public repos, keep sensitive specifics (credentials, PII, financial detail)"
+                                .dimmed()
+                        );
+                        println!(
+                            "{}",
+                            "    out of node bodies, or use a private repo for sensitive theses/requirements."
+                                .dimmed()
+                        );
                         println!();
                         println!("Next steps:");
                         println!("  lattice seed              # Bootstrap from vision");
@@ -2516,9 +2660,11 @@ fn run_command(command: Commands) {
                 depends_on,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let priority = parse_priority(&priority);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| {
@@ -2536,6 +2682,7 @@ fn run_command(command: Commands) {
                     depends_on: split_csv(depends_on),
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_requirement(&root, options) {
@@ -2553,9 +2700,11 @@ fn run_command(command: Commands) {
                 supported_by,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let category = parse_thesis_category(&category);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| "unknown".to_string());
@@ -2569,6 +2718,7 @@ fn run_command(command: Commands) {
                     supported_by: split_csv(supported_by),
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_thesis(&root, options) {
@@ -2586,9 +2736,11 @@ fn run_command(command: Commands) {
                 reliability,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let reliability = parse_reliability(&reliability);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| "unknown".to_string());
@@ -2602,6 +2754,7 @@ fn run_command(command: Commands) {
                     reliability,
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_source(&root, options) {
@@ -2620,9 +2773,11 @@ fn run_command(command: Commands) {
                 satisfies,
                 status,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
                 let status = parse_status(&status);
                 let created_by = created_by.unwrap_or_else(|| {
                     format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d"))
@@ -2638,6 +2793,7 @@ fn run_command(command: Commands) {
                     satisfies: split_csv(satisfies),
                     status,
                     created_by,
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_implementation(&root, options) {
@@ -2696,9 +2852,11 @@ fn run_command(command: Commands) {
                 grounded_in,
                 tags,
                 created_by,
+                requested_by,
                 format,
             } => {
                 let root = get_lattice_root();
+                let config = load_config(&root);
 
                 let options = AddMessageOptions {
                     id: id.clone(),
@@ -2711,6 +2869,7 @@ fn run_command(command: Commands) {
                     status: Status::Active,
                     created_by: created_by
                         .unwrap_or_else(|| get_git_user().unwrap_or_else(|| "unknown".to_string())),
+                    requested_by: resolve_requested_by(requested_by, &config),
                 };
 
                 match add_message(&root, options) {
@@ -2995,6 +3154,7 @@ fn run_command(command: Commands) {
             body,
             status,
             priority,
+            confidence,
             tags,
             category,
             files,
@@ -3013,6 +3173,7 @@ fn run_command(command: Commands) {
                 body,
                 status,
                 priority,
+                confidence,
                 tags,
                 category,
                 files,
@@ -3238,6 +3399,7 @@ fn run_command(command: Commands) {
             title,
             include_internal,
             output,
+            base_url,
         } => {
             let root = get_lattice_root();
 
@@ -3269,21 +3431,32 @@ fn run_command(command: Commands) {
             if format == "pages" {
                 let output_dir = output.unwrap_or_else(|| "_site".to_string());
 
-                // Derive GitHub Pages URL from git remote
-                let pages_base = match get_github_pages_url() {
-                    Some(url) => url,
-                    None => {
+                // Use explicit --base-url or derive from git remote
+                let pages_base = base_url
+                    .map(|u| u.trim_end_matches('/').to_string())
+                    .filter(|u| !u.is_empty())
+                    .or_else(get_github_pages_url)
+                    .unwrap_or_else(|| {
                         eprintln!(
                             "{}",
-                            "Error: Could not derive GitHub Pages URL from git remote. Ensure a GitHub origin is configured."
+                            "Error: Could not derive GitHub Pages URL from git remote. Use --base-url or ensure a GitHub origin is configured."
                                 .red()
                         );
                         process::exit(1);
-                    }
-                };
+                    });
 
                 let json_url = format!("{}/lattice-data.json", pages_base);
-                let reader_url = format!("https://forkzero.ai/reader?url={}", json_url);
+                let encoded_json_url: String = json_url
+                    .bytes()
+                    .flat_map(|b| {
+                        if b.is_ascii_alphanumeric() || b"-_.~:/".contains(&b) {
+                            vec![b as char]
+                        } else {
+                            format!("%{:02X}", b).chars().collect()
+                        }
+                    })
+                    .collect();
+                let reader_url = format!("https://forkzero.ai/reader?url={}", encoded_json_url);
 
                 // Build JSON export
                 match build_node_index(&root) {
@@ -3703,25 +3876,35 @@ fn run_command(command: Commands) {
 
             let change_pressure = contested_count + drift_count;
 
-            // 3. Code impact: files changed since last .lattice/ commit that are bound in implementations
-            let bound_files: std::collections::HashSet<String> = all_nodes
+            // 3. Code impact: compare bound file hashes against stored hashes (#54, #55)
+            //    A file is "affected" when its current content hash differs from
+            //    the hash recorded at the last `lattice verify`.
+            let repo_root = &root;
+
+            // Build map: file path → all stored sha256 values (from implementation meta.files)
+            // A file may appear in multiple implementations; we keep all hashes
+            // so we can flag the file as affected if ANY binding is stale.
+            let mut bound_file_hashes: std::collections::HashMap<String, Vec<Option<String>>> =
+                std::collections::HashMap::new();
+            for node in all_nodes
                 .iter()
                 .filter(|n| n.node_type == NodeType::Implementation)
-                .filter_map(|n| {
-                    if let Some(NodeMeta::Implementation(meta)) = &n.meta {
-                        meta.files.as_ref()
-                    } else {
-                        None
+            {
+                if let Some(NodeMeta::Implementation(meta)) = &node.meta
+                    && let Some(files) = &meta.files
+                {
+                    for f in files {
+                        bound_file_hashes
+                            .entry(f.path.clone())
+                            .or_default()
+                            .push(f.sha256.clone());
                     }
-                })
-                .flat_map(|files| files.iter().map(|f| f.path.clone()))
-                .collect();
+                }
+            }
 
-            // If lattice is staged, this commit resolves the diff coupling (#31)
+            // Check which bound files have changed content
             let (tracked_files_changed, total_files_changed, affected_file_names) =
-                if lattice_staged {
-                    (0, 0, Vec::new())
-                } else if !lattice_commit.is_empty() {
+                if !lattice_commit.is_empty() {
                     let changed = run_git_lines(
                         &root,
                         &[
@@ -3733,17 +3916,32 @@ fn run_command(command: Commands) {
                             ":!.lattice/",
                         ],
                     );
+                    let total = changed.len();
+
+                    // A bound file is affected if ANY implementation binding it
+                    // has a stale or missing hash.
                     let affected: Vec<String> = changed
                         .iter()
-                        .filter(|f| bound_files.contains(f.as_str()))
+                        .filter(|f| {
+                            bound_file_hashes.get(f.as_str()).is_some_and(|hashes| {
+                                let current = compute_file_sha256(&repo_root.join(f));
+                                hashes.iter().any(|stored| match stored {
+                                    Some(hash) => current.as_deref() != Some(hash.as_str()),
+                                    None => true,
+                                })
+                            })
+                        })
                         .cloned()
                         .collect();
                     let tracked = affected.len();
-                    let total = changed.len();
                     (tracked, total, affected)
                 } else {
                     (0, 0, Vec::new())
                 };
+
+            // Lattice staged still credits as "diff coupling cleared" for display,
+            // but only when no affected files remain after hash comparison
+            let lattice_staged_credit = lattice_staged && tracked_files_changed == 0;
 
             // 4. Lint (strict mode only)
             let lint_issues = if strict {
@@ -3789,7 +3987,7 @@ fn run_command(command: Commands) {
                     "code_impact": {
                         "total_files_changed": total_files_changed,
                         "tracked_files_changed": tracked_files_changed,
-                        "bound_files_count": bound_files.len(),
+                        "bound_files_count": bound_file_hashes.len(),
                         "affected_files": affected_file_names,
                     },
                     "lattice_staged": lattice_staged,
@@ -3825,7 +4023,7 @@ fn run_command(command: Commands) {
                 println!();
 
                 println!("  {}", "Code Impact:".bold());
-                if lattice_staged {
+                if lattice_staged_credit {
                     println!(
                         "    {}",
                         "Lattice update staged — diff coupling cleared".green()
@@ -3835,11 +4033,11 @@ fn run_command(command: Commands) {
                         "    {} files changed since last lattice update",
                         total_files_changed
                     );
-                    if !bound_files.is_empty() {
+                    if !bound_file_hashes.is_empty() {
                         println!(
                             "    {} of {} lattice-tracked files affected",
                             tracked_files_changed,
-                            bound_files.len()
+                            bound_file_hashes.len()
                         );
                     }
                     for f in &affected_file_names {
@@ -3861,7 +4059,7 @@ fn run_command(command: Commands) {
             // Print remediation hint on FAIL (text mode only)
             if verdict == "FAIL" && !is_json(&format) {
                 println!();
-                if tracked_files_changed > 0 && !lattice_staged {
+                if tracked_files_changed > 0 && !lattice_staged_credit {
                     println!(
                         "  {}",
                         "Tip: Re-verify bound implementations (lattice verify/edit),".dimmed()
@@ -4390,6 +4588,7 @@ fn run_command(command: Commands) {
             description,
             proposed,
             implementation,
+            requested_by,
             format,
         } => {
             let root = get_lattice_root();
@@ -4399,6 +4598,7 @@ fn run_command(command: Commands) {
                 Err(e) => emit_error(&format, "invalid_gap_type", &e),
             };
 
+            let config = load_config(&root);
             let options = RefineOptions {
                 parent_id: parent.clone(),
                 gap_type: gap,
@@ -4407,6 +4607,7 @@ fn run_command(command: Commands) {
                 proposed,
                 implementation_id: implementation,
                 created_by: format!("agent:claude-{}", chrono::Utc::now().format("%Y-%m-%d")),
+                requested_by: resolve_requested_by(requested_by, &config),
             };
 
             match refine_requirement(&root, options) {
@@ -4758,8 +4959,40 @@ fn run_command(command: Commands) {
             force,
             version,
             format,
+            rest,
         } => {
             use lattice::update::{UpdateOptions, UpdateResult};
+
+            // Catch `lattice update REQ-X ...` — user likely meant `lattice edit`
+            let looks_like_node_id = rest.first().is_some_and(|arg| {
+                let u = arg.to_uppercase();
+                u.starts_with("REQ-")
+                    || u.starts_with("THX-")
+                    || u.starts_with("SRC-")
+                    || u.starts_with("IMP-")
+                    || u.starts_with("MSG-")
+            });
+            if looks_like_node_id {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Error: `lattice update` is the self-updater. To change a node, use:\n\n  lattice edit {} [--title ...] [--body ...]\n\nRun `lattice edit --help` for all options.",
+                        rest[0]
+                    )
+                    .red()
+                );
+                process::exit(1);
+            } else if !rest.is_empty() {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Error: unexpected argument '{}'. Did you mean `--version {}`?\n\nRun `lattice update --help` for usage.",
+                        rest[0], rest[0]
+                    )
+                    .red()
+                );
+                process::exit(1);
+            }
 
             if !lattice::update::is_installed_binary() {
                 if is_json(&format) {
@@ -5219,6 +5452,12 @@ fn run_command(command: Commands) {
                         println!("{}\n", "VERSIONING:".bold());
                         if let Some(v) = concepts["versions"].as_str() {
                             println!("  {}\n", v);
+                        }
+
+                        // Code Impact
+                        println!("{}\n", "CODE IMPACT:".bold());
+                        if let Some(ci) = concepts["code_impact"].as_str() {
+                            println!("  {}\n", ci);
                         }
 
                         // ID conventions

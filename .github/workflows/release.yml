@@ -23,7 +23,7 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-latest
             cross: false
           - target: x86_64-apple-darwin
             os: macos-latest
@@ -210,6 +210,17 @@ jobs:
 
       - name: Install lattice via install script
         run: curl -fsSL ${{ vars.INSTALL_URL }} | sh
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+
+      - name: Verify unauthenticated version detection
+        run: |
+          DETECTED=$(curl -sSL "https://api.github.com/repos/${{ github.repository }}/releases/latest" 2>/dev/null | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/' || true)
+          if [ -n "$DETECTED" ]; then
+            echo "Detected version: ${DETECTED}"
+          else
+            echo "Warning: unauthenticated version detection failed (likely GitHub API rate limit)"
+          fi
 
       - name: Run e2e tests
         run: bash tests/docker/e2e-test.sh

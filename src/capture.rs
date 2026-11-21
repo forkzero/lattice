@@ -407,6 +407,7 @@ pub fn accept(
                 depends_on: None,
                 status: Status::Active,
                 created_by: nom.created_by.clone(),
+                requested_by: None,
             };
             add_requirement(root, opts).map_err(|e| e.to_string())?;
             Ok(format!("Created requirement {}", req_id))
@@ -544,10 +545,12 @@ mod tests {
                         .map(|p| FileRef {
                             path: p.to_string(),
                             functions: None,
+                            sha256: None,
                         })
                         .collect(),
                 ),
                 test_command: None,
+                verified_at: None,
             })),
             edges: Some(Edges {
                 satisfies: Some(
