@@ -1,0 +1,13 @@
+id: SRC-AGENT-MEMORY-HOOKS
+type: source
+title: Bratanic — Unified Agentic Memory Across Harnesses Using Hooks
+body: Tomaz Bratanic (Neo4j). Argues agent memory should live below the harness so it is portable across Claude Code, Codex, and Cursor and owned by the user. Uses standardized lifecycle hooks (SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop) for passive deterministic capture into Neo4j as a linked list of session events, plus an offline dream phase where an LLM distills events into merged markdown memories at semantic paths. Injection loads profile memories at session start and fulltext-searched memories per prompt. Companion repo tomasonjo/agent-memory-hooks-neo4j implements hooks/log_event.py, hooks/inject_memory.py, and dream/dream.py.
+status: active
+version: 1.0.0
+created_at: 2026-07-17T23:11:08.798098348+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  url: https://towardsdatascience.com/unified-agentic-memory-across-harnesses-using-hooks/
+  reliability: blog
+  retrieved_at: 2026-07-17

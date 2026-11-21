@@ -1,0 +1,18 @@
+id: IMP-CAPTURE-002
+type: implementation
+title: Binding-intersection relevance prefilter
+body: Deterministic prefilter in src/capture.rs (prefilter, binding_map, staged_files, changed_files_since) intersecting git-changed files with implementation binding paths and resolving affected requirements via satisfies edges. No model call.
+status: active
+version: 1.0.0
+created_at: 2026-07-18T00:03:03.616395140+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  language: rust
+  files:
+  - path: src/capture.rs
+  test_command: 'cargo test --lib capture::'
+edges:
+  satisfies:
+  - target: REQ-CAPTURE-002
+    version: 1.0.0
