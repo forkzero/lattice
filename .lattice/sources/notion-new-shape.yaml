@@ -1,0 +1,15 @@
+id: SRC-NOTION-NEW-SHAPE
+type: source
+title: Notion — A New Shape for Work
+body: 'Notion Labs field guide (v1.0) arguing for a shared context system that a team and its agents work in together, plus factories (shared, specific, scrutinized AI systems). A context system does six jobs: store essential knowledge; organize everything with a logical place; govern with granular permissions and version control; display flexibly; provide great human collaboration; work with any agent. It advocates a clear ontology (core databases like Projects, People, Meetings), syncing external systems into one governed context warehouse (managed syncs and AI-authored worker syncs), validation (make it impossible to input bad information), and curing context rot (stale, out-of-date context as Enemy No. 1). It explicitly argues hosted platforms beat raw code, markdown files, and Git (overkill for most; data scattered across stray Postgres databases), while sloganizing Rent the intelligence, own the context. Factory build loop: Notice, Plan, Run (shadow runs, incremental risk), Improve (evals). Does not mandate a model provider.'
+status: active
+version: 1.0.0
+created_at: 2026-11-21T23:14:43.507577875+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta: {}
+edges:
+  challenges:
+  - target: THX-FILES-SOURCE-OF-TRUTH
+    version: 1.0.0
+    rationale: Notion argues a hosted, governed context platform beats raw code, markdown files, and Git for most teams (overkill for most; stray Postgres databases), contradicting the files-in-Git-as-source-of-truth position.

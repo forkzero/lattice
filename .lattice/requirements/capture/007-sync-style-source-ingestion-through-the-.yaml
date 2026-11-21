@@ -1,0 +1,18 @@
+id: REQ-CAPTURE-007
+type: requirement
+title: Sync-style source ingestion through the nomination seam
+body: Extend capture beyond git-milestone code diffs to ingest external corpora (documents, issues, chat and meeting transcripts, CRM records) as candidate nodes. Ingested content never enters the graph directly; it flows through the same validated nomination seam (propose, then human or agent review, then accept via the CLI), so external data becomes typed, attributed lattice nodes rather than a raw scraped silo. Each sync provider maps external records to proposed nominations (new source, new requirement, or edges to existing nodes), preserving the nominate-not-commit guardrail and keeping provenance. Mirrors the managed/worker sync distinction from context-system practice.
+status: active
+version: 1.0.0
+created_at: 2026-11-21T23:14:53.696507059+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: CAPTURE
+edges:
+  derives_from:
+  - target: THX-MILESTONE-NOMINATION
+    version: 1.0.0
+  depends_on:
+  - target: REQ-CAPTURE-001
+    version: 1.0.0
