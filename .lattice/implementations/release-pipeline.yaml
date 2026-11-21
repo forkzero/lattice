@@ -10,14 +10,19 @@ meta:
   language: yaml
   files:
   - path: .github/workflows/release.yml
+    sha256: fff7d0b6fe53fdc9bc8cc8d8f3673f9ecf3175f3c9ead724f19fb561dbc145a1
   - path: install.sh
+    sha256: 2a48b38b2b98d706dd095dc1effd79da88322c9a1c010fde3bcf49aaa9f15f18
   - path: README.md
+    sha256: 6f9cc524e54626239f2762851b0cb4405162d7f09c58b7871bc67d3b22fdc1de
   - path: src/update.rs
+    sha256: 62864c3d7f0d631e71eee7dec6f38a1ad3929e1351b02c69743bbe405439df47
+  verified_at: 2026-11-21T14:58:23.300748+00:00
 edges:
   satisfies:
   - target: REQ-DIST-001
     version: 1.0.0
-    rationale: Pre-built binary releases for 4 platforms
+    rationale: tests pass
   - target: REQ-DIST-002
     version: 1.0.0
     rationale: install.sh for curl-based installation

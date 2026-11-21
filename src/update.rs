@@ -347,6 +347,10 @@ pub async fn run_update(options: UpdateOptions) -> Result<UpdateResult, UpdateEr
 struct UpdateCheckState {
     last_checked: chrono::DateTime<chrono::Utc>,
     latest_version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    next_check_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    etag: Option<String>,
 }
 
 fn update_check_path() -> Option<std::path::PathBuf> {
@@ -372,6 +376,17 @@ fn write_check_state(path: &std::path::Path, state: &UpdateCheckState) {
     let _ = serde_json::to_string(state)
         .ok()
         .and_then(|json| std::fs::write(path, json).ok());
+}
+
+/// Jittered next-check time: 18-30h from now (spreads load across a 12h window)
+fn jittered_next_check(now: chrono::DateTime<chrono::Utc>) -> chrono::DateTime<chrono::Utc> {
+    let base_secs: i64 = 18 * 3600;
+    let jitter_secs: i64 = (std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos() as i64)
+        % (12 * 3600);
+    now + chrono::Duration::seconds(base_secs + jitter_secs)
 }
 
 /// Check if auto-update is enabled via env var or user config.
@@ -572,14 +587,16 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
         }
     };
 
-    // Check cache first
-    if let Some(state) = read_check_state(&cache_path) {
-        let age = now.signed_duration_since(state.last_checked);
-        if age < chrono::Duration::hours(24) {
+    // Check cache first (use next_check_at if present, fall back to 24h TTL for old cache files)
+    let cached_state = read_check_state(&cache_path);
+    if let Some(ref state) = cached_state {
+        let cache_fresh = state.next_check_at.map(|nca| now < nca).unwrap_or_else(|| {
+            now.signed_duration_since(state.last_checked) < chrono::Duration::hours(24)
+        });
+        if cache_fresh {
             if let Ok(latest) = Version::parse(&state.latest_version)
                 && latest > current
             {
-                // Only create runtime if we need to stage an update
                 if is_auto_update_enabled() {
                     if let Ok(rt) = tokio::runtime::Runtime::new() {
                         stage_auto_update(&rt, &latest);
@@ -603,31 +620,59 @@ pub fn maybe_notify_update(command_name: Option<&str>) {
         Err(_) => return,
     };
 
-    match rt.block_on(fetch_latest_version(&client)) {
-        Ok(ReleaseInfo {
-            version: latest, ..
-        }) => {
-            write_check_state(
-                &cache_path,
-                &UpdateCheckState {
-                    last_checked: now,
-                    latest_version: latest.to_string(),
-                },
-            );
-            if latest > current {
-                handle_update(&rt, &latest);
+    // Build request with conditional ETag header if available
+    let url = format!(
+        "https://api.github.com/repos/{}/releases/latest",
+        GITHUB_REPO
+    );
+    let mut req = client.get(&url);
+    let cached_etag = cached_state.as_ref().and_then(|s| s.etag.clone());
+    if let Some(ref etag) = cached_etag {
+        req = req.header("If-None-Match", etag.as_str());
+    }
+
+    let mut new_state = UpdateCheckState {
+        last_checked: now,
+        latest_version: cached_state
+            .as_ref()
+            .map(|s| s.latest_version.clone())
+            .unwrap_or_else(|| current.to_string()),
+        next_check_at: Some(jittered_next_check(now)),
+        etag: None,
+    };
+
+    let mut notify_version: Option<Version> = None;
+
+    match rt.block_on(async { req.send().await }) {
+        Ok(resp) if resp.status() == reqwest::StatusCode::NOT_MODIFIED => {
+            new_state.etag = cached_etag;
+        }
+        Ok(resp) if resp.status().is_success() => {
+            new_state.etag = resp
+                .headers()
+                .get("etag")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            if let Ok(ReleaseInfo {
+                version: latest, ..
+            }) = rt.block_on(parse_release_response(resp))
+            {
+                new_state.latest_version = latest.to_string();
             }
         }
-        Err(_) => {
-            // Write timestamp anyway to suppress retries for 24h
-            write_check_state(
-                &cache_path,
-                &UpdateCheckState {
-                    last_checked: now,
-                    latest_version: current.to_string(),
-                },
-            );
-        }
+        _ => {}
+    }
+
+    if let Ok(latest) = Version::parse(&new_state.latest_version)
+        && latest > current
+    {
+        notify_version = Some(latest);
+    }
+
+    write_check_state(&cache_path, &new_state);
+
+    if let Some(latest) = notify_version {
+        handle_update(&rt, &latest);
     }
 }
 
@@ -731,11 +776,15 @@ abc123def456  lattice-0.1.7-aarch64-apple-darwin.tar.gz
         let state = UpdateCheckState {
             last_checked: chrono::Utc::now(),
             latest_version: "0.1.7".to_string(),
+            next_check_at: None,
+            etag: None,
         };
         let json = serde_json::to_string(&state).unwrap();
         let parsed: UpdateCheckState = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.latest_version, "0.1.7");
         assert_eq!(parsed.last_checked, state.last_checked);
+        assert!(parsed.next_check_at.is_none());
+        assert!(parsed.etag.is_none());
     }
 
     #[test]
@@ -758,13 +807,18 @@ abc123def456  lattice-0.1.7-aarch64-apple-darwin.tar.gz
     fn test_write_and_read_check_state() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("update-check.json");
+        let now = chrono::Utc::now();
         let state = UpdateCheckState {
-            last_checked: chrono::Utc::now(),
+            last_checked: now,
             latest_version: "0.2.0".to_string(),
+            next_check_at: Some(jittered_next_check(now)),
+            etag: Some("W/\"abc123\"".to_string()),
         };
         write_check_state(&path, &state);
         let loaded = read_check_state(&path).unwrap();
         assert_eq!(loaded.latest_version, "0.2.0");
+        assert!(loaded.next_check_at.is_some());
+        assert_eq!(loaded.etag.as_deref(), Some("W/\"abc123\""));
     }
 
     #[test]

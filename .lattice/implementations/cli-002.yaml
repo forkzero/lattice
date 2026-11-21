@@ -11,7 +11,12 @@ meta:
   language: rust
   files:
   - path: src/main.rs
+    sha256: d527d7e48ad96d8e2f01488e5441f81a868e2e10f76858f51004f8fd306f460a
+  verified_at: 2026-11-21T14:58:21.170115+00:00
 edges:
   satisfies:
   - target: REQ-CLI-011
     version: 1.0.0
+  - target: REQ-CLI-003
+    version: 1.0.0
+    rationale: tests pass
