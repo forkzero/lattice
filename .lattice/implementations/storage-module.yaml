@@ -24,7 +24,7 @@ meta:
     - find_node_path
     - find_lattice_root
     - get_git_user
-  verified_at: 2026-11-04T03:50:30.360383+00:00
+  verified_at: 2026-11-21T05:01:09.233698+00:00
 edges:
   satisfies:
   - target: REQ-CORE-004

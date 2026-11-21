@@ -155,7 +155,7 @@ enum Commands {
         format: String,
     },
 
-    /// Edit a source, thesis, requirement, or implementation
+    /// Edit a node. Any field change bumps the patch version; nodes with edges bound to this one will show drift (see `lattice drift`)
     Edit {
         /// Node ID (e.g., REQ-CORE-001, IMP-DIST-001)
         id: String,
@@ -243,11 +243,11 @@ enum Commands {
         #[arg(long)]
         tests_pass: bool,
 
-        /// Record coverage percentage (0.0-1.0)
+        /// Record coverage percentage (0.0-1.0); overwrites previous value
         #[arg(long)]
         coverage: Option<f64>,
 
-        /// Comma-separated file paths as evidence
+        /// Comma-separated file paths as evidence (stored separately from implementation's files; overwrites previous evidence)
         #[arg(long)]
         files: Option<String>,
 
@@ -440,6 +440,10 @@ enum Commands {
         /// Output directory for HTML export
         #[arg(short, long)]
         output: Option<String>,
+
+        /// Base URL for pages export (overrides auto-detected GitHub Pages URL)
+        #[arg(long)]
+        base_url: Option<String>,
     },
 
     // ── Setup ───────────────────────────────────────────────────────
@@ -458,7 +462,7 @@ enum Commands {
         skill: bool,
     },
 
-    /// Self-update to the latest version
+    /// Self-update lattice to the latest version. To change a node, use `lattice edit`
     Update {
         /// Only check for updates, don't install
         #[arg(long)]
@@ -475,6 +479,10 @@ enum Commands {
         /// Output format (text, json)
         #[arg(short, long, default_value = "text")]
         format: String,
+
+        /// Trailing arguments (caught to detect misuse like `lattice update REQ-X`)
+        #[arg(trailing_var_arg = true, hide = true)]
+        rest: Vec<String>,
     },
 
     /// Show commands, concepts, or workflows
@@ -1309,6 +1317,7 @@ fn build_command_catalog() -> serde_json::Value {
                 "grounded_in": "Message is grounded in a thesis — messaging claim traces back to strategic position. Direction: message → thesis."
             },
             "versions": "All nodes use semver (MAJOR.MINOR.PATCH). Edges record the target node's version at binding time. When a node is edited, its version bumps and edges bound to the old version become 'potentially stale' — this is drift.",
+            "code_impact": "Implementation nodes bind source files via meta.files. When `lattice health` runs, it compares files changed since the last .lattice/ commit against these bindings. Changed tracked files that haven't been re-verified trigger a Code Impact warning. Clear it by running `lattice verify` or `lattice edit` on the affected implementation, then staging .lattice/ alongside your code.",
             "id_conventions": "IDs follow the pattern PREFIX-CATEGORY-NNN (e.g. REQ-CORE-001, THX-AGENT-PROTOCOL, SRC-MCP-SPEC). Categories group related nodes (CORE, CLI, API, AGENT, DIST, etc.)."
         },
         "workflows": [
@@ -1806,7 +1815,8 @@ fn build_command_catalog() -> serde_json::Value {
                     param("--audience", "string", false, "Target audience: investor, contributor, overview (default: overview)"),
                     param("--title", "string", false, "Document title (default: Lattice)"),
                     param("--include-internal", "bool", false, "Include nodes marked as internal"),
-                    param("--output", "string", false, "Output directory for HTML/pages export")
+                    param("--output", "string", false, "Output directory for HTML/pages export"),
+                    param("--base-url", "string", false, "Base URL for pages export (overrides auto-detected GitHub Pages URL)")
                 ],
                 "examples": [
                     {"command": "lattice export", "explanation": "Generate a narrative overview of the lattice for general audiences"},
@@ -2108,6 +2118,26 @@ fn run_command(command: Commands) {
             let cwd = env::current_dir().expect("Failed to get current directory");
             let lattice_exists = cwd.join(".lattice").exists();
             let install_agents = agents || skill;
+
+            // Warn if a parent directory has .lattice/ (prevents silent shadowing)
+            if !lattice_exists && let Some(parent_root) = find_lattice_root(&cwd) {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Warning: a parent directory already has a lattice at {}",
+                        parent_root.join(".lattice").display()
+                    )
+                    .yellow()
+                );
+                eprintln!(
+                    "{}",
+                    "  Other commands will use that lattice unless you create one here.".dimmed()
+                );
+                eprintln!(
+                    "{}",
+                    "  Proceeding to initialize in the current directory.\n".dimmed()
+                );
+            }
 
             // If --skill or --agents on an existing lattice, install standalone
             if install_agents && lattice_exists && !force {
@@ -2936,6 +2966,7 @@ fn run_command(command: Commands) {
             title,
             include_internal,
             output,
+            base_url,
         } => {
             let root = get_lattice_root();
 
@@ -2967,21 +2998,36 @@ fn run_command(command: Commands) {
             if format == "pages" {
                 let output_dir = output.unwrap_or_else(|| "_site".to_string());
 
-                // Derive GitHub Pages URL from git remote
-                let pages_base = match get_github_pages_url() {
-                    Some(url) => url,
-                    None => {
+                // Use explicit --base-url or derive from git remote
+                let pages_base = base_url
+                    .map(|u| u.trim_end_matches('/').to_string())
+                    .or_else(get_github_pages_url)
+                    .unwrap_or_else(|| {
                         eprintln!(
                             "{}",
-                            "Error: Could not derive GitHub Pages URL from git remote. Ensure a GitHub origin is configured."
+                            "Error: Could not derive GitHub Pages URL from git remote. Use --base-url or ensure a GitHub origin is configured."
                                 .red()
                         );
                         process::exit(1);
-                    }
-                };
+                    });
 
                 let json_url = format!("{}/lattice-data.json", pages_base);
-                let reader_url = format!("https://forkzero.ai/reader?url={}", json_url);
+                let encoded_json_url: String = json_url
+                    .bytes()
+                    .flat_map(|b| match b {
+                        b'A'..=b'Z'
+                        | b'a'..=b'z'
+                        | b'0'..=b'9'
+                        | b'-'
+                        | b'_'
+                        | b'.'
+                        | b'~'
+                        | b':'
+                        | b'/' => vec![b as char],
+                        _ => format!("%{:02X}", b).chars().collect(),
+                    })
+                    .collect();
+                let reader_url = format!("https://forkzero.ai/reader?url={}", encoded_json_url);
 
                 // Build JSON export
                 match build_node_index(&root) {
@@ -4467,8 +4513,40 @@ fn run_command(command: Commands) {
             force,
             version,
             format,
+            rest,
         } => {
             use lattice::update::{UpdateOptions, UpdateResult};
+
+            // Catch `lattice update REQ-X ...` — user likely meant `lattice edit`
+            let looks_like_node_id = rest.first().is_some_and(|arg| {
+                let u = arg.to_uppercase();
+                u.starts_with("REQ-")
+                    || u.starts_with("THX-")
+                    || u.starts_with("SRC-")
+                    || u.starts_with("IMP-")
+                    || u.starts_with("MSG-")
+            });
+            if looks_like_node_id {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Error: `lattice update` is the self-updater. To change a node, use:\n\n  lattice edit {} [--title ...] [--body ...]\n\nRun `lattice edit --help` for all options.",
+                        rest[0]
+                    )
+                    .red()
+                );
+                process::exit(1);
+            } else if !rest.is_empty() {
+                eprintln!(
+                    "{}",
+                    format!(
+                        "Error: unexpected argument '{}'. Did you mean `--version {}`?\n\nRun `lattice update --help` for usage.",
+                        rest[0], rest[0]
+                    )
+                    .red()
+                );
+                process::exit(1);
+            }
 
             if !lattice::update::is_installed_binary() {
                 if is_json(&format) {
@@ -4926,6 +5004,12 @@ fn run_command(command: Commands) {
                         println!("{}\n", "VERSIONING:".bold());
                         if let Some(v) = concepts["versions"].as_str() {
                             println!("  {}\n", v);
+                        }
+
+                        // Code Impact
+                        println!("{}\n", "CODE IMPACT:".bold());
+                        if let Some(ci) = concepts["code_impact"].as_str() {
+                            println!("  {}\n", ci);
                         }
 
                         // ID conventions

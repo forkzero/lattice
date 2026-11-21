@@ -16,6 +16,8 @@ fn test_export_pages_creates_json_and_html() {
         "export",
         "--format",
         "pages",
+        "--base-url",
+        "https://example.github.io/test",
         "--output",
         output_path.to_str().unwrap(),
     ])
@@ -43,6 +45,8 @@ fn test_export_pages_html_redirects_to_reader() {
         "export",
         "--format",
         "pages",
+        "--base-url",
+        "https://example.github.io/test",
         "--output",
         output_path.to_str().unwrap(),
     ])
@@ -112,6 +116,8 @@ fn test_pages_json_has_metadata_wrapper() {
         "export",
         "--format",
         "pages",
+        "--base-url",
+        "https://example.github.io/test",
         "--output",
         output_path.to_str().unwrap(),
     ])
