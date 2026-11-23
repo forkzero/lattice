@@ -1,0 +1,20 @@
+id: THX-KNOWLEDGE-SUBSTRATE
+type: thesis
+title: Lattice Is the Knowledge Substrate Beneath Agent Methodology Layers
+body: 'Agent skill stacks (e.g. Lauren Tan''s pstack) encode how an agent should work: investigate before changing, prove before done, route every lesson into durable structure, keep a decision trail. These methodology layers are behavioral (skills, principles, lint rules) and are complementary to, not competitive with, a knowledge layer. Lattice is that knowledge layer: the typed, version-bound, drift-aware graph of research, strategy, requirements, and implementations that a methodology layer reads from and writes to. pstack''s encode-lessons-in-structure routes a systemic learning to a principle; Lattice gives that learning a typed home with provenance. pstack''s show-me-your-work keeps an append-only decision log; Lattice is the graph form of the same provenance. Positioning Lattice beneath skill stacks rather than against them widens its surface: it is the context system the methodology operates on.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T12:03:30.198866828+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  category: value_prop
+  confidence: 0.7
+edges:
+  supported_by:
+  - target: SRC-PSTACK
+    version: 1.0.0
+  extends:
+  - target: THX-CONTEXT-INFRA
+    version: 1.0.0
+    rationale: 'Specializes the context-infrastructure thesis: the knowledge graph is the substrate a behavioral methodology layer operates on.'

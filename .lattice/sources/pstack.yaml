@@ -1,0 +1,13 @@
+id: SRC-PSTACK
+type: source
+title: Lauren Tan — pstack (agent skill stack)
+body: 'Lauren Tan''s (poteto) harness-neutral skill stack for rigorous agent engineering: 18 skills and 21 principles organized as understand, design, verify, write-it-down, plus a foundations layer (principles, reflect). Published as a Cursor plugin (cursor/plugins/pstack), MIT, portable markdown installable across ~70 agents from one Git source. Core principles include Encode Lessons in Structure (route every correction to the strongest durable mechanism: one-off note, recurring fix as skill or lint rule, systemic issue as principle), Prove It Works (verify against the real artifact, not it-compiles), Sequence Work into Verifiable Units, Build the Lever (the rerunnable tool is the artifact a reviewer checks), and Never Block on the Human (proceed then present; only irreversible actions require confirmation). The show-me-your-work skill keeps an append-only decision log (decision, why, evidence pointer, result; supersede, never delete). The blast-radius skill grades each safety claim on a certainty ladder: asserted, pointed at a line, shown impossible, ran it, reproduced in the running app.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T12:03:30.163242749+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  url: https://github.com/cursor/plugins/tree/main/pstack
+  reliability: industry
+  retrieved_at: 2026-11-23
