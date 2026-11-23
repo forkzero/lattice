@@ -11,13 +11,17 @@ meta:
   category: technical
   confidence: 0.85
 edges:
+  supported_by:
+  - target: SRC-PSTACK
+    version: 1.0.0
+    rationale: A principal engineer ships her agent methodology as shared, scrutinized, continuously-improved infrastructure (factories/skills) — real-world evidence for Lattice-as-infrastructure for an agent product owner.
   validates:
-    - target: THX-REQUIREMENTS-DURABLE
-      version: '1.0.0'
-      rationale: Agent PO makes requirements-as-durable-artifact concrete — the agent authors and maintains them as its primary output
-    - target: THX-AGENT-NATIVE-TOOLS
-      version: '1.0.0'
-      rationale: A product owner agent is the strongest consumer of structured, queryable knowledge — it must reason over the full graph
-    - target: THX-BIDIRECTIONAL-FLOW
-      version: '1.0.0'
-      rationale: The PO agent mechanizes bidirectional flow — it reads feedback edges and writes new requirements/challenges in response
+  - target: THX-REQUIREMENTS-DURABLE
+    version: 1.0.0
+    rationale: Agent PO makes requirements-as-durable-artifact concrete — the agent authors and maintains them as its primary output
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0
+    rationale: A product owner agent is the strongest consumer of structured, queryable knowledge — it must reason over the full graph
+  - target: THX-BIDIRECTIONAL-FLOW
+    version: 1.0.0
+    rationale: The PO agent mechanizes bidirectional flow — it reads feedback edges and writes new requirements/challenges in response

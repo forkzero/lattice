@@ -1,0 +1,15 @@
+id: REQ-VERIFY-001
+type: requirement
+title: Grade verification evidence by proof strength
+body: 'Record how strongly an implementation''s satisfaction of a requirement is proven, not just that it is claimed. Add a proof-level to verification metadata on a certainty ladder adapted from pstack''s blast-radius skill: asserted (claimed only), pointed (a real file:line or source reference), shown (the failure case walked through and shown impossible), ran (a script or test exercising the real code), reproduced (observed in the running app). Verification output and health checks can then distinguish asserted-only satisfaction from reproduced satisfaction, so reviewers and agents see where confidence actually stops. Complements the existing tests_pass and coverage fields.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T12:03:41.188376809+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: VERIFY
+edges:
+  derives_from:
+  - target: THX-AGENT-NATIVE-TOOLS
+    version: 1.0.0

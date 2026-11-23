@@ -36,3 +36,6 @@ edges:
   - target: SRC-TOOLS-FOR-HUMANS
     version: 1.0.0
     rationale: Current tools' database-centricity is part of the problem
+  - target: SRC-PSTACK
+    version: 1.0.0
+    rationale: pstack is portable markdown-in-Git with explicit no-vendor-lock-in from a SpaceX/Cursor principal — evidence the files-in-Git approach works for top practitioners, counterbalancing Notion's challenge.
