@@ -35,3 +35,6 @@ edges:
   - target: SRC-REQUIREMENTS-DRIFT
     version: 1.0.0
     rationale: If requirements drift is the problem, fixing it becomes more valuable
+  - target: SRC-MATTPOCOCK-SKILLS
+    version: 1.0.0
+    rationale: 'Independent convergence on Lattice''s spine: research→spec→tickets-with-blocking-edges + glossary + ADRs + decision maps, from a respected educator.'

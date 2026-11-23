@@ -39,3 +39,6 @@ edges:
   - target: SRC-PSTACK
     version: 1.0.0
     rationale: pstack is portable markdown-in-Git with explicit no-vendor-lock-in from a SpaceX/Cursor principal — evidence the files-in-Git approach works for top practitioners, counterbalancing Notion's challenge.
+  - target: SRC-MATTPOCOCK-SKILLS
+    version: 1.0.0
+    rationale: 'Tracker-agnostic skills with a local-markdown fallback: state externalized to files, model-agnostic, no hosted lock-in.'

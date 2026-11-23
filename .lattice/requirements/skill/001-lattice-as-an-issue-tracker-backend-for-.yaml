@@ -1,0 +1,15 @@
+id: REQ-SKILL-001
+type: requirement
+title: Lattice as an issue-tracker backend for agent skill pipelines
+body: 'Agent skill pipelines (mattpocock/skills'' research to-spec to-tickets wayfinder; pstack''s reflect) read from and write to a pluggable issue tracker (GitHub Issues, Linear, or local markdown). Lattice should be installable as that backend so those writes land as typed nodes and edges instead of flat issues: a spec becomes a requirement, tickets become requirements with depends_on edges, research becomes sources with citations, wayfinder decision tickets become theses or open decisions. The pipeline then inherits version-bound edges, drift detection, and provenance for free while the skills keep working unchanged. Provide the adapter/config so setup-style tooling can target Lattice.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T14:32:16.442709737+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: SKILL
+edges:
+  derives_from:
+  - target: THX-KNOWLEDGE-SUBSTRATE
+    version: 1.0.0

@@ -1,0 +1,13 @@
+id: SRC-MATTPOCOCK-SKILLS
+type: source
+title: Matt Pocock — Skills For Real Engineers
+body: 'Matt Pocock''s agent skill collection (mattpocock/skills): ~27 small, composable, model-agnostic skills in engineering/productivity/misc/in-progress, positioned against process-owning frameworks (GSD, BMAD, Spec-Kit) that take away control. Ships a GLOSSARY.md controlled vocabulary with Avoid-synonyms, explicit relationships, and resolved ambiguities, plus a domain-modeling skill and ADRs. Core pipeline: research (primary sources, cite every claim) then to-spec (use glossary, respect ADRs) then to-tickets (tracer-bullet vertical slices each declaring blocking edges) then implement-spec. wayfinder plans oversized work as a shared map of decision tickets (questions whose resolution is a decision), the map an index not a store. Skills read/write a pluggable issue tracker: GitHub Issues, Linear, or a local markdown convention. SCOPE.md sets a curation bar (observed failure + fits philosophy); .out-of-scope records each rejection; a behaviour that composes from existing skills gets no new skill.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T14:32:16.415188519+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  url: https://github.com/mattpocock/skills
+  reliability: industry
+  retrieved_at: 2026-11-23

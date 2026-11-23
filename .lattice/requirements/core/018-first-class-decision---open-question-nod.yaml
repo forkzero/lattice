@@ -1,0 +1,15 @@
+id: REQ-CORE-018
+type: requirement
+title: First-class decision / open-question node type
+body: 'wayfinder-style planning centers on decision tickets: open questions whose resolution is a decision, distinct from an executable spec. Lattice approximates these with draft or contested theses but has no dedicated node for a decision-in-flight (a question, its options, its eventual resolution with rationale, and the requirements it unblocks). Evaluate adding a first-class decision/open-question node or thesis sub-kind so planning and a wayfinder-style map have a typed home. Relatedly, assess whether ADRs (architecture decision records) warrant representation, since adjacent skill ecosystems treat them as first-class.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T14:32:16.511220703+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: CORE
+edges:
+  derives_from:
+  - target: THX-REQUIREMENTS-DURABLE
+    version: 1.0.0
