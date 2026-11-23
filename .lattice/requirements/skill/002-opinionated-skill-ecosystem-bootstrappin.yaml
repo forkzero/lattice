@@ -1,0 +1,17 @@
+id: REQ-SKILL-002
+type: requirement
+title: Opinionated skill-ecosystem bootstrapping for users without opinions
+body: 'Most teams lack a settled opinion about which agent skills to adopt: a jagged frontier where a few power users have strong setups, most have none, and wiring skills one at a time is a configuration tax. Lattice should help a user assemble a curated, opinionated starting ecosystem of agent skills, its own plus vetted external stacks (e.g. pstack, mattpocock/skills), matched to their project, rather than leaving them to discover and glue skills by hand. Because Lattice is skill-aware and holds the project knowledge graph, it can recommend a coherent default set and the install glue, which the user then adapts. Opt-in, adaptable, never locked: a fast on-ramp for the opinion-less, not a mandated stack.'
+status: active
+version: 1.0.0
+created_at: 2026-11-23T14:32:16.476659482+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: SKILL
+edges:
+  derives_from:
+  - target: THX-SKILL-AWARE-GRAPH
+    version: 1.0.0
+  - target: THX-KNOWLEDGE-SUBSTRATE
+    version: 1.0.0
