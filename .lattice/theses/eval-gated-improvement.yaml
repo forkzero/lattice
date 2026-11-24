@@ -1,0 +1,27 @@
+id: THX-EVAL-GATED-IMPROVEMENT
+type: thesis
+title: Continual Skill Improvement Must Be Gated by a Versioned, Failure-Sourced Eval Corpus
+body: 'Shipping skill updates on a cadence (daily, weekly, monthly) is only safe if each update is provably better, and better is undefinable against a moving target. The gate is a frozen, held-out eval corpus: tasks with observable success predicates, sourced from real session failures rather than hypotheticals, and versioned so each task''s provenance is known. An update ships only when the new version scores at least as well as the current one across the frozen set, strictly better on the case that motivated it, with zero regressions, and the comparison is recorded at a proof-level (ran or reproduced, not asserted). Cadence is just how often the loop runs; provability comes from the A/B comparison and the eval corpus, not the schedule. Evals are the bottleneck, not the pipeline: where success has no observable predicate the skill stays human-verified, and claims are always relative to a named eval set at a stated proof-level, never provably better in the abstract. Lattice is the ledger of this process: versioned skill nodes, eval nodes with provenance, verified improvement edges, and drift detection over stale evals.'
+status: active
+version: 1.0.0
+created_at: 2026-11-24T04:04:24.789336262+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+meta:
+  category: technical
+  confidence: 0.7
+edges:
+  supported_by:
+  - target: SRC-NOTION-NEW-SHAPE
+    version: 1.0.0
+  - target: SRC-PSTACK
+    version: 1.0.0
+  - target: SRC-MATTPOCOCK-SKILLS
+    version: 1.0.0
+  extends:
+  - target: THX-KNOWLEDGE-SUBSTRATE
+    version: 1.0.0
+    rationale: 'Lattice-as-substrate becomes the ledger of provable improvement: it records why each skill version beat the last and how strongly it was proven.'
+  - target: THX-VERSION-AWARE
+    version: 1.0.0
+    rationale: A versioned eval corpus plus drift detection over stale evals is version-aware traceability applied to skill improvement.

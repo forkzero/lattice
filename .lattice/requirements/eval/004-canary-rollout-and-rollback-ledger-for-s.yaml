@@ -1,0 +1,18 @@
+id: REQ-EVAL-004
+type: requirement
+title: Canary rollout and rollback ledger for skill versions
+body: 'Ship a passing skill update incrementally: canary or shadow to a sample, watch live outcomes, then widen (incremental risk). Each version is a semver bump on the skill node carrying edges to the eval runs that justified it and the failures it resolved, so the improvement is auditable. A live regression is reversible through version history and supersedes edges, and the regression itself becomes a new eval task, feeding back into REQ-EVAL-003. Lattice is the rollout ledger: what shipped, why it was trusted, and how to roll it back.'
+status: active
+version: 1.0.0
+created_at: 2026-11-24T04:04:43.845539021+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: EVAL
+edges:
+  derives_from:
+  - target: THX-EVAL-GATED-IMPROVEMENT
+    version: 1.0.0
+  depends_on:
+  - target: REQ-EVAL-002
+    version: 1.0.0
