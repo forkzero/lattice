@@ -1,0 +1,20 @@
+id: REQ-EVAL-003
+type: requirement
+title: 'Failure-to-eval capture: nominations emit a reproducing eval'
+body: 'Extend the capture nominator so that when a real session failure or correction is nominated, it proposes not only a skill or node edit but also a new eval task that reproduces the failure. This is how the frozen corpus grows from real usage rather than imagination (the observed-failure bar), and it closes the loop: the failure that motivated a change becomes the test that proves the change and guards against its regression. Like all nominations it enters through the validated accept seam, never directly.'
+status: active
+version: 1.0.0
+created_at: 2026-11-24T04:04:43.754314893+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: EVAL
+edges:
+  derives_from:
+  - target: THX-EVAL-GATED-IMPROVEMENT
+    version: 1.0.0
+  depends_on:
+  - target: REQ-EVAL-001
+    version: 1.0.0
+  - target: REQ-CAPTURE-003
+    version: 1.0.0

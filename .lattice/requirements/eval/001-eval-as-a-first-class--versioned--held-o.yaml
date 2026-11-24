@@ -1,0 +1,15 @@
+id: REQ-EVAL-001
+type: requirement
+title: Eval as a first-class, versioned, held-out node
+body: 'Model an eval as a lattice node: a task with an observable success predicate (a check that passes or fails, not a subjective judgment), its provenance (the real failure or requirement it came from), and a version. The corpus is held out: the agent editing a skill cannot see or train against it. Evals carry edges to the skill/requirement they exercise, so coverage and staleness are queryable and drift detection can flag an eval that no longer matches the skill or the world.'
+status: active
+version: 1.0.0
+created_at: 2026-11-24T04:04:43.636606237+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: EVAL
+edges:
+  derives_from:
+  - target: THX-EVAL-GATED-IMPROVEMENT
+    version: 1.0.0

@@ -1,0 +1,20 @@
+id: REQ-EVAL-002
+type: requirement
+title: 'A/B improvement gate: new must beat old with zero regressions'
+body: Before a skill update ships, run the current and candidate versions against the same frozen eval corpus under the same model(s) and compare. The update passes only if it scores at least as well across the whole set, strictly better on the case that motivated it, and introduces no regressions. Record the result at a proof-level (ran or reproduced), reusing REQ-VERIFY-001's certainty ladder, and attach the eval-run evidence to the skill version. An adversarial verifier reviews before merge. State every claim relative to the named eval set and proof-level, never as unqualified better.
+status: active
+version: 1.0.0
+created_at: 2026-11-24T04:04:43.678167051+00:00
+created_by: agent:claude
+requested_by: Claude <noreply@anthropic.com>
+priority: P2
+category: EVAL
+edges:
+  derives_from:
+  - target: THX-EVAL-GATED-IMPROVEMENT
+    version: 1.0.0
+  depends_on:
+  - target: REQ-EVAL-001
+    version: 1.0.0
+  - target: REQ-VERIFY-001
+    version: 1.0.0
